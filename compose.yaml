@@ -1,0 +1,50 @@
+name: dukaanai
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: dukaan
+      POSTGRES_USER: dukaan
+      POSTGRES_PASSWORD: dukaan_local_only
+      DUKAAN_APP_DB_PASSWORD: ${DUKAAN_APP_DB_PASSWORD:-dukaan_app_local_only}
+    ports:
+      - "${DUKAAN_POSTGRES_PORT:-5433}:5432"
+    volumes:
+      - dukaan-postgres-data:/var/lib/postgresql/data
+      - ./infra/postgres/init-roles.sh:/docker-entrypoint-initdb.d/10-init-roles.sh:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U dukaan -d dukaan"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+    security_opt:
+      - no-new-privileges:true
+
+  redis:
+    image: valkey/valkey:8-alpine
+    restart: unless-stopped
+    command:
+      - valkey-server
+      - --appendonly
+      - "yes"
+      - --maxmemory-policy
+      - noeviction
+    ports:
+      - "${DUKAAN_REDIS_PORT:-6380}:6379"
+    volumes:
+      - dukaan-redis-data:/data
+    healthcheck:
+      test: ["CMD", "valkey-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 5s
+    security_opt:
+      - no-new-privileges:true
+
+volumes:
+  dukaan-postgres-data:
+  dukaan-redis-data:

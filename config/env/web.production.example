@@ -1,0 +1,5 @@
+# Public browser values for apps/web only. Never add a service-role key here.
+VITE_API_URL=https://api.example.com
+VITE_SUPABASE_URL=https://PROJECT_REF.supabase.co
+VITE_SUPABASE_ANON_KEY=PUBLIC_ANON_OR_PUBLISHABLE_KEY
+VITE_DEMO_MODE=false

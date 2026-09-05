@@ -1,0 +1,3 @@
+# Public compile-time Flutter values. Never add a Supabase service-role key here.
+DUKAAN_API_BASE_URL=https://api.example.com/api/v1/
+DUKAAN_DEMO_MODE=false

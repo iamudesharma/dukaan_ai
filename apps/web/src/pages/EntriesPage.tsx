@@ -1,0 +1,74 @@
+import { useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { Download, Filter, Plus, Search } from "lucide-react";
+import { useWorkspace } from "../app/WorkspaceContext";
+import { EmptyState } from "../components/EmptyState";
+import { LoadingBlock } from "../components/LoadingBlock";
+import { PageHeader } from "../components/PageHeader";
+import { StatusBadge } from "../components/StatusBadge";
+import { getEntries } from "../data/repository";
+import { formatDateTime, formatKind, formatMoney } from "../lib/format";
+import type { EntryKind } from "../types";
+import { ManualSaleDialog } from "../features/entries/ManualSaleDialog";
+
+const filters: Array<{ label: string; value: "ALL" | EntryKind }> = [
+  { label: "All", value: "ALL" },
+  { label: "Sales", value: "SALE" },
+  { label: "Purchases", value: "PURCHASE" },
+  { label: "Payments in", value: "PAYMENT_IN" },
+  { label: "Payments out", value: "PAYMENT_OUT" },
+  { label: "Expenses", value: "EXPENSE" },
+];
+
+export function EntriesPage() {
+  const { bootstrap, locationId, openAssistant } = useWorkspace();
+  const [filter, setFilter] = useState<"ALL" | EntryKind>("ALL");
+  const [search, setSearch] = useState("");
+  const [manualSaleOpen, setManualSaleOpen] = useState(false);
+  const query = useQuery({
+    queryKey: ["entries", bootstrap.business.id, locationId],
+    queryFn: () => getEntries(bootstrap.business.id, locationId),
+  });
+  const visible = useMemo(() => (query.data ?? []).filter((entry) => {
+    if (filter !== "ALL" && entry.kind !== filter) return false;
+    return `${entry.partyName} ${entry.number}`.toLowerCase().includes(search.toLowerCase());
+  }), [filter, query.data, search]);
+
+  return (
+    <>
+      <PageHeader
+        eyebrow="Operations"
+        title="Entries"
+        description="A single timeline for sales, purchases, payments and expenses. Posted entries are corrected through reversals."
+        actions={<><button className="secondary-button"><Download />Export</button><button className="secondary-button" onClick={() => setManualSaleOpen(true)}><Plus />Manual sale</button><button className="primary-button" onClick={openAssistant}><Plus />Ask / Add</button></>}
+      />
+      <section className="panel data-panel">
+        <div className="filter-row">
+          <div className="tabs" role="tablist" aria-label="Entry type">
+            {filters.map((item) => <button key={item.value} role="tab" aria-selected={filter === item.value} className={filter === item.value ? "active" : ""} onClick={() => setFilter(item.value)}>{item.label}</button>)}
+          </div>
+          <label className="inline-search"><Search /><span className="sr-only">Search entries</span><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Party or invoice" /></label>
+          <button className="icon-button bordered" aria-label="More filters"><Filter /></button>
+        </div>
+        {query.isLoading ? <LoadingBlock /> : visible.length ? (
+          <div className="table-scroll">
+            <table>
+              <thead><tr><th>Entry</th><th>Party / details</th><th>Date</th><th>Payment</th><th>Status</th><th className="amount-cell">Amount</th></tr></thead>
+              <tbody>{visible.map((entry) => (
+                <tr key={entry.id}>
+                  <td><strong>{formatKind(entry.kind)}</strong><small>{entry.number}</small></td>
+                  <td>{entry.partyName}</td>
+                  <td>{formatDateTime(entry.occurredAt)}</td>
+                  <td>{entry.paymentMode ?? "—"}</td>
+                  <td>{entry.outstandingMinor > 0 ? <StatusBadge tone="warning">{formatMoney(entry.outstandingMinor)} due</StatusBadge> : <StatusBadge tone="positive">Paid</StatusBadge>}</td>
+                  <td className="amount-cell"><strong>{formatMoney(entry.totalMinor)}</strong></td>
+                </tr>
+              ))}</tbody>
+            </table>
+          </div>
+        ) : <EmptyState title="No matching entries" detail="Change the filters or record a new entry." />}
+      </section>
+      <ManualSaleDialog open={manualSaleOpen} onClose={() => setManualSaleOpen(false)} />
+    </>
+  );
+}

@@ -1,0 +1,84 @@
+# dependencies
+node_modules/
+/.pnp
+.pnp.*
+.yarn/*
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/versions
+
+# testing
+/coverage
+apps/web/coverage/
+apps/mobile/coverage/
+
+# next.js
+/.next/
+/.vinext/
+/out/
+
+# misc
+.DS_Store
+*.pem
+
+# debug
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# local environment
+.env*
+!.env.example
+!config/env/*.example
+
+# Python / Django
+__pycache__/
+*.py[cod]
+*.sqlite3
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+.venv/
+*.egg-info/
+services/api/staticfiles/
+
+# Flutter / Dart
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+build/
+apps/mobile/.dart_tool/
+apps/mobile/android/key.properties
+apps/mobile/android/*.jks
+apps/mobile/android/*.keystore
+apps/mobile/ios/Runner/*.mobileprovision
+apps/mobile/ios/Runner/*.p12
+
+# IDE and local tooling
+.idea/
+.vscode/
+*.swp
+
+# Local infrastructure state and secrets
+.supabase/
+supabase/.branches/
+supabase/.temp/
+config/env/*.local
+config/env/*.secret
+*.tfstate
+*.tfstate.*
+crash.log
+
+# deployment and generated files
+.vercel
+next-env.d.ts
+/dist/
+apps/web/dist/
+*.tsbuildinfo
+/.wrangler/
+/outputs/
+/work/

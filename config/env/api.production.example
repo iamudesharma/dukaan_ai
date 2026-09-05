@@ -1,0 +1,36 @@
+# Copy values into Render's secret/environment controls; do not deploy this file.
+# All entries marked REQUIRED must be set before production traffic is enabled.
+
+DJANGO_SECRET_KEY=REQUIRED_generate_at_least_50_random_characters
+DJANGO_DEBUG=false
+DJANGO_ALLOWED_HOSTS=api.example.com,dukaan-api.onrender.com
+DJANGO_SECURE_SSL_REDIRECT=true
+DJANGO_SECURE_HSTS_SECONDS=3600
+DJANGO_SECURE_HSTS_INCLUDE_SUBDOMAINS=false
+DJANGO_SECURE_HSTS_PRELOAD=false
+DJANGO_USE_X_FORWARDED_HOST=true
+DATABASE_URL=REQUIRED_supabase_session_pooler_url_with_sslmode_require
+# Least-privilege application role enforced by Row Level Security policies.
+# The migration/operator credential in DATABASE_URL must own the tables;
+# create this role once per database (see docs/runbooks/database-roles.md)
+# and keep its password in server-side secret controls only.
+DUKAAN_APP_DB_ROLE=dukaan_app
+DUKAAN_APP_DB_PASSWORD=REQUIRED_SERVER_ONLY_SECRET_FOR_APP_ROLE
+REDIS_URL=INJECTED_BY_RENDER_KEY_VALUE
+CELERY_BROKER_URL=INJECTED_BY_RENDER_KEY_VALUE
+DEV_AUTH_ENABLED=false
+CORS_ALLOWED_ORIGINS=https://app.example.com
+
+SUPABASE_URL=https://REQUIRED_PROJECT_REF.supabase.co
+SUPABASE_JWKS_URL=https://REQUIRED_PROJECT_REF.supabase.co/auth/v1/.well-known/jwks.json
+SUPABASE_JWT_ISSUER=https://REQUIRED_PROJECT_REF.supabase.co/auth/v1
+SUPABASE_JWT_AUDIENCE=authenticated
+SUPABASE_SERVICE_ROLE_KEY=REQUIRED_SERVER_ONLY_SECRET
+SUPABASE_STORAGE_BUCKET=receipts
+
+# Only needed for projects that still validate legacy symmetric JWTs.
+SUPABASE_JWT_SECRET=
+
+# Optional. Configure alerting before adding the DSN.
+SENTRY_DSN=
+SENTRY_ENVIRONMENT=production

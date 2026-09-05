@@ -1,0 +1,17 @@
+{
+  "name": "dukaanai",
+  "version": "0.1.0",
+  "private": true,
+  "engines": {
+    "node": ">=22.13.0"
+  },
+  "workspaces": [
+    "apps/web"
+  ],
+  "scripts": {
+    "dev:web": "npm run dev --workspace @dukaanai/web",
+    "build:web": "npm run build --workspace @dukaanai/web",
+    "test:web": "npm run test --workspace @dukaanai/web",
+    "lint:web": "npm run lint --workspace @dukaanai/web"
+  }
+}

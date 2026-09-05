@@ -1,0 +1,71 @@
+[build-system]
+requires = ["setuptools>=75"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "dukaanai-api"
+version = "0.1.0"
+description = "DukaanAI modular Django API"
+requires-python = ">=3.13,<3.14"
+dependencies = [
+  "Django>=5.2,<5.3",
+  "djangorestframework>=3.16,<3.17",
+  "drf-spectacular>=0.28,<0.29",
+  "django-cors-headers>=4.7,<5",
+  "dj-database-url>=2.3,<3",
+  "psycopg[binary]>=3.2,<4",
+  "PyJWT[crypto]>=2.10,<3",
+  "celery[redis]>=5.5,<6",
+  "gunicorn>=23,<24",
+  "whitenoise>=6.9,<7",
+  "sentry-sdk[django]>=2.29,<3",
+]
+
+[dependency-groups]
+dev = [
+  "pytest>=8.3,<9",
+  "pytest-django>=4.11,<5",
+  "freezegun>=1.5,<2",
+  "ruff>=0.11,<0.12",
+]
+
+[tool.setuptools]
+packages = [
+  "config",
+  "apps",
+  "apps.common",
+  "apps.common.management",
+  "apps.common.management.commands",
+  "apps.common.migrations",
+  "apps.tenancy",
+  "apps.tenancy.management",
+  "apps.tenancy.management.commands",
+  "apps.tenancy.migrations",
+  "apps.catalog",
+  "apps.catalog.migrations",
+  "apps.operations",
+  "apps.operations.migrations",
+  "apps.assistant",
+  "apps.assistant.migrations",
+]
+
+[tool.pytest.ini_options]
+DJANGO_SETTINGS_MODULE = "config.settings"
+python_files = ["test_*.py"]
+addopts = "-q --strict-markers"
+testpaths = ["tests"]
+
+[tool.ruff]
+target-version = "py313"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "DJ"]
+ignore = ["DJ001"]
+
+[tool.ruff.lint.per-file-ignores]
+"**/migrations/*.py" = ["E501"]
+
+[tool.uv]
+required-version = "==0.9.17"
+default-groups = ["dev"]

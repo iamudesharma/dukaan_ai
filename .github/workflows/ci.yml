@@ -1,0 +1,185 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  changes:
+    name: Detect changed areas
+    runs-on: ubuntu-latest
+    outputs:
+      backend: ${{ steps.filter.outputs.backend }}
+      web: ${{ steps.filter.outputs.web }}
+      mobile: ${{ steps.filter.outputs.mobile }}
+      ops: ${{ steps.filter.outputs.ops }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            backend:
+              - 'services/api/**'
+            web:
+              - 'apps/web/**'
+              - 'package.json'
+              - 'package-lock.json'
+            mobile:
+              - 'apps/mobile/**'
+            ops:
+              - '.github/**'
+              - 'config/env/**'
+              - 'docs/**'
+              - '.env.example'
+              - '.gitignore'
+              - 'compose.yaml'
+              - 'render.yaml'
+              - 'Makefile'
+              - 'README.md'
+
+  backend:
+    name: Django checks
+    needs: changes
+    if: needs.changes.outputs.backend == 'true' || needs.changes.outputs.ops == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: dukaan_test
+          POSTGRES_USER: dukaan
+          POSTGRES_PASSWORD: dukaan_test_only
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U dukaan -d dukaan_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+      redis:
+        image: valkey/valkey:8-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "valkey-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 12
+    env:
+      DJANGO_SECRET_KEY: ci-only-secret-key
+      DJANGO_DEBUG: "false"
+      DJANGO_ALLOWED_HOSTS: localhost,127.0.0.1,testserver
+      DJANGO_SECURE_SSL_REDIRECT: "false"
+      DATABASE_URL: postgresql://dukaan:dukaan_test_only@127.0.0.1:5432/dukaan_test
+      DUKAAN_APP_DB_ROLE: dukaan_app
+      DUKAAN_APP_DB_PASSWORD: dukaan_app_test_only
+      REDIS_URL: redis://127.0.0.1:6379/0
+      CELERY_BROKER_URL: redis://127.0.0.1:6379/0
+      CELERY_TASK_ALWAYS_EAGER: "true"
+      DEV_AUTH_ENABLED: "true"
+      SUPABASE_JWT_AUDIENCE: authenticated
+    defaults:
+      run:
+        working-directory: services/api
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v7
+        with:
+          version: "0.9.17"
+          enable-cache: true
+          cache-dependency-glob: services/api/uv.lock
+      - name: Install dependencies
+        run: uv sync --locked
+      - name: Create application database role
+        run: |
+          PGPASSWORD=dukaan_test_only psql \
+            --host 127.0.0.1 --username dukaan --dbname dukaan_test --no-password \
+            --command "CREATE ROLE dukaan_app LOGIN PASSWORD 'dukaan_app_test_only'" \
+            --command "GRANT CONNECT ON DATABASE dukaan_test TO dukaan_app" \
+            --command "GRANT USAGE ON SCHEMA public TO dukaan_app"
+      - name: Check migrations
+        run: uv run --locked python manage.py makemigrations --check --dry-run
+      - name: Apply migrations
+        run: uv run --locked python manage.py migrate --noinput
+      - name: Lint
+        run: uv run --locked ruff check .
+      - name: Check formatting
+        run: uv run --locked ruff format --check .
+      - name: Test
+        run: uv run --locked pytest
+
+  web:
+    name: Web checks
+    needs: changes
+    if: needs.changes.outputs.web == 'true' || needs.changes.outputs.ops == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: package-lock.json
+      - name: Install dependencies
+        run: npm ci
+      - name: Lint
+        run: npm run lint:web
+      - name: Test
+        run: npm run test:web
+      - name: Build
+        run: npm run build:web
+
+  mobile:
+    name: Flutter checks
+    needs: changes
+    if: needs.changes.outputs.mobile == 'true' || needs.changes.outputs.ops == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: apps/mobile
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - name: Install dependencies
+        run: flutter pub get
+      - name: Analyze
+        run: flutter analyze
+      - name: Test
+        run: flutter test
+
+  ci-required:
+    name: Required CI gate
+    if: always()
+    needs: [changes, backend, web, mobile]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Confirm all selected jobs passed
+        env:
+          CHANGES_RESULT: ${{ needs.changes.result }}
+          BACKEND_RESULT: ${{ needs.backend.result }}
+          WEB_RESULT: ${{ needs.web.result }}
+          MOBILE_RESULT: ${{ needs.mobile.result }}
+        shell: bash
+        run: |
+          for result in "$CHANGES_RESULT" "$BACKEND_RESULT" "$WEB_RESULT" "$MOBILE_RESULT"; do
+            case "$result" in
+              success|skipped) ;;
+              *) echo "A required CI job ended with: $result" >&2; exit 1 ;;
+            esac
+          done
