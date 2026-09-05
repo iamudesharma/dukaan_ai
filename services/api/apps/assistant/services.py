@@ -281,6 +281,35 @@ def _parse_sale(content: str, business: Business, location: Location):
     return payload, preview, warnings, blockers
 
 
+def _interpret_with_ai(content: str, locale: str, business: Business, location: Location):
+    from .chatgpt import interpret_with_ai
+
+    result = interpret_with_ai(content, locale)
+    if result is None or not result.is_valid:
+        return None
+
+    payload = {
+        "business_id": str(business.id),
+        "location_id": str(location.id),
+        "customer_name": result.customer_name,
+        "items": result.items,
+        "total_minor": result.total_minor,
+        "paid_minor": result.paid_minor,
+    }
+    preview_parts = []
+    if result.customer_name:
+        preview_parts.append(f"Party: {result.customer_name}")
+    if result.items:
+        for item in result.items:
+            preview_parts.append(f"{item.get('quantity', '?')} × {item.get('product', '?')}")
+    if result.total_minor:
+        preview_parts.append(f"Total: ₹{result.total_minor / 100:.2f}")
+    if result.paid_minor:
+        preview_parts.append(f"Paid: ₹{result.paid_minor / 100:.2f}")
+    preview = "; ".join(preview_parts) if preview_parts else ""
+    return payload, preview, result.warnings, result.blocking_questions
+
+
 @transaction.atomic
 def interpret(
     *, actor, business: Business, location: Location, input_type: str, content: str, locale: str
@@ -290,7 +319,15 @@ def interpret(
         raise ValidationError("Location does not belong to the business")
     business = Business.objects.select_for_update().get(pk=business.pk)
     location = Location.objects.select_for_update().get(pk=location.pk)
-    payload, preview, warnings, blockers = _parse_sale(content, business, location)
+
+    ai_result = _interpret_with_ai(content, locale, business, location)
+    if ai_result:
+        payload, preview, warnings, blockers = ai_result
+        command_type = "SALE" if payload.get("items") else "UNSUPPORTED"
+    else:
+        payload, preview, warnings, blockers = _parse_sale(content, business, location)
+        command_type = "SALE" if payload else "UNSUPPORTED"
+
     proposal = AssistantProposal.objects.create(
         business=business,
         location=location,
@@ -298,7 +335,7 @@ def interpret(
         input_type=input_type,
         locale=locale,
         content=content,
-        command_type="SALE" if payload else "UNSUPPORTED",
+        command_type=command_type,
         payload=payload,
         preview=preview,
         warnings=warnings,

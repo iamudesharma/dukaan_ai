@@ -10,6 +10,7 @@ requires-python = ">=3.13,<3.14"
 dependencies = [
   "Django>=5.2,<5.3",
   "djangorestframework>=3.16,<3.17",
+  "djangorestframework-simplejwt>=5.5,<6",
   "drf-spectacular>=0.28,<0.29",
   "django-cors-headers>=4.7,<5",
   "dj-database-url>=2.3,<3",
@@ -37,6 +38,8 @@ packages = [
   "apps.common.management",
   "apps.common.management.commands",
   "apps.common.migrations",
+  "apps.authentication",
+  "apps.authentication.migrations",
   "apps.tenancy",
   "apps.tenancy.management",
   "apps.tenancy.management.commands",

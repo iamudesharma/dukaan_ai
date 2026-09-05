@@ -1,5 +1,5 @@
 import type { ApiErrorShape } from "../types";
-import { accessToken } from "./supabase";
+import { accessToken, getRefreshToken, setTokens, clearTokens } from "./supabase";
 
 const apiUrl = ((import.meta.env.VITE_API_URL as string | undefined) ?? "http://127.0.0.1:8000")
   .replace(/\/$/, "");
@@ -34,8 +34,29 @@ interface RequestOptions extends Omit<RequestInit, "body"> {
   idempotencyKey?: string;
 }
 
+async function refreshAccessToken(): Promise<string | null> {
+  const refresh = getRefreshToken();
+  if (!refresh) return null;
+  try {
+    const res = await fetch(`${apiUrl}/auth/refresh/`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ refresh }),
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    if (data.access) {
+      setTokens({ access: data.access, refresh });
+      return data.access;
+    }
+  } catch {
+    // fall through
+  }
+  return null;
+}
+
 export async function apiRequest<T>(path: string, options: RequestOptions = {}): Promise<T> {
-  const token = await accessToken();
+  let token = await accessToken();
   const headers = new Headers(options.headers);
   headers.set("Accept", "application/json");
   headers.set("X-Client", "dukaanai-web/0.1.0");
@@ -43,11 +64,23 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
   if (token) headers.set("Authorization", `Bearer ${token}`);
   if (options.idempotencyKey) headers.set("Idempotency-Key", options.idempotencyKey);
 
-  const response = await fetch(`${apiUrl}${path}`, {
+  let response = await fetch(`${apiUrl}${path}`, {
     ...options,
     headers,
     body: options.body === undefined ? undefined : JSON.stringify(options.body),
   });
+
+  if (response.status === 401 && token) {
+    const newToken = await refreshAccessToken();
+    if (newToken) {
+      headers.set("Authorization", `Bearer ${newToken}`);
+      response = await fetch(`${apiUrl}${path}`, {
+        ...options,
+        headers,
+        body: options.body === undefined ? undefined : JSON.stringify(options.body),
+      });
+    }
+  }
 
   if (!response.ok) {
     const fallback: ApiErrorShape = {
