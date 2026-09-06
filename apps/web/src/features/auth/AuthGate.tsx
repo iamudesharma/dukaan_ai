@@ -19,7 +19,9 @@ export function AuthGate({ children }: Props) {
   const [phone, setPhone] = useState("+91");
   const [otp, setOtp] = useState("");
   const [password, setPassword] = useState("");
-  const [step, setStep] = useState<"phone" | "otp" | "password">("phone");
+  const [displayName, setDisplayName] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [step, setStep] = useState<"phone" | "otp" | "password" | "signup" | "reset" | "reset-confirm">("phone");
   const [submitting, setSubmitting] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [devOtp, setDevOtp] = useState<string | null>(null);
@@ -101,6 +103,82 @@ export function AuthGate({ children }: Props) {
       } else {
         setTokens({ access: data.access, refresh: data.refresh });
         setAuth({ authenticated: true, loading: false });
+      }
+    } catch {
+      setMessage("Network error. Please try again.");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function submitSignup(event: FormEvent) {
+    event.preventDefault();
+    setSubmitting(true);
+    setMessage(null);
+    const normalized = phone.replace(/[\s()-]/g, "");
+    try {
+      const res = await fetch("/api/v1/auth/signup/", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ phone: normalized, password, ...(displayName ? { display_name: displayName } : {}) }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setMessage(data.detail ?? "Could not create your account.");
+      } else {
+        setTokens({ access: data.access, refresh: data.refresh });
+        setAuth({ authenticated: true, loading: false });
+      }
+    } catch {
+      setMessage("Network error. Please try again.");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function submitPasswordResetRequest(event: FormEvent) {
+    event.preventDefault();
+    setSubmitting(true);
+    setMessage(null);
+    setDevOtp(null);
+    const normalized = phone.replace(/[\s()-]/g, "");
+    try {
+      const res = await fetch("/api/v1/auth/password/reset/", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ phone: normalized }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setMessage(data.detail ?? "Could not send a reset code.");
+      } else {
+        setStep("reset-confirm");
+        if (data.dev_otp) setDevOtp(data.dev_otp);
+      }
+    } catch {
+      setMessage("Network error. Please try again.");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function submitPasswordResetConfirm(event: FormEvent) {
+    event.preventDefault();
+    setSubmitting(true);
+    setMessage(null);
+    const normalized = phone.replace(/[\s()-]/g, "");
+    try {
+      const res = await fetch("/api/v1/auth/password/reset/confirm/", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ phone: normalized, otp, new_password: newPassword }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setMessage(data.detail ?? "Invalid code.");
+      } else {
+        setMessage("Password has been reset. Sign in with your new password.");
+        setStep("password");
       }
     } catch {
       setMessage("Network error. Please try again.");
@@ -203,6 +281,106 @@ export function AuthGate({ children }: Props) {
                 Use password
               </button>
             )}
+            <button type="button" className="text-button" onClick={() => setStep("signup")}>
+              Create a new account
+            </button>
+            <button type="button" className="text-button" onClick={() => setStep("reset")}>
+              Forgot password?
+            </button>
+          </form>
+        ) : step === "signup" ? (
+          <form onSubmit={submitSignup}>
+            <UserPlus className="auth-icon" aria-hidden="true" />
+            <h2>Create your account</h2>
+            <label htmlFor="signup-phone">Mobile number</label>
+            <input
+              id="signup-phone"
+              inputMode="tel"
+              autoComplete="tel"
+              value={phone}
+              onChange={(event) => setPhone(event.target.value)}
+              placeholder="+91 98765 43210"
+              required
+            />
+            <label htmlFor="signup-name">Display name</label>
+            <input
+              id="signup-name"
+              autoComplete="name"
+              value={displayName}
+              onChange={(event) => setDisplayName(event.target.value)}
+              placeholder="Your name"
+            />
+            <label htmlFor="signup-password">Password</label>
+            <input
+              id="signup-password"
+              type="password"
+              autoComplete="new-password"
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+              placeholder="Choose a password"
+              required
+            />
+            <button className="primary-button full" disabled={submitting}>
+              {submitting ? <LoaderCircle className="spin" aria-hidden="true" /> : null}
+              Create account
+            </button>
+            <button type="button" className="text-button" onClick={() => setStep("phone")}>
+              Back to sign in
+            </button>
+          </form>
+        ) : step === "reset" ? (
+          <form onSubmit={submitPasswordResetRequest}>
+            <KeyRound className="auth-icon" aria-hidden="true" />
+            <h2>Reset your password</h2>
+            <p>We&apos;ll send a code to {phone || "your number"}.</p>
+            <label htmlFor="reset-phone">Mobile number</label>
+            <input
+              id="reset-phone"
+              inputMode="tel"
+              autoComplete="tel"
+              value={phone}
+              onChange={(event) => setPhone(event.target.value)}
+              placeholder="+91 98765 43210"
+              required
+            />
+            <button className="primary-button full" disabled={submitting}>
+              {submitting ? <LoaderCircle className="spin" aria-hidden="true" /> : null}
+              Send reset code
+            </button>
+            <button type="button" className="text-button" onClick={() => setStep("phone")}>
+              Back to sign in
+            </button>
+          </form>
+        ) : step === "reset-confirm" ? (
+          <form onSubmit={submitPasswordResetConfirm}>
+            <KeyRound className="auth-icon" aria-hidden="true" />
+            <h2>Choose a new password</h2>
+            <label htmlFor="reset-otp">One-time code</label>
+            <input
+              id="reset-otp"
+              inputMode="numeric"
+              autoComplete="one-time-code"
+              value={otp}
+              onChange={(event) => setOtp(event.target.value.replace(/\D/g, "").slice(0, 6))}
+              placeholder="000000"
+              required
+              minLength={6}
+            />
+            <label htmlFor="reset-new-password">New password</label>
+            <input
+              id="reset-new-password"
+              type="password"
+              autoComplete="new-password"
+              value={newPassword}
+              onChange={(event) => setNewPassword(event.target.value)}
+              placeholder="Choose a new password"
+              required
+            />
+            <button className="primary-button full" disabled={submitting || otp.length !== 6 || !newPassword}>
+              {submitting ? <LoaderCircle className="spin" aria-hidden="true" /> : null}
+              Reset password
+            </button>
+            <button type="button" className="text-button" onClick={() => setStep("phone")}>Back to sign in</button>
           </form>
         ) : step === "password" ? (
           <form onSubmit={submitLogin}>

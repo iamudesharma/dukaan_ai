@@ -14,7 +14,7 @@ import {
   X,
 } from "lucide-react";
 import { useWorkspace } from "../../app/WorkspaceContext";
-import { confirmCommand, interpretCommand, reviseCommand } from "../../data/repository";
+import { cancelProposal, confirmCommand, getProposalRevisions, interpretCommand, listProposals, reviseCommand } from "../../data/repository";
 import { formatMoney } from "../../lib/format";
 import { saveOfflineDraft } from "../../lib/offlineDrafts";
 import type { AssistantProposal } from "../../types";
@@ -50,6 +50,31 @@ export function AssistantPanel() {
     mutationFn: (current: AssistantProposal) => reviseCommand(bootstrap.business.id, current),
     onSuccess: (next) => { setProposal(next); confirm.reset(); },
   });
+
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [history, setHistory] = useState<Awaited<ReturnType<typeof listProposals>>>([]);
+  const [revisions, setRevisions] = useState<Awaited<ReturnType<typeof getProposalRevisions>>>([]);
+  const cancel = useMutation({
+    mutationFn: (current: AssistantProposal) => cancelProposal(current.id, current.version),
+    onSuccess: () => { setProposal(null); setText(""); },
+  });
+
+  async function loadHistory() {
+    setHistoryOpen(true);
+    try {
+      setHistory(await listProposals());
+    } catch {
+      setHistory([]);
+    }
+  }
+
+  async function loadRevisions(current: AssistantProposal) {
+    try {
+      setRevisions(await getProposalRevisions(current.id));
+    } catch {
+      setRevisions([]);
+    }
+  }
 
   useEffect(() => {
     if (!assistantOpen) return;
@@ -146,6 +171,15 @@ export function AssistantPanel() {
                 <button type="button"><ReceiptIndianRupee />Scan bill<span>Photo or PDF</span></button>
                 <button type="button"><ChevronRight />Manual<span>Use a form</span></button>
               </div>
+              <button type="button" className="text-button" onClick={() => void loadHistory()}>View past proposals</button>
+              {historyOpen ? (
+                <div>
+                  {history.length ? (
+                    <ul>{history.slice(0, 20).map((item) => <li key={item.id}>{item.status} · v{item.version}{item.content ? ` · ${item.content.slice(0, 60)}` : ""}</li>)}</ul>
+                  ) : <p className="muted-copy">No past proposals.</p>}
+                  <button type="button" className="text-button" onClick={() => setHistoryOpen(false)}>Hide history</button>
+                </div>
+              ) : null}
             </>
           ) : null}
 
@@ -217,6 +251,14 @@ export function AssistantPanel() {
                 onClick={() => refresh.mutate(proposal)}>
                 {refresh.isPending ? "Refreshing…" : "Refresh and review"}
               </button>
+              <div className="review-actions">
+                <button type="button" className="text-button" onClick={() => { void loadRevisions(proposal); }}>View revisions{revisions.length ? ` (${revisions.length})` : ""}</button>
+                <button type="button" className="text-button" disabled={cancel.isPending} onClick={() => cancel.mutate(proposal)}>{cancel.isPending ? "Cancelling…" : "Cancel proposal"}</button>
+              </div>
+              {revisions.length ? (
+                <ul>{revisions.map((rev) => <li key={rev.version}>v{rev.version} · {rev.createdAt}</li>)}</ul>
+              ) : null}
+              {cancel.error ? <p className="form-error" role="alert">{cancel.error.message}</p> : null}
               {refresh.error ? <p className="form-error" role="alert">{refresh.error.message}</p> : null}
               {confirm.error ? <p className="form-error" role="alert">{confirm.error.message}</p> : null}
             </div>

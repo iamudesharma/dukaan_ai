@@ -112,6 +112,30 @@ class AuthApi {
       ),
     );
   }
+
+  Future<String?> requestPasswordReset({required String phone}) async {
+    final response = await _dio.post<Object>(
+      'auth/password/reset/',
+      data: {'phone': _normalize(phone)},
+    );
+    final data = response.data as Map<String, dynamic>;
+    return data['dev_otp'] as String?;
+  }
+
+  Future<void> confirmPasswordReset({
+    required String phone,
+    required String otp,
+    required String newPassword,
+  }) async {
+    await _dio.post<Object>(
+      'auth/password/reset/confirm/',
+      data: {
+        'phone': _normalize(phone),
+        'otp': otp,
+        'new_password': newPassword,
+      },
+    );
+  }
 }
 
 class AuthTokens {

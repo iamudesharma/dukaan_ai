@@ -20,6 +20,99 @@ abstract interface class DukaanRepository {
   Future<AssistantProposal> refreshProposal(AssistantProposal proposal);
   Future<PostedResult> confirmProposal(AssistantProposal proposal);
   Future<PostedResult> createSale(SaleDraft draft);
+
+  // Common: current user + bootstrap.
+  Future<Map<String, dynamic>> fetchMe();
+  Future<Map<String, dynamic>> fetchBootstrap({String? businessId});
+
+  // Tenancy.
+  Future<List<Business>> listBusinesses();
+  Future<Business> createBusiness(Map<String, dynamic> payload);
+  Future<Business> fetchBusiness(String id);
+  Future<List<BusinessLocation>> listLocations({String? businessId});
+  Future<BusinessLocation> createLocation(Map<String, dynamic> payload);
+  Future<BusinessLocation> updateLocation(String id, Map<String, dynamic> payload);
+  Future<void> deleteLocation(String id);
+  Future<List<GstRegistration>> listGst({String? businessId});
+  Future<GstRegistration> createGst(Map<String, dynamic> payload);
+  Future<GstRegistration> updateGst(String id, Map<String, dynamic> payload);
+  Future<List<Membership>> listMemberships({String? businessId});
+  Future<Membership> createMembership(Map<String, dynamic> payload);
+  Future<Membership> updateMembership(String id, Map<String, dynamic> payload);
+  Future<void> deleteMembership(String id);
+
+  // Catalog detail + write.
+  Future<Product> fetchProduct(String id);
+  Future<Product> createProduct(Map<String, dynamic> payload);
+  Future<Product> updateProduct(String id, Map<String, dynamic> payload);
+  Future<void> deleteProduct(String id);
+  Future<Party> fetchParty(String id);
+  Future<Party> createParty(Map<String, dynamic> payload);
+  Future<Party> updateParty(String id, Map<String, dynamic> payload);
+  Future<void> deleteParty(String id);
+
+  // Operations detail.
+  Future<Map<String, dynamic>> fetchSale(String id);
+  Future<Map<String, dynamic>> fetchPurchase(String id);
+  Future<Map<String, dynamic>> fetchPayment(String id);
+  Future<Map<String, dynamic>> fetchExpense(String id);
+  Future<Map<String, dynamic>> fetchTransfer(String id);
+
+  // Operations writes (payloads already carry business_id/location_id;
+  // idempotency_key is injected when absent).
+  Future<PostedResult> createPurchase(Map<String, dynamic> payload);
+  Future<PostedResult> createPayment(Map<String, dynamic> payload);
+  Future<PostedResult> createExpense(Map<String, dynamic> payload);
+  Future<PostedResult> createTransfer(Map<String, dynamic> payload);
+
+  // Operations reversals.
+  Future<Map<String, dynamic>> reverseSale({
+    required String id,
+    required String reason,
+    String? idempotencyKey,
+  });
+  Future<Map<String, dynamic>> reversePurchase({
+    required String id,
+    required String reason,
+    String? idempotencyKey,
+  });
+  Future<Map<String, dynamic>> reversePayment({
+    required String id,
+    required String reason,
+    String? idempotencyKey,
+  });
+  Future<Map<String, dynamic>> reverseExpense({
+    required String id,
+    required String reason,
+    String? idempotencyKey,
+  });
+  Future<Map<String, dynamic>> reverseTransfer({
+    required String id,
+    required String reason,
+    String? idempotencyKey,
+  });
+
+  // Stock + ledger.
+  Future<Map<String, dynamic>> adjustStock(Map<String, dynamic> payload);
+  Future<Map<String, dynamic>> postOpeningBalance(Map<String, dynamic> payload);
+  Future<List<StockRow>> fetchStockReport({
+    required String businessId,
+    String? locationId,
+  });
+  Future<LedgerReport> fetchPartyLedger({
+    required String businessId,
+    required String partyId,
+    String? account,
+  });
+
+  // Assistant proposals.
+  Future<List<ProposalSummary>> listProposals();
+  Future<Map<String, dynamic>> fetchProposal(String id);
+  Future<List<ProposalRevision>> fetchRevisions(String id);
+  Future<Map<String, dynamic>> cancelProposal({
+    required String id,
+    required int version,
+  });
 }
 
 class ApiDukaanRepository implements DukaanRepository {
@@ -149,6 +242,396 @@ class ApiDukaanRepository implements DukaanRepository {
       data: draft.toApiJson(const Uuid().v4()),
     );
     return _postedResult(_object(response.data));
+  }
+
+  @override
+  Future<Map<String, dynamic>> fetchMe() async {
+    final response = await _dio.get<Object>('me/');
+    return _object(response.data);
+  }
+
+  @override
+  Future<Map<String, dynamic>> fetchBootstrap({String? businessId}) async {
+    final response = await _dio.get<Object>(
+      'bootstrap/',
+      queryParameters: {if (businessId != null) 'business_id': businessId},
+    );
+    return _object(response.data);
+  }
+
+  @override
+  Future<List<Business>> listBusinesses() async {
+    final response = await _dio.get<Object>('businesses/');
+    return _rows(response.data).map(Business.fromJson).toList(growable: false);
+  }
+
+  @override
+  Future<Business> createBusiness(Map<String, dynamic> payload) async {
+    final response = await _dio.post<Object>('businesses/', data: payload);
+    return Business.fromJson(_object(response.data));
+  }
+
+  @override
+  Future<Business> fetchBusiness(String id) async {
+    final response = await _dio.get<Object>('businesses/$id/');
+    return Business.fromJson(_object(response.data));
+  }
+
+  @override
+  Future<List<BusinessLocation>> listLocations({String? businessId}) async {
+    final resolved = businessId ?? await _resolveBusinessId();
+    final response = await _dio.get<Object>(
+      'locations/',
+      queryParameters: {'business_id': resolved},
+    );
+    return _rows(response.data)
+        .map((row) => BusinessLocation.fromJson({...row, 'business_id': resolved}))
+        .toList(growable: false);
+  }
+
+  @override
+  Future<BusinessLocation> createLocation(Map<String, dynamic> payload) async {
+    final businessId = payload['business']?.toString() ?? await _resolveBusinessId();
+    final response = await _dio.post<Object>(
+      'locations/',
+      data: {...payload, 'business': businessId},
+    );
+    return BusinessLocation.fromJson({..._object(response.data), 'business_id': businessId});
+  }
+
+  @override
+  Future<BusinessLocation> updateLocation(String id, Map<String, dynamic> payload) async {
+    final response = await _dio.patch<Object>('locations/$id/', data: payload);
+    final row = _object(response.data);
+    return BusinessLocation.fromJson({
+      ...row,
+      'business_id': row['business_id'] ?? row['business'] ?? await _resolveBusinessId(),
+    });
+  }
+
+  @override
+  Future<void> deleteLocation(String id) async {
+    await _dio.delete<Object>('locations/$id/');
+  }
+
+  @override
+  Future<List<GstRegistration>> listGst({String? businessId}) async {
+    final resolved = businessId ?? await _resolveBusinessId();
+    final response = await _dio.get<Object>(
+      'gst-registrations/',
+      queryParameters: {'business_id': resolved},
+    );
+    return _rows(response.data).map(GstRegistration.fromJson).toList(growable: false);
+  }
+
+  @override
+  Future<GstRegistration> createGst(Map<String, dynamic> payload) async {
+    final businessId = payload['business']?.toString() ?? await _resolveBusinessId();
+    final response = await _dio.post<Object>(
+      'gst-registrations/',
+      data: {...payload, 'business': businessId},
+    );
+    return GstRegistration.fromJson(_object(response.data));
+  }
+
+  @override
+  Future<GstRegistration> updateGst(String id, Map<String, dynamic> payload) async {
+    final response = await _dio.patch<Object>('gst-registrations/$id/', data: payload);
+    return GstRegistration.fromJson(_object(response.data));
+  }
+
+  @override
+  Future<List<Membership>> listMemberships({String? businessId}) async {
+    final resolved = businessId ?? await _resolveBusinessId();
+    final response = await _dio.get<Object>(
+      'memberships/',
+      queryParameters: {'business_id': resolved},
+    );
+    return _rows(response.data).map(Membership.fromJson).toList(growable: false);
+  }
+
+  @override
+  Future<Membership> createMembership(Map<String, dynamic> payload) async {
+    final businessId = payload['business']?.toString() ?? await _resolveBusinessId();
+    final response = await _dio.post<Object>(
+      'memberships/',
+      data: {...payload, 'business': businessId},
+    );
+    return Membership.fromJson(_object(response.data));
+  }
+
+  @override
+  Future<Membership> updateMembership(String id, Map<String, dynamic> payload) async {
+    final response = await _dio.patch<Object>('memberships/$id/', data: payload);
+    return Membership.fromJson(_object(response.data));
+  }
+
+  @override
+  Future<void> deleteMembership(String id) async {
+    await _dio.delete<Object>('memberships/$id/');
+  }
+
+  @override
+  Future<Product> fetchProduct(String id) async {
+    final response = await _dio.get<Object>('products/$id/');
+    return Product.fromJson(_object(response.data));
+  }
+
+  @override
+  Future<Product> createProduct(Map<String, dynamic> payload) async {
+    final data = Map<String, dynamic>.from(payload);
+    data['business'] ??= await _resolveBusinessId();
+    final response = await _dio.post<Object>('products/', data: data);
+    return Product.fromJson(_object(response.data));
+  }
+
+  @override
+  Future<Product> updateProduct(String id, Map<String, dynamic> payload) async {
+    final response = await _dio.patch<Object>('products/$id/', data: payload);
+    return Product.fromJson(_object(response.data));
+  }
+
+  @override
+  Future<void> deleteProduct(String id) async {
+    await _dio.delete<Object>('products/$id/');
+  }
+
+  @override
+  Future<Party> fetchParty(String id) async {
+    final response = await _dio.get<Object>('parties/$id/');
+    return Party.fromJson(_object(response.data));
+  }
+
+  @override
+  Future<Party> createParty(Map<String, dynamic> payload) async {
+    final data = Map<String, dynamic>.from(payload);
+    data['business'] ??= await _resolveBusinessId();
+    final response = await _dio.post<Object>('parties/', data: data);
+    return Party.fromJson(_object(response.data));
+  }
+
+  @override
+  Future<Party> updateParty(String id, Map<String, dynamic> payload) async {
+    final response = await _dio.patch<Object>('parties/$id/', data: payload);
+    return Party.fromJson(_object(response.data));
+  }
+
+  @override
+  Future<void> deleteParty(String id) async {
+    await _dio.delete<Object>('parties/$id/');
+  }
+
+  @override
+  Future<Map<String, dynamic>> fetchSale(String id) async {
+    final response = await _dio.get<Object>('sales/$id/');
+    return _object(response.data);
+  }
+
+  @override
+  Future<Map<String, dynamic>> fetchPurchase(String id) async {
+    final response = await _dio.get<Object>('purchases/$id/');
+    return _object(response.data);
+  }
+
+  @override
+  Future<Map<String, dynamic>> fetchPayment(String id) async {
+    final response = await _dio.get<Object>('payments/$id/');
+    return _object(response.data);
+  }
+
+  @override
+  Future<Map<String, dynamic>> fetchExpense(String id) async {
+    final response = await _dio.get<Object>('expenses/$id/');
+    return _object(response.data);
+  }
+
+  @override
+  Future<Map<String, dynamic>> fetchTransfer(String id) async {
+    final response = await _dio.get<Object>('transfers/$id/');
+    return _object(response.data);
+  }
+
+  @override
+  Future<PostedResult> createPurchase(Map<String, dynamic> payload) async {
+    final response = await _dio.post<Object>(
+      'purchases/',
+      data: _withIdempotency(payload),
+    );
+    return _postedResult(_object(response.data));
+  }
+
+  @override
+  Future<PostedResult> createPayment(Map<String, dynamic> payload) async {
+    final response = await _dio.post<Object>(
+      'payments/',
+      data: _withIdempotency(payload),
+    );
+    return _postedResult(_object(response.data));
+  }
+
+  @override
+  Future<PostedResult> createExpense(Map<String, dynamic> payload) async {
+    final response = await _dio.post<Object>(
+      'expenses/',
+      data: _withIdempotency(payload),
+    );
+    return _postedResult(_object(response.data));
+  }
+
+  @override
+  Future<PostedResult> createTransfer(Map<String, dynamic> payload) async {
+    final response = await _dio.post<Object>(
+      'transfers/',
+      data: _withIdempotency(payload),
+    );
+    return _postedResult(_object(response.data));
+  }
+
+  @override
+  Future<Map<String, dynamic>> reverseSale({
+    required String id,
+    required String reason,
+    String? idempotencyKey,
+  }) async {
+    return _reverse('sales', id, reason, idempotencyKey);
+  }
+
+  @override
+  Future<Map<String, dynamic>> reversePurchase({
+    required String id,
+    required String reason,
+    String? idempotencyKey,
+  }) async {
+    return _reverse('purchases', id, reason, idempotencyKey);
+  }
+
+  @override
+  Future<Map<String, dynamic>> reversePayment({
+    required String id,
+    required String reason,
+    String? idempotencyKey,
+  }) async {
+    return _reverse('payments', id, reason, idempotencyKey);
+  }
+
+  @override
+  Future<Map<String, dynamic>> reverseExpense({
+    required String id,
+    required String reason,
+    String? idempotencyKey,
+  }) async {
+    return _reverse('expenses', id, reason, idempotencyKey);
+  }
+
+  @override
+  Future<Map<String, dynamic>> reverseTransfer({
+    required String id,
+    required String reason,
+    String? idempotencyKey,
+  }) async {
+    return _reverse('transfers', id, reason, idempotencyKey);
+  }
+
+  @override
+  Future<Map<String, dynamic>> adjustStock(Map<String, dynamic> payload) async {
+    final response = await _dio.post<Object>(
+      'stock/adjustments/',
+      data: _withIdempotency(payload),
+    );
+    return _object(response.data);
+  }
+
+  @override
+  Future<Map<String, dynamic>> postOpeningBalance(Map<String, dynamic> payload) async {
+    final response = await _dio.post<Object>(
+      'party-ledger/opening-balances/',
+      data: _withIdempotency(payload),
+    );
+    return _object(response.data);
+  }
+
+  @override
+  Future<List<StockRow>> fetchStockReport({
+    required String businessId,
+    String? locationId,
+  }) async {
+    final response = await _dio.get<Object>(
+      'reports/stock/',
+      queryParameters: {
+        'business_id': businessId,
+        if (locationId != null) 'location_id': locationId,
+      },
+    );
+    return _rows(response.data).map(StockRow.fromJson).toList(growable: false);
+  }
+
+  @override
+  Future<LedgerReport> fetchPartyLedger({
+    required String businessId,
+    required String partyId,
+    String? account,
+  }) async {
+    final response = await _dio.get<Object>(
+      'reports/party-ledger/',
+      queryParameters: {
+        'business_id': businessId,
+        'party_id': partyId,
+        if (account != null) 'account': account,
+      },
+    );
+    return LedgerReport.fromJson(_object(response.data));
+  }
+
+  @override
+  Future<List<ProposalSummary>> listProposals() async {
+    final response = await _dio.get<Object>('assistant/proposals/');
+    return _rows(response.data).map(ProposalSummary.fromJson).toList(growable: false);
+  }
+
+  @override
+  Future<Map<String, dynamic>> fetchProposal(String id) async {
+    final response = await _dio.get<Object>('assistant/proposals/$id/');
+    return _object(response.data);
+  }
+
+  @override
+  Future<List<ProposalRevision>> fetchRevisions(String id) async {
+    final response = await _dio.get<Object>('assistant/proposals/$id/revisions/');
+    return _rows(response.data).map(ProposalRevision.fromJson).toList(growable: false);
+  }
+
+  @override
+  Future<Map<String, dynamic>> cancelProposal({
+    required String id,
+    required int version,
+  }) async {
+    final response = await _dio.post<Object>(
+      'assistant/proposals/$id/cancel/',
+      data: {'version': version},
+    );
+    return _object(response.data);
+  }
+
+  Future<Map<String, dynamic>> _reverse(
+    String resource,
+    String id,
+    String reason,
+    String? idempotencyKey,
+  ) async {
+    final response = await _dio.post<Object>(
+      '$resource/$id/reverse/',
+      data: {
+        'reason': reason,
+        'idempotency_key': idempotencyKey ?? const Uuid().v4(),
+      },
+    );
+    return _object(response.data);
+  }
+
+  static Map<String, dynamic> _withIdempotency(Map<String, dynamic> payload) {
+    final data = Map<String, dynamic>.from(payload);
+    data['idempotency_key'] ??= const Uuid().v4();
+    return data;
   }
 
   static List<Map<String, dynamic>> _rows(Object? data) {
@@ -480,6 +963,299 @@ class DemoDukaanRepository implements DukaanRepository {
     );
     return PostedResult(id: id, reference: reference, message: 'Sale recorded');
   }
+
+  @override
+  Future<Map<String, dynamic>> fetchMe() => _pause(const {
+        'id': 'user-demo',
+        'phone': '+919876543210',
+        'display_name': 'Demo User',
+      });
+
+  @override
+  Future<Map<String, dynamic>> fetchBootstrap({String? businessId}) => _pause({
+        'user': {
+          'id': 'user-demo',
+          'name': 'Demo User',
+          'phone': '+919876543210',
+          'role': 'OWNER',
+        },
+        'business': {
+          'id': businessId ?? 'business-demo',
+          'name': 'Demo Business',
+          'currency': 'INR',
+          'timezone': 'Asia/Kolkata',
+        },
+        'locations': [
+          {'id': 'loc-main', 'name': 'Main Market', 'code': 'MAIN'},
+          {'id': 'loc-godown', 'name': 'Godown', 'code': 'GODOWN'},
+        ],
+        'permissions': ['*'],
+      });
+
+  @override
+  Future<List<Business>> listBusinesses() => _pause(const [
+        Business(id: 'business-demo', name: 'Demo Business', role: 'OWNER'),
+      ]);
+
+  @override
+  Future<Business> createBusiness(Map<String, dynamic> payload) => _pause(
+        Business(id: _uuid.v4(), name: (payload['name'] ?? 'Business').toString()),
+      );
+
+  @override
+  Future<Business> fetchBusiness(String id) => _pause(
+        Business(id: id, name: 'Demo Business', role: 'OWNER'),
+      );
+
+  @override
+  Future<List<BusinessLocation>> listLocations({String? businessId}) =>
+      _pause(locations);
+
+  @override
+  Future<BusinessLocation> createLocation(Map<String, dynamic> payload) => _pause(
+        BusinessLocation(
+          id: _uuid.v4(),
+          businessId: (payload['business'] ?? 'business-demo').toString(),
+          name: (payload['name'] ?? 'Location').toString(),
+        ),
+      );
+
+  @override
+  Future<BusinessLocation> updateLocation(String id, Map<String, dynamic> payload) =>
+      _pause(
+        BusinessLocation(
+          id: id,
+          businessId: 'business-demo',
+          name: (payload['name'] ?? 'Main Market').toString(),
+        ),
+      );
+
+  @override
+  Future<void> deleteLocation(String id) => _pause(null);
+
+  @override
+  Future<List<GstRegistration>> listGst({String? businessId}) => _pause(const []);
+
+  @override
+  Future<GstRegistration> createGst(Map<String, dynamic> payload) => _pause(
+        GstRegistration(
+          id: _uuid.v4(),
+          businessId: (payload['business'] ?? 'business-demo').toString(),
+          gstin: (payload['gstin'] ?? '').toString(),
+        ),
+      );
+
+  @override
+  Future<GstRegistration> updateGst(String id, Map<String, dynamic> payload) => _pause(
+        GstRegistration(
+          id: id,
+          businessId: 'business-demo',
+          gstin: (payload['gstin'] ?? '').toString(),
+        ),
+      );
+
+  @override
+  Future<List<Membership>> listMemberships({String? businessId}) => _pause(const [
+        Membership(id: 'membership-demo', businessId: 'business-demo', role: 'OWNER'),
+      ]);
+
+  @override
+  Future<Membership> createMembership(Map<String, dynamic> payload) => _pause(
+        Membership(
+          id: _uuid.v4(),
+          businessId: (payload['business'] ?? 'business-demo').toString(),
+          role: (payload['role'] ?? 'CASHIER').toString(),
+        ),
+      );
+
+  @override
+  Future<Membership> updateMembership(String id, Map<String, dynamic> payload) => _pause(
+        Membership(
+          id: id,
+          businessId: 'business-demo',
+          role: (payload['role'] ?? 'CASHIER').toString(),
+        ),
+      );
+
+  @override
+  Future<void> deleteMembership(String id) => _pause(null);
+
+  @override
+  Future<Product> fetchProduct(String id) =>
+      _pause(products.firstWhere((product) => product.id == id, orElse: () => products.first));
+
+  @override
+  Future<Product> createProduct(Map<String, dynamic> payload) => _pause(
+        Product(
+          id: _uuid.v4(),
+          packId: _uuid.v4(),
+          name: (payload['name'] ?? 'Product').toString(),
+          sku: (payload['sku'] ?? '').toString(),
+          unit: (payload['base_unit'] ?? 'pcs').toString(),
+          stock: Decimal.parse('0'),
+          lowStockAt: Decimal.parse('0'),
+          retailPriceMinor: 0,
+          wholesalePriceMinor: 0,
+        ),
+      );
+
+  @override
+  Future<Product> updateProduct(String id, Map<String, dynamic> payload) =>
+      fetchProduct(id);
+
+  @override
+  Future<void> deleteProduct(String id) => _pause(null);
+
+  @override
+  Future<Party> fetchParty(String id) =>
+      _pause(parties.firstWhere((party) => party.id == id, orElse: () => parties.first));
+
+  @override
+  Future<Party> createParty(Map<String, dynamic> payload) => _pause(
+        Party(
+          id: _uuid.v4(),
+          name: (payload['name'] ?? 'Party').toString(),
+          phone: (payload['phone_e164'] ?? '').toString(),
+          kind: PartyKind.customer,
+          toReceiveMinor: 0,
+          toPayMinor: 0,
+        ),
+      );
+
+  @override
+  Future<Party> updateParty(String id, Map<String, dynamic> payload) => fetchParty(id);
+
+  @override
+  Future<void> deleteParty(String id) => _pause(null);
+
+  @override
+  Future<Map<String, dynamic>> fetchSale(String id) => _pause({'id': id});
+
+  @override
+  Future<Map<String, dynamic>> fetchPurchase(String id) => _pause({'id': id});
+
+  @override
+  Future<Map<String, dynamic>> fetchPayment(String id) => _pause({'id': id});
+
+  @override
+  Future<Map<String, dynamic>> fetchExpense(String id) => _pause({'id': id});
+
+  @override
+  Future<Map<String, dynamic>> fetchTransfer(String id) => _pause({'id': id});
+
+  Future<PostedResult> _demoPost(String prefix) async {
+    await Future<void>.delayed(const Duration(milliseconds: 350));
+    final id = _uuid.v4();
+    return PostedResult(id: id, reference: '$prefix-${1000 + _entries.length}', message: 'Saved');
+  }
+
+  @override
+  Future<PostedResult> createPurchase(Map<String, dynamic> payload) =>
+      _demoPost('DEMO-PUR');
+
+  @override
+  Future<PostedResult> createPayment(Map<String, dynamic> payload) =>
+      _demoPost('DEMO-PAY');
+
+  @override
+  Future<PostedResult> createExpense(Map<String, dynamic> payload) =>
+      _demoPost('DEMO-EXP');
+
+  @override
+  Future<PostedResult> createTransfer(Map<String, dynamic> payload) =>
+      _demoPost('DEMO-TRF');
+
+  @override
+  Future<Map<String, dynamic>> reverseSale({
+    required String id,
+    required String reason,
+    String? idempotencyKey,
+  }) =>
+      _pause({'id': id, 'status': 'REVERSED'});
+
+  @override
+  Future<Map<String, dynamic>> reversePurchase({
+    required String id,
+    required String reason,
+    String? idempotencyKey,
+  }) =>
+      _pause({'id': id, 'status': 'REVERSED'});
+
+  @override
+  Future<Map<String, dynamic>> reversePayment({
+    required String id,
+    required String reason,
+    String? idempotencyKey,
+  }) =>
+      _pause({'id': id, 'status': 'REVERSED'});
+
+  @override
+  Future<Map<String, dynamic>> reverseExpense({
+    required String id,
+    required String reason,
+    String? idempotencyKey,
+  }) =>
+      _pause({'id': id, 'status': 'REVERSED'});
+
+  @override
+  Future<Map<String, dynamic>> reverseTransfer({
+    required String id,
+    required String reason,
+    String? idempotencyKey,
+  }) =>
+      _pause({'id': id, 'status': 'REVERSED'});
+
+  @override
+  Future<Map<String, dynamic>> adjustStock(Map<String, dynamic> payload) =>
+      _pause({'id': _uuid.v4()});
+
+  @override
+  Future<Map<String, dynamic>> postOpeningBalance(Map<String, dynamic> payload) =>
+      _pause({'id': _uuid.v4()});
+
+  @override
+  Future<List<StockRow>> fetchStockReport({
+    required String businessId,
+    String? locationId,
+  }) =>
+      _pause(
+        products
+            .map(
+              (product) => StockRow(
+                productId: product.id,
+                name: product.name,
+                unit: product.unit,
+                quantity: product.stock,
+                lowStockThreshold: product.lowStockAt,
+                isLowStock: product.isLowStock,
+              ),
+            )
+            .toList(growable: false),
+      );
+
+  @override
+  Future<LedgerReport> fetchPartyLedger({
+    required String businessId,
+    required String partyId,
+    String? account,
+  }) =>
+      _pause(LedgerReport(partyId: partyId, balanceMinor: 0, entries: const []));
+
+  @override
+  Future<List<ProposalSummary>> listProposals() => _pause(const []);
+
+  @override
+  Future<Map<String, dynamic>> fetchProposal(String id) => _pause({'id': id});
+
+  @override
+  Future<List<ProposalRevision>> fetchRevisions(String id) => _pause(const []);
+
+  @override
+  Future<Map<String, dynamic>> cancelProposal({
+    required String id,
+    required int version,
+  }) =>
+      _pause({'id': id, 'version': version, 'status': 'CANCELLED'});
 }
 
 bool get isDemoRepositoryEnabled => AppConfig.demoMode;

@@ -454,3 +454,182 @@ class LocalDraft {
 
   String get encodedPayload => jsonEncode(payload);
 }
+
+@immutable
+class Business {
+  const Business({
+    required this.id,
+    required this.name,
+    this.legalName = '',
+    this.currency = 'INR',
+    this.timezone = 'Asia/Kolkata',
+    this.role,
+  });
+
+  final String id;
+  final String name;
+  final String legalName;
+  final String currency;
+  final String timezone;
+  final String? role;
+
+  factory Business.fromJson(Map<String, dynamic> json) => Business(
+        id: json['id'].toString(),
+        name: (json['name'] ?? 'Business').toString(),
+        legalName: (json['legal_name'] ?? '').toString(),
+        currency: (json['currency'] ?? 'INR').toString(),
+        timezone: (json['timezone'] ?? 'Asia/Kolkata').toString(),
+        role: json['role']?.toString(),
+      );
+}
+
+@immutable
+class Membership {
+  const Membership({
+    required this.id,
+    required this.businessId,
+    this.userId = '',
+    required this.role,
+    this.isActive = true,
+  });
+
+  final String id;
+  final String businessId;
+  final String userId;
+  final String role;
+  final bool isActive;
+
+  factory Membership.fromJson(Map<String, dynamic> json) => Membership(
+        id: json['id'].toString(),
+        businessId: (json['business'] ?? json['business_id'] ?? '').toString(),
+        userId: (json['user'] ?? json['user_id'] ?? '').toString(),
+        role: (json['role'] ?? '').toString(),
+        isActive: json['is_active'] is bool ? json['is_active'] as bool : true,
+      );
+}
+
+@immutable
+class GstRegistration {
+  const GstRegistration({
+    required this.id,
+    required this.businessId,
+    this.gstin = '',
+    this.legalName = '',
+    this.address = '',
+    this.stateCode = '',
+    this.invoicePrefix = '',
+  });
+
+  final String id;
+  final String businessId;
+  final String gstin;
+  final String legalName;
+  final String address;
+  final String stateCode;
+  final String invoicePrefix;
+
+  factory GstRegistration.fromJson(Map<String, dynamic> json) => GstRegistration(
+        id: json['id'].toString(),
+        businessId: (json['business'] ?? json['business_id'] ?? '').toString(),
+        gstin: (json['gstin'] ?? '').toString(),
+        legalName: (json['legal_name'] ?? '').toString(),
+        address: (json['address'] ?? '').toString(),
+        stateCode: (json['state_code'] ?? '').toString(),
+        invoicePrefix: (json['invoice_prefix'] ?? '').toString(),
+      );
+}
+
+@immutable
+class StockRow {
+  const StockRow({
+    required this.productId,
+    required this.name,
+    required this.unit,
+    required this.quantity,
+    required this.lowStockThreshold,
+    required this.isLowStock,
+  });
+
+  final String productId;
+  final String name;
+  final String unit;
+  final Decimal quantity;
+  final Decimal lowStockThreshold;
+  final bool isLowStock;
+
+  factory StockRow.fromJson(Map<String, dynamic> json) => StockRow(
+        productId: (json['product_id'] ?? json['id'] ?? '').toString(),
+        name: (json['name'] ?? 'Product').toString(),
+        unit: (json['unit'] ?? json['base_unit'] ?? 'pcs').toString(),
+        quantity: decimalFrom(json['quantity']),
+        lowStockThreshold: decimalFrom(json['low_stock_threshold']),
+        isLowStock: json['is_low_stock'] == true,
+      );
+}
+
+@immutable
+class LedgerReport {
+  const LedgerReport({
+    required this.partyId,
+    required this.balanceMinor,
+    required this.entries,
+  });
+
+  final String partyId;
+  final int balanceMinor;
+  final List<Map<String, dynamic>> entries;
+
+  factory LedgerReport.fromJson(Map<String, dynamic> json) {
+    final rawEntries = json['entries'];
+    return LedgerReport(
+      partyId: (json['party_id'] ?? '').toString(),
+      balanceMinor: minorFrom(json['balance']),
+      entries: rawEntries is List
+          ? rawEntries
+              .whereType<Map>()
+              .map((row) => Map<String, dynamic>.from(row))
+              .toList(growable: false)
+          : const [],
+    );
+  }
+}
+
+@immutable
+class ProposalSummary {
+  const ProposalSummary({
+    required this.id,
+    required this.version,
+    required this.status,
+  });
+
+  final String id;
+  final int version;
+  final String status;
+
+  factory ProposalSummary.fromJson(Map<String, dynamic> json) => ProposalSummary(
+        id: json['id'].toString(),
+        version: (json['version'] as num?)?.toInt() ?? 1,
+        status: (json['status'] ?? '').toString(),
+      );
+}
+
+@immutable
+class ProposalRevision {
+  const ProposalRevision({
+    required this.version,
+    required this.snapshot,
+    this.createdAt,
+  });
+
+  final int version;
+  final Map<String, dynamic> snapshot;
+  final DateTime? createdAt;
+
+  factory ProposalRevision.fromJson(Map<String, dynamic> json) => ProposalRevision(
+        version: (json['version'] as num?)?.toInt() ?? 1,
+        snapshot: json['snapshot'] is Map
+            ? Map<String, dynamic>.from(json['snapshot'] as Map)
+            : <String, dynamic>{},
+        createdAt: DateTime.tryParse((json['created_at'] ?? '').toString()),
+      );
+}

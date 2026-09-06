@@ -21,7 +21,7 @@ import {
 } from "lucide-react";
 import { NavLink, useLocation } from "react-router-dom";
 import { useWorkspace } from "../app/WorkspaceContext";
-import { demoMode, supabase } from "../lib/supabase";
+import { clearTokens, demoMode, getAccessToken } from "../lib/supabase";
 import { AssistantPanel } from "../features/assistant/AssistantPanel";
 
 const primaryNavigation = [
@@ -68,6 +68,23 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   useEffect(() => setMenuOpen(false), [location.pathname]);
 
+  async function signOut() {
+    try {
+      await fetch("/api/v1/auth/logout/", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${await getAccessToken() ?? ""}`,
+        },
+        body: JSON.stringify({ refresh: localStorage.getItem("dukaan_refresh_token") }),
+      });
+    } catch {
+      // Still clear local tokens on network failure.
+    }
+    clearTokens();
+    window.location.reload();
+  }
+
   const nav = (items: typeof primaryNavigation) => items.map(({ to, label, icon: Icon }) => (
     <NavLink key={to} to={to} end={to === "/"} className={({ isActive }) => isActive ? "nav-link active" : "nav-link"}>
       <Icon aria-hidden="true" />
@@ -99,8 +116,8 @@ export function AppShell({ children }: { children: ReactNode }) {
           <div className="user-card">
             <span className="avatar">AS</span>
             <div><strong>{bootstrap.user.name}</strong><span>{bootstrap.user.role.toLowerCase()}</span></div>
-            {!demoMode && supabase ? (
-              <button className="icon-button" aria-label="Sign out" title="Sign out" onClick={() => void supabase?.auth.signOut()}><ChevronDown /></button>
+            {!demoMode ? (
+              <button className="icon-button" aria-label="Sign out" title="Sign out" onClick={() => void signOut()}><ChevronDown /></button>
             ) : null}
           </div>
         </div>

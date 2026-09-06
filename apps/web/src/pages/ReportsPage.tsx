@@ -3,7 +3,7 @@ import { BarChart3, CalendarDays, Download, IndianRupee, Landmark, PackageCheck,
 import { useWorkspace } from "../app/WorkspaceContext";
 import { LoadingBlock } from "../components/LoadingBlock";
 import { PageHeader } from "../components/PageHeader";
-import { getDashboard } from "../data/repository";
+import { getDashboard, getStockReport } from "../data/repository";
 import { formatMoney } from "../lib/format";
 
 const reportCards = [
@@ -21,6 +21,10 @@ export function ReportsPage() {
     queryKey: ["dashboard", bootstrap.business.id, locationId],
     queryFn: () => getDashboard(bootstrap.business.id, locationId),
   });
+  const stock = useQuery({
+    queryKey: ["stock-report", bootstrap.business.id, locationId],
+    queryFn: () => getStockReport(bootstrap.business.id, locationId),
+  });
   return (
     <>
       <PageHeader eyebrow="Grounded in posted entries" title="Reports" description="Operational views for decisions and reconciliation. Profit is an estimate, not statutory accounting." actions={<><button className="secondary-button"><CalendarDays />This month</button><button className="primary-button"><Download />Export</button></>} />
@@ -32,6 +36,12 @@ export function ReportsPage() {
       ) : null}
       <section className="report-grid" aria-label="Available reports">
         {reportCards.map(({ name, detail, icon: Icon }) => <button type="button" className="report-card" key={name}><span><Icon /></span><div><strong>{name}</strong><small>{detail}</small></div><BarChart3 className="report-arrow" /></button>)}
+      </section>
+      <section className="panel" aria-label="Stock report">
+        <div className="panel-heading simple"><div><h2>Stock report</h2><p>Live server quantities for this location.</p></div><PackageCheck /></div>
+        {stock.isLoading ? <LoadingBlock /> : stock.data?.length ? (
+          <ul>{stock.data.slice(0, 20).map((row) => <li key={row.productId}>{row.name} — {row.quantity} {row.unit}{row.isLowStock ? " · low" : ""}</li>)}</ul>
+        ) : <p>No stock rows for this location.</p>}
       </section>
     </>
   );

@@ -16,6 +16,126 @@ export interface Business {
   timezone: "Asia/Kolkata";
 }
 
+export interface BusinessDetail extends Business {
+  legal_name?: string;
+  gstEnabled?: boolean;
+  negativeStockAllowed?: boolean;
+  role?: Role;
+}
+
+export interface LocationInput {
+  business: string;
+  name: string;
+  code: string;
+  address?: string;
+  stateCode?: string;
+  state_code?: string;
+  gstRegistration?: string | null;
+}
+
+export interface GstRegistration {
+  id: string;
+  business: string;
+  gstin: string;
+  legalName: string;
+  address?: string;
+  stateCode?: string;
+  invoicePrefix?: string;
+}
+
+export interface Membership {
+  id: string;
+  user: string;
+  business: string;
+  role: Role;
+  locations: string[];
+  isActive?: boolean;
+}
+
+export interface MeProfile {
+  id: string;
+  phone: string;
+  displayName: string;
+  memberships: Array<{ businessId: string; businessName: string; role: Role }>;
+}
+
+export interface StockRow {
+  productId: string;
+  name: string;
+  unit: string;
+  quantity: string;
+  lowStockThreshold?: string;
+  isLowStock?: boolean;
+}
+
+export interface LedgerEntry {
+  id: string;
+  account: string;
+  amountMinor: number;
+  note?: string;
+  occurredAt: string;
+}
+
+export interface LedgerReport {
+  partyId: string;
+  balance: number;
+  entries: LedgerEntry[];
+}
+
+export interface ProposalSummary {
+  id: string;
+  version: number;
+  status: string;
+  commandType?: string;
+  content?: string;
+  createdAt?: string;
+}
+
+export interface ProposalRevision {
+  version: number;
+  snapshot: unknown;
+  createdAt: string;
+}
+
+export interface ProductInput {
+  business: string;
+  name: string;
+  sku?: string;
+  baseUnit?: string;
+  trackInventory?: boolean;
+  hsnSac?: string;
+  taxRateBps?: number;
+  lowStockThreshold?: string;
+  packs: Array<{
+    id?: string;
+    name: string;
+    conversionFactor?: string;
+    retailPriceMinor: number;
+    wholesalePriceMinor: number;
+  }>;
+}
+
+export interface PartyInput {
+  business: string;
+  name: string;
+  kind: Party["kind"];
+  phoneE164?: string;
+  gstin?: string;
+  stateCode?: string;
+  address?: string;
+}
+
+export interface PurchaseLineInput {
+  packId: string;
+  quantity: string;
+  unitCostMinor: number;
+}
+
+export interface TransferLineInput {
+  packId: string;
+  quantity: string;
+}
+
 export interface Location {
   id: string;
   name: string;

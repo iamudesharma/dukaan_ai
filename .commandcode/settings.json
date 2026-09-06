@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Shell(uv:*)",
+      "Shell(source:*)",
+      "Shell(python manage.py makemigrations authentication common 2 >& 1)",
+      "Shell(DATABASE_URL= python -m pytest tests/test_auth.py -v 2 >& 1)",
+      "Shell(DATABASE_URL= python -c  from django.contrib.auth import get_user_model from rest_framework_simplejwt.tokens import RefreshToken User = get_user_model() user = User.objects.create_user(username='test', password='test123') refresh = RefreshToken.for_user(user) print('jti:', refresh['jti']) print('exp:', refresh['exp']) print('type exp:', type(refresh['exp']))  2 >& 1)",
+      "Shell(DATABASE_URL= python -m pytest tests/test_auth.py::TestLogout::test_logout_blacklists_token -v 2 >& 1)",
+      "Shell(flutter:*)"
+    ],
+    "deny": [],
+    "defaultMode": "default"
+  }
+}
