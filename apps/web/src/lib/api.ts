@@ -1,7 +1,7 @@
 import type { ApiErrorShape } from "../types";
 import { accessToken, getRefreshToken, setTokens, clearTokens } from "./supabase";
 
-const apiUrl = ((import.meta.env.VITE_API_URL as string | undefined) ?? "http://127.0.0.1:8000")
+export const apiUrl = ((import.meta.env.VITE_API_URL as string | undefined) ?? "http://127.0.0.1:8000")
   .replace(/\/$/, "");
 
 export class ApiError extends Error {

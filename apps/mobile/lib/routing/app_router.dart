@@ -3,6 +3,7 @@ import 'package:dukaan_ai_mobile/ui/pages/assistant_page.dart';
 import 'package:dukaan_ai_mobile/ui/pages/entries_page.dart';
 import 'package:dukaan_ai_mobile/ui/pages/manual_sale_page.dart';
 import 'package:dukaan_ai_mobile/ui/pages/parties_page.dart';
+import 'package:dukaan_ai_mobile/ui/pages/reports_page.dart';
 import 'package:dukaan_ai_mobile/ui/pages/stock_page.dart';
 import 'package:dukaan_ai_mobile/ui/pages/today_page.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -23,6 +24,7 @@ final routerProvider = Provider<GoRouter>((ref) {
           GoRoute(path: '/ask', builder: (context, state) => const AssistantPage()),
           GoRoute(path: '/stock', builder: (context, state) => const StockPage()),
           GoRoute(path: '/parties', builder: (context, state) => const PartiesPage()),
+          GoRoute(path: '/reports', builder: (context, state) => const ReportsPage()),
           GoRoute(
             path: '/sale/new',
             builder: (context, state) => const ManualSalePage(),

@@ -1,13 +1,24 @@
 import { useMemo, useState, type FormEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeftRight, Boxes, PackagePlus, Search, X } from "lucide-react";
+import { ArrowLeftRight, Boxes, PackagePlus, Pencil, Search, Trash2, X } from "lucide-react";
 import { useWorkspace } from "../app/WorkspaceContext";
 import { EmptyState } from "../components/EmptyState";
 import { LoadingBlock } from "../components/LoadingBlock";
 import { PageHeader } from "../components/PageHeader";
 import { StatusBadge } from "../components/StatusBadge";
-import { adjustStock, createProduct, createTransfer, getProducts, getStockReport } from "../data/repository";
-import { formatMoney } from "../lib/format";
+import {
+  adjustStock,
+  createProduct,
+  createTransfer,
+  deleteProduct,
+  getProducts,
+  getStockMovements,
+  getStockReport,
+  listTransfers,
+  updateProduct,
+} from "../data/repository";
+import { formatDateTime, formatMoney } from "../lib/format";
+import type { Product } from "../types";
 
 export function StockPage() {
   const { bootstrap, locationId } = useWorkspace();
@@ -25,6 +36,10 @@ export function StockPage() {
   const [transferQty, setTransferQty] = useState("1");
   const [delta, setDelta] = useState("1");
   const [reason, setReason] = useState("");
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editRetail, setEditRetail] = useState("");
+  const [editWholesale, setEditWholesale] = useState("");
+  const [editReorder, setEditReorder] = useState("");
   const queryClient = useQueryClient();
   const query = useQuery({
     queryKey: ["products", bootstrap.business.id, locationId],
@@ -33,6 +48,14 @@ export function StockPage() {
   const report = useQuery({
     queryKey: ["stock-report", bootstrap.business.id, locationId],
     queryFn: () => getStockReport(bootstrap.business.id, locationId),
+  });
+  const transfers = useQuery({
+    queryKey: ["transfers", bootstrap.business.id, locationId],
+    queryFn: () => listTransfers(bootstrap.business.id, locationId),
+  });
+  const movements = useQuery({
+    queryKey: ["stock-movements", bootstrap.business.id, locationId],
+    queryFn: () => getStockMovements({ businessId: bootstrap.business.id, locationId }),
   });
   const addProduct = useMutation({
     mutationFn: () => createProduct({
@@ -79,11 +102,46 @@ export function StockPage() {
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["products"] });
       await queryClient.invalidateQueries({ queryKey: ["stock-report"] });
+      await queryClient.invalidateQueries({ queryKey: ["stock-movements"] });
       setAdjustingId(null);
       setDelta("1");
       setReason("");
     },
   });
+  const editProductMutation = useMutation({
+    mutationFn: ({ productId, packId }: { productId: string; packId: string }) =>
+      updateProduct(productId, {
+        lowStockThreshold: editReorder || "0",
+        packs: [{
+          id: packId,
+          name: "",
+          retailPriceMinor: Math.round(Number(editRetail || 0) * 100),
+          wholesalePriceMinor: Math.round(Number(editWholesale || 0) * 100),
+        }],
+      }),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["products"] });
+      await queryClient.invalidateQueries({ queryKey: ["stock-report"] });
+      setEditingId(null);
+    },
+  });
+  const removeProduct = useMutation({
+    mutationFn: (productId: string) => deleteProduct(productId),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["products"] });
+      await queryClient.invalidateQueries({ queryKey: ["stock-report"] });
+    },
+  });
+  function openEdit(product: Product) {
+    setEditingId(product.id);
+    setEditRetail((product.retailPriceMinor / 100).toString());
+    setEditWholesale((product.wholesalePriceMinor / 100).toString());
+    setEditReorder(product.reorderLevel);
+  }
+  const locationName = (id: string) =>
+    bootstrap.locations.find((item) => item.id === id)?.name ?? id.slice(0, 8);
+  const nameForProduct = (id: string) =>
+    (query.data ?? []).find((item) => item.id === id)?.name ?? id.slice(0, 8);
   const products = useMemo(() => (query.data ?? []).filter((product) => {
     if (!`${product.name} ${product.sku}`.toLowerCase().includes(search.toLowerCase())) return false;
     if (showOnly === "low") return Number(product.onHand) <= Number(product.reorderLevel);
@@ -170,12 +228,67 @@ export function StockPage() {
                       <button className="text-button" disabled={adjust.isPending}>Save</button>
                       <button className="icon-button" aria-label="Cancel adjustment" type="button" onClick={() => setAdjustingId(null)}><X /></button>
                     </form>
-                  ) : <button type="button" className="text-button" onClick={() => setAdjustingId(product.id)}>Adjust</button>}</td>
+                  ) : editingId === product.id ? (
+                    <form className="inline-search" onSubmit={(e: FormEvent) => { e.preventDefault(); editProductMutation.mutate({ productId: product.id, packId: product.packId }); }}>
+                      <input aria-label="Retail price" type="number" min="0" step="0.01" value={editRetail} onChange={(e) => setEditRetail(e.target.value)} style={{ width: 72 }} />
+                      <input aria-label="Wholesale price" type="number" min="0" step="0.01" value={editWholesale} onChange={(e) => setEditWholesale(e.target.value)} style={{ width: 72 }} />
+                      <input aria-label="Reorder level" type="number" min="0" step="0.001" value={editReorder} onChange={(e) => setEditReorder(e.target.value)} style={{ width: 64 }} />
+                      <button className="text-button" disabled={editProductMutation.isPending}>Save</button>
+                      <button className="icon-button" aria-label="Cancel edit" type="button" onClick={() => setEditingId(null)}><X /></button>
+                    </form>
+                  ) : (
+                    <div className="row-actions">
+                      <button type="button" className="text-button" onClick={() => openEdit(product)}><Pencil size={14} /> Edit</button>
+                      <button type="button" className="text-button" onClick={() => setAdjustingId(product.id)}>Adjust</button>
+                      <button type="button" className="text-button" onClick={() => { if (window.confirm(`Deactivate ${product.name}?`)) removeProduct.mutate(product.id); }}><Trash2 size={14} /> Remove</button>
+                    </div>
+                  )}</td>
                 </tr>;
               })}</tbody>
             </table>
           </div>
         ) : <EmptyState title="No products found" detail="Add a product or change your search." />}
+      </section>
+      <section className="dashboard-grid lower">
+        <article className="panel data-panel">
+          <div className="panel-heading simple"><div><h2>Transfers</h2><p>Recent stock transfers involving this location.</p></div><ArrowLeftRight /></div>
+          {transfers.isLoading ? <LoadingBlock /> : transfers.data?.length ? (
+            <div className="table-scroll">
+              <table>
+                <thead><tr><th>Transfer</th><th>Route</th><th>Date</th><th>Status</th></tr></thead>
+                <tbody>
+                  {transfers.data.slice(0, 10).map((raw) => {
+                    const row = raw as Record<string, unknown>;
+                    return (
+                      <tr key={String(row.id)}>
+                        <td><strong>{String(row.number ?? "—")}</strong></td>
+                        <td>{locationName(String(row.fromLocation ?? ""))} → {locationName(String(row.toLocation ?? ""))}</td>
+                        <td>{row.documentDate ? String(row.documentDate) : "—"}</td>
+                        <td>{row.status === "REVERSED" ? <StatusBadge tone="neutral">Reversed</StatusBadge> : <StatusBadge tone="positive">Posted</StatusBadge>}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          ) : <p>No transfers for this location yet.</p>}
+        </article>
+        <article className="panel data-panel">
+          <div className="panel-heading simple"><div><h2>Recent movements</h2><p>Every quantity change for this location.</p></div><Boxes /></div>
+          {movements.isLoading ? <LoadingBlock /> : movements.data?.length ? (
+            <div className="compact-entry-list">
+              {movements.data.slice(0, 10).map((movement) => (
+                <div className="compact-entry" key={movement.id}>
+                  <div>
+                    <strong>{nameForProduct(movement.product)}</strong>
+                    <span>{movement.movementType} · {formatDateTime(movement.occurredAt)}</span>
+                  </div>
+                  <div className="entry-amount"><strong>{movement.quantity}</strong></div>
+                </div>
+              ))}
+            </div>
+          ) : <p>No stock movements yet.</p>}
+        </article>
       </section>
     </>
   );

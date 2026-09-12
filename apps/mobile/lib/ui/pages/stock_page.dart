@@ -3,6 +3,7 @@ import 'package:dukaan_ai_mobile/domain/models.dart';
 import 'package:dukaan_ai_mobile/l10n/app_strings.dart';
 import 'package:dukaan_ai_mobile/state/app_providers.dart';
 import 'package:dukaan_ai_mobile/ui/common/async_content.dart';
+import 'package:dukaan_ai_mobile/ui/common/stock_movements_sheet.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -19,6 +20,7 @@ class _StockPageState extends ConsumerState<StockPage> {
   @override
   Widget build(BuildContext context) {
     final products = ref.watch(productsProvider);
+    final stockReport = ref.watch(stockReportProvider);
     return Column(
       children: [
         Padding(
@@ -50,21 +52,32 @@ class _StockPageState extends ConsumerState<StockPage> {
               onRetry: () => ref.invalidate(productsProvider),
             ),
             data: (items) {
-              final filtered = _lowOnly
-                  ? items.where((product) => product.isLowStock).toList()
-                  : items;
+              final rows = {
+                for (final row in stockReport.valueOrNull ?? const <StockRow>[])
+                  row.productId: row,
+              };
+              bool isLow(Product product) =>
+                  rows[product.id]?.isLowStock ?? product.isLowStock;
+              final filtered =
+                  _lowOnly ? items.where(isLow).toList() : items;
               return RefreshIndicator(
                 onRefresh: () async {
                   ref.invalidate(productsProvider);
+                  ref.invalidate(stockReportProvider);
                   await ref.read(productsProvider.future);
                 },
                 child: ListView(
                   physics: const AlwaysScrollableScrollPhysics(),
                   padding: const EdgeInsets.fromLTRB(16, 6, 16, 28),
                   children: [
-                    _StockSummary(products: items),
+                    _StockSummary(products: items, isLow: isLow),
                     const SizedBox(height: 14),
-                    ...filtered.map((product) => _ProductCard(product: product)),
+                    ...filtered.map(
+                      (product) => _ProductCard(
+                        product: product,
+                        report: rows[product.id],
+                      ),
+                    ),
                   ],
                 ),
               );
@@ -77,13 +90,14 @@ class _StockPageState extends ConsumerState<StockPage> {
 }
 
 class _StockSummary extends StatelessWidget {
-  const _StockSummary({required this.products});
+  const _StockSummary({required this.products, required this.isLow});
 
   final List<Product> products;
+  final bool Function(Product) isLow;
 
   @override
   Widget build(BuildContext context) {
-    final low = products.where((product) => product.isLowStock).length;
+    final low = products.where(isLow).length;
     return Card(
       color: low > 0
           ? Theme.of(context).colorScheme.errorContainer
@@ -108,69 +122,76 @@ class _StockSummary extends StatelessWidget {
   }
 }
 
-class _ProductCard extends StatelessWidget {
-  const _ProductCard({required this.product});
+class _ProductCard extends ConsumerWidget {
+  const _ProductCard({required this.product, this.report});
 
   final Product product;
+  final StockRow? report;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final locale = Localizations.localeOf(context).languageCode;
-    final stockText = '${product.stock} ${product.unit} ${context.strings.t('inStock')}';
+    final quantity = report?.quantity ?? product.stock;
+    final low = report?.isLowStock ?? product.isLowStock;
+    final stockText = '$quantity ${product.unit} ${context.strings.t('inStock')}';
     return Semantics(
-      label: '${product.name}, $stockText${product.isLowStock ? ', ${context.strings.t('belowMinimum')}' : ''}',
+      label: '${product.name}, $stockText${low ? ', ${context.strings.t('belowMinimum')}' : ''}',
       child: Padding(
         padding: const EdgeInsets.only(bottom: 8),
         child: Card(
-          child: Padding(
-            padding: const EdgeInsets.all(15),
-            child: Row(
-              children: [
-                CircleAvatar(
-                  backgroundColor: product.isLowStock
-                      ? Theme.of(context).colorScheme.errorContainer
-                      : Theme.of(context).colorScheme.secondaryContainer,
-                  child: Icon(
-                    product.isLowStock
-                        ? Icons.warning_amber_rounded
-                        : Icons.inventory_2_outlined,
+          child: InkWell(
+            borderRadius: BorderRadius.circular(12),
+            onTap: report == null
+                ? null
+                : () => showStockMovementsSheet(context, ref, row: report!),
+            child: Padding(
+              padding: const EdgeInsets.all(15),
+              child: Row(
+                children: [
+                  CircleAvatar(
+                    backgroundColor: low
+                        ? Theme.of(context).colorScheme.errorContainer
+                        : Theme.of(context).colorScheme.secondaryContainer,
+                    child: Icon(
+                      low ? Icons.warning_amber_rounded : Icons.inventory_2_outlined,
+                    ),
                   ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(product.name, style: const TextStyle(fontWeight: FontWeight.w800)),
-                      const SizedBox(height: 3),
-                      Text('${product.sku} · $stockText'),
-                      if (product.isLowStock)
-                        Text(
-                          context.strings.t('belowMinimum'),
-                          style: TextStyle(
-                            color: Theme.of(context).colorScheme.error,
-                            fontWeight: FontWeight.w700,
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(product.name, style: const TextStyle(fontWeight: FontWeight.w800)),
+                        const SizedBox(height: 3),
+                        Text('${product.sku} · $stockText'),
+                        if (low)
+                          Text(
+                            context.strings.t('belowMinimum'),
+                            style: TextStyle(
+                              color: Theme.of(context).colorScheme.error,
+                              fontWeight: FontWeight.w700,
+                            ),
                           ),
-                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Text(
+                        formatMoney(product.retailPriceMinor, locale),
+                        style: const TextStyle(fontWeight: FontWeight.w800),
+                      ),
+                      Text(
+                        '${context.strings.t('wholesale')}: '
+                        '${formatMoney(product.wholesalePriceMinor, locale)}',
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
                     ],
                   ),
-                ),
-                const SizedBox(width: 8),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    Text(
-                      formatMoney(product.retailPriceMinor, locale),
-                      style: const TextStyle(fontWeight: FontWeight.w800),
-                    ),
-                    Text(
-                      '${context.strings.t('wholesale')}: '
-                      '${formatMoney(product.wholesalePriceMinor, locale)}',
-                      style: Theme.of(context).textTheme.bodySmall,
-                    ),
-                  ],
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         ),
@@ -178,4 +199,3 @@ class _ProductCard extends StatelessWidget {
     );
   }
 }
-

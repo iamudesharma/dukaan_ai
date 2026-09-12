@@ -100,22 +100,28 @@ class PartyViewSet(BusinessScopedCatalogViewSet):
 
     def get_queryset(self):
         queryset = super().get_queryset()
+        business_id = self.get_business_id()
         location_ids = self.get_location_ids()
-        if location_ids is None:
+        if location_ids is None or not business_id:
             return queryset.none()
-        return queryset.annotate(
-            _receivable_minor=Coalesce(
-                Sum(
-                    "ledger_entries__amount_minor",
-                    filter=Q(
-                        ledger_entries__account=PartyLedgerEntry.Account.RECEIVABLE,
-                        ledger_entries__location_id__in=location_ids,
-                    ),
+        membership = require_membership(self.request.user, business_id)
+        receivable = Coalesce(
+            Sum(
+                "ledger_entries__amount_minor",
+                filter=Q(
+                    ledger_entries__account=PartyLedgerEntry.Account.RECEIVABLE,
+                    ledger_entries__location_id__in=location_ids,
                 ),
-                Value(0),
-                output_field=BigIntegerField(),
             ),
-            _payable_minor=Coalesce(
+            Value(0),
+            output_field=BigIntegerField(),
+        )
+        if membership.role == Membership.Role.CASHIER:
+            # Cashiers must not see supplier payables, matching the payment
+            # document restriction on the operations endpoints.
+            payable = Value(0, output_field=BigIntegerField())
+        else:
+            payable = Coalesce(
                 Sum(
                     "ledger_entries__amount_minor",
                     filter=Q(
@@ -125,5 +131,5 @@ class PartyViewSet(BusinessScopedCatalogViewSet):
                 ),
                 Value(0),
                 output_field=BigIntegerField(),
-            ),
-        )
+            )
+        return queryset.annotate(_receivable_minor=receivable, _payable_minor=payable)

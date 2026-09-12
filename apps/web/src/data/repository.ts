@@ -1,11 +1,14 @@
-import { apiRequest, newIdempotencyKey } from "../lib/api";
-import { demoMode, getRefreshToken } from "../lib/supabase";
+import { apiRequest, apiUrl, newIdempotencyKey } from "../lib/api";
+import { accessToken, demoMode, getRefreshToken } from "../lib/supabase";
 import type {
   AssistantProposal,
   Bootstrap,
   Business,
   DashboardSummary,
+  DayBookReport,
+  DocumentReport,
   Entry,
+  GstReport,
   GstRegistration,
   LedgerReport,
   Location,
@@ -14,14 +17,19 @@ import type {
   Membership,
   MeProfile,
   Party,
+  PartyBalancesReport,
   PartyInput,
   Product,
   ProductInput,
   ProposalRevision,
   ProposalSummary,
   PurchaseLineInput,
+  ReportGroupRow,
+  ReportKind,
   Role,
+  StockMovementRow,
   StockRow,
+  StockValuationReport,
   TransferLineInput,
 } from "../types";
 import {
@@ -86,12 +94,19 @@ export async function getDashboard(
   };
 }
 
-export async function getEntries(businessId: string, locationId: string): Promise<Entry[]> {
+export async function getEntries(
+  businessId: string,
+  locationId: string,
+  options: { from?: string; to?: string; status?: string } = {},
+): Promise<Entry[]> {
   if (demoMode) {
     await delay();
     return getDemoState().entries;
   }
   const params = new URLSearchParams({ business_id: businessId, location_id: locationId });
+  if (options.from) params.set("from", options.from);
+  if (options.to) params.set("to", options.to);
+  if (options.status) params.set("status", options.status);
   const [sales, purchases, payments, expenses] = await Promise.all([
     apiRequest<unknown>(`/api/v1/sales/?${params}`),
     apiRequest<unknown>(`/api/v1/purchases/?${params}`),
@@ -694,11 +709,11 @@ export async function getProduct(id: string): Promise<Product | null> {
   const pack = packs[0] ?? {};
   return {
     id: String(row.id),
-    packId: String(pack.id ?? row.id),
+    packId: String(row.defaultPackId ?? pack.id ?? row.id),
     name: String(row.name),
     sku: String(row.sku ?? ""),
     unit: String(row.baseUnit ?? "piece").toLowerCase(),
-    onHand: "0",
+    onHand: String(row.stockQuantity ?? "0"),
     reorderLevel: String(row.lowStockThreshold ?? "0"),
     retailPriceMinor: minorFrom(pack, "retailPriceMinor", "retailPrice"),
     wholesalePriceMinor: minorFrom(pack, "wholesalePriceMinor", "wholesalePrice"),
@@ -748,7 +763,7 @@ export async function updateProduct(id: string, patch: Partial<ProductInput>) {
       ...(patch.packs ? {
         packs: patch.packs.map((p) => ({
           ...(p.id ? { id: p.id } : {}),
-          name: p.name,
+          ...(p.name ? { name: p.name } : {}),
           retail_price_minor: p.retailPriceMinor,
           wholesale_price_minor: p.wholesalePriceMinor,
         })),
@@ -774,10 +789,10 @@ export async function getParty(businessId: string, id: string): Promise<Party | 
   return {
     id: String(row.id),
     name: String(row.name),
-    phone: row.phoneE164 ? String(row.phoneE164) : undefined,
+    phone: row.phone ?? row.phoneE164 ? String(row.phone ?? row.phoneE164) : undefined,
     kind: String(row.kind ?? "CUSTOMER") as Party["kind"],
-    receivableMinor: 0,
-    payableMinor: 0,
+    receivableMinor: Number(row.receivableMinor ?? 0),
+    payableMinor: Number(row.payableMinor ?? 0),
     priceTier: "RETAIL",
   };
 }
@@ -1137,4 +1152,356 @@ export async function cancelProposal(id: string, version: number) {
     method: "POST",
     body: { version },
   });
+}
+
+// ---------------------------------------------------------------------------
+// Reports: day book, sales/purchases, GST, party balances, stock valuation,
+// stock movements and CSV export.
+// ---------------------------------------------------------------------------
+
+export interface ReportQuery {
+  businessId: string;
+  locationId?: string;
+  from?: string;
+  to?: string;
+}
+
+function reportParams(query: ReportQuery, extra: Record<string, string> = {}): URLSearchParams {
+  const params = new URLSearchParams({ business_id: query.businessId, ...extra });
+  if (query.locationId) params.set("location_id", query.locationId);
+  if (query.from) params.set("from", query.from);
+  if (query.to) params.set("to", query.to);
+  return params;
+}
+
+function mapDayBook(raw: Record<string, unknown>): DayBookReport {
+  const summary = (raw.summary ?? {}) as Record<string, unknown>;
+  const entries = Array.isArray(raw.entries)
+    ? (raw.entries as Record<string, unknown>[]).map((entry) => ({
+        date: String(entry.date ?? ""),
+        kind: String(entry.kind ?? ""),
+        number: String(entry.number ?? ""),
+        partyName: String(entry.partyName ?? ""),
+        direction: String(entry.direction ?? "IN") as "IN" | "OUT",
+        amountMinor: Number(entry.amountMinor ?? 0),
+        status: String(entry.status ?? "POSTED"),
+      }))
+    : [];
+  return {
+    from: raw.from ? String(raw.from) : undefined,
+    to: raw.to ? String(raw.to) : undefined,
+    summary: {
+      salesMinor: Number(summary.salesMinor ?? 0),
+      purchasesMinor: Number(summary.purchasesMinor ?? 0),
+      receiptsMinor: Number(summary.receiptsMinor ?? 0),
+      paymentsMinor: Number(summary.paymentsMinor ?? 0),
+      expensesMinor: Number(summary.expensesMinor ?? 0),
+      netCashMinor: Number(summary.netCashMinor ?? 0),
+    },
+    entries,
+  };
+}
+
+function mapGroupRow(row: Record<string, unknown>): ReportGroupRow {
+  return {
+    key: String(row.key ?? ""),
+    label: String(row.label ?? ""),
+    count: Number(row.count ?? 0),
+    quantity: row.quantity !== undefined ? String(row.quantity) : undefined,
+    taxableMinor: Number(row.taxableMinor ?? 0),
+    taxMinor: Number(row.taxMinor ?? 0),
+    grandTotalMinor: Number(row.grandTotalMinor ?? 0),
+    paidMinor: Number(row.paidMinor ?? 0),
+    dueMinor: Number(row.dueMinor ?? 0),
+  };
+}
+
+function mapDocumentReport(raw: Record<string, unknown>): DocumentReport {
+  return {
+    from: raw.from ? String(raw.from) : undefined,
+    to: raw.to ? String(raw.to) : undefined,
+    groupBy: String(raw.groupBy ?? "day") as DocumentReport["groupBy"],
+    totals: mapGroupRow((raw.totals ?? {}) as Record<string, unknown>),
+    rows: Array.isArray(raw.rows)
+      ? (raw.rows as Record<string, unknown>[]).map(mapGroupRow)
+      : [],
+  };
+}
+
+function demoDayBook(): DayBookReport {
+  const state = getDemoState();
+  const total = (kind: Entry["kind"]) =>
+    state.entries.filter((entry) => entry.kind === kind).reduce((sum, entry) => sum + entry.totalMinor, 0);
+  const receipts = total("PAYMENT_IN");
+  const payments = total("PAYMENT_OUT");
+  const expenses = total("EXPENSE");
+  return {
+    summary: {
+      salesMinor: total("SALE"),
+      purchasesMinor: total("PURCHASE"),
+      receiptsMinor: receipts,
+      paymentsMinor: payments,
+      expensesMinor: expenses,
+      netCashMinor: receipts - payments - expenses,
+    },
+    entries: state.entries.map((entry) => ({
+      date: entry.occurredAt.slice(0, 10),
+      kind: entry.kind,
+      number: entry.number,
+      partyName: entry.partyName,
+      direction: entry.kind === "SALE" || entry.kind === "PAYMENT_IN" ? ("IN" as const) : ("OUT" as const),
+      amountMinor: entry.totalMinor,
+      status: entry.status,
+    })),
+  };
+}
+
+function demoDocumentReport(kind: "sales" | "purchases", groupBy: string): DocumentReport {
+  const wanted = kind === "sales" ? "SALE" : "PURCHASE";
+  const rows = getDemoState()
+    .entries.filter((entry) => entry.kind === wanted)
+    .map<ReportGroupRow>((entry) => ({
+      key: entry.id,
+      label: groupBy === "party" ? entry.partyName : entry.occurredAt.slice(0, 10),
+      count: 1,
+      taxableMinor: entry.totalMinor,
+      taxMinor: 0,
+      grandTotalMinor: entry.totalMinor,
+      paidMinor: entry.totalMinor - entry.outstandingMinor,
+      dueMinor: entry.outstandingMinor,
+    }));
+  const totals = rows.reduce<ReportGroupRow>(
+    (accumulator, row) => ({
+      key: "totals",
+      label: "Total",
+      count: accumulator.count + 1,
+      taxableMinor: accumulator.taxableMinor + row.taxableMinor,
+      taxMinor: accumulator.taxMinor + row.taxMinor,
+      grandTotalMinor: accumulator.grandTotalMinor + row.grandTotalMinor,
+      paidMinor: accumulator.paidMinor + row.paidMinor,
+      dueMinor: accumulator.dueMinor + row.dueMinor,
+    }),
+    { key: "totals", label: "Total", count: 0, taxableMinor: 0, taxMinor: 0, grandTotalMinor: 0, paidMinor: 0, dueMinor: 0 },
+  );
+  return { groupBy: groupBy as DocumentReport["groupBy"], totals, rows };
+}
+
+export async function getDayBook(query: ReportQuery): Promise<DayBookReport> {
+  if (demoMode) {
+    await delay();
+    return demoDayBook();
+  }
+  const raw = await apiRequest<Record<string, unknown>>(
+    `/api/v1/reports/day-book/?${reportParams(query)}`,
+  );
+  return mapDayBook(raw);
+}
+
+export async function getDocumentReport(
+  query: ReportQuery,
+  kind: "sales" | "purchases",
+  groupBy: "day" | "party" | "product",
+): Promise<DocumentReport> {
+  if (demoMode) {
+    await delay();
+    return demoDocumentReport(kind, groupBy);
+  }
+  const raw = await apiRequest<Record<string, unknown>>(
+    `/api/v1/reports/${kind}/?${reportParams(query, { group_by: groupBy })}`,
+  );
+  return mapDocumentReport(raw);
+}
+
+function mapGstSide(side: Record<string, unknown>) {
+  const rows = Array.isArray(side.rows)
+    ? (side.rows as Record<string, unknown>[]).map((row) => ({
+        rateBps: Number(row.rateBps ?? 0),
+        taxableMinor: Number(row.taxableMinor ?? 0),
+        cgstMinor: Number(row.cgstMinor ?? 0),
+        sgstMinor: Number(row.sgstMinor ?? 0),
+        igstMinor: Number(row.igstMinor ?? 0),
+        taxMinor: Number(row.taxMinor ?? 0),
+      }))
+    : [];
+  const totals = (side.totals ?? {}) as Record<string, unknown>;
+  return {
+    rows,
+    totals: {
+      taxableMinor: Number(totals.taxableMinor ?? 0),
+      cgstMinor: Number(totals.cgstMinor ?? 0),
+      sgstMinor: Number(totals.sgstMinor ?? 0),
+      igstMinor: Number(totals.igstMinor ?? 0),
+      taxMinor: Number(totals.taxMinor ?? 0),
+    },
+  };
+}
+
+export async function getGstReport(query: ReportQuery): Promise<GstReport> {
+  if (demoMode) {
+    await delay();
+    const empty = { rows: [], totals: { taxableMinor: 0, cgstMinor: 0, sgstMinor: 0, igstMinor: 0, taxMinor: 0 } };
+    return {
+      output: { ...empty },
+      input: { ...empty },
+      b2b: { count: 0, taxableMinor: 0, taxMinor: 0 },
+      b2c: { count: 0, taxableMinor: 0, taxMinor: 0 },
+    };
+  }
+  const raw = await apiRequest<Record<string, unknown>>(`/api/v1/reports/gst/?${reportParams(query)}`);
+  const b2b = (raw.b2b ?? {}) as Record<string, unknown>;
+  const b2c = (raw.b2c ?? {}) as Record<string, unknown>;
+  return {
+    from: raw.from ? String(raw.from) : undefined,
+    to: raw.to ? String(raw.to) : undefined,
+    output: mapGstSide((raw.output ?? {}) as Record<string, unknown>),
+    input: mapGstSide((raw.input ?? {}) as Record<string, unknown>),
+    b2b: { count: Number(b2b.count ?? 0), taxableMinor: Number(b2b.taxableMinor ?? 0), taxMinor: Number(b2b.taxMinor ?? 0) },
+    b2c: { count: Number(b2c.count ?? 0), taxableMinor: Number(b2c.taxableMinor ?? 0), taxMinor: Number(b2c.taxMinor ?? 0) },
+  };
+}
+
+export async function getPartyBalances(query: ReportQuery): Promise<PartyBalancesReport> {
+  if (demoMode) {
+    await delay();
+    const parties = getDemoState().parties;
+    return {
+      rows: parties.map((party) => ({
+        partyId: party.id,
+        name: party.name,
+        kind: party.kind,
+        phone: party.phone ?? "",
+        receivableMinor: party.receivableMinor,
+        payableMinor: party.payableMinor,
+      })),
+      totals: {
+        receivableMinor: parties.reduce((sum, party) => sum + party.receivableMinor, 0),
+        payableMinor: parties.reduce((sum, party) => sum + party.payableMinor, 0),
+      },
+    };
+  }
+  const raw = await apiRequest<Record<string, unknown>>(
+    `/api/v1/reports/party-balances/?${reportParams(query)}`,
+  );
+  const totals = (raw.totals ?? {}) as Record<string, unknown>;
+  return {
+    totals: {
+      receivableMinor: Number(totals.receivableMinor ?? 0),
+      payableMinor: Number(totals.payableMinor ?? 0),
+    },
+    rows: Array.isArray(raw.rows)
+      ? (raw.rows as Record<string, unknown>[]).map((row) => ({
+          partyId: String(row.partyId ?? ""),
+          name: String(row.name ?? ""),
+          kind: String(row.kind ?? ""),
+          phone: String(row.phone ?? ""),
+          receivableMinor: Number(row.receivableMinor ?? 0),
+          payableMinor: Number(row.payableMinor ?? 0),
+        }))
+      : [],
+  };
+}
+
+export async function getStockValuation(query: ReportQuery): Promise<StockValuationReport> {
+  if (demoMode) {
+    await delay();
+    const products = getDemoState().products;
+    return {
+      rows: products.map((product) => ({
+        productId: product.id,
+        name: product.name,
+        unit: product.unit,
+        quantity: product.onHand,
+        costPerBaseUnitMinor: String(product.wholesalePriceMinor),
+        stockValueCostMinor: Math.round(Number(product.onHand) * product.wholesalePriceMinor),
+        retailPerBaseUnitMinor: String(product.retailPriceMinor),
+        stockValueRetailMinor: Math.round(Number(product.onHand) * product.retailPriceMinor),
+      })),
+      totals: {
+        costValueMinor: products.reduce((sum, product) => sum + Math.round(Number(product.onHand) * product.wholesalePriceMinor), 0),
+        retailValueMinor: products.reduce((sum, product) => sum + Math.round(Number(product.onHand) * product.retailPriceMinor), 0),
+        knownCostRows: products.length,
+      },
+    };
+  }
+  const raw = await apiRequest<Record<string, unknown>>(
+    `/api/v1/reports/stock-valuation/?${reportParams(query)}`,
+  );
+  const totals = (raw.totals ?? {}) as Record<string, unknown>;
+  return {
+    totals: {
+      costValueMinor: Number(totals.costValueMinor ?? 0),
+      retailValueMinor: Number(totals.retailValueMinor ?? 0),
+      knownCostRows: Number(totals.knownCostRows ?? 0),
+    },
+    rows: Array.isArray(raw.rows)
+      ? (raw.rows as Record<string, unknown>[]).map((row) => ({
+          productId: String(row.productId ?? ""),
+          name: String(row.name ?? ""),
+          unit: String(row.unit ?? ""),
+          quantity: String(row.quantity ?? "0"),
+          costPerBaseUnitMinor: row.costPerBaseUnitMinor != null ? String(row.costPerBaseUnitMinor) : null,
+          stockValueCostMinor: row.stockValueCostMinor != null ? Number(row.stockValueCostMinor) : null,
+          retailPerBaseUnitMinor: row.retailPerBaseUnitMinor != null ? String(row.retailPerBaseUnitMinor) : null,
+          stockValueRetailMinor: row.stockValueRetailMinor != null ? Number(row.stockValueRetailMinor) : null,
+        }))
+      : [],
+  };
+}
+
+export async function getStockMovements(
+  query: ReportQuery & { productId?: string; movementType?: string },
+): Promise<StockMovementRow[]> {
+  if (demoMode) {
+    await delay();
+    return [];
+  }
+  const extra: Record<string, string> = {};
+  if (query.productId) extra.product_id = query.productId;
+  if (query.movementType) extra.movement_type = query.movementType;
+  const raw = await apiRequest<unknown>(`/api/v1/stock/movements/?${reportParams(query, extra)}`);
+  return recordList(raw).map((row) => ({
+    id: String(row.id ?? ""),
+    location: String(row.location ?? ""),
+    product: String(row.product ?? ""),
+    movementType: String(row.movementType ?? ""),
+    quantity: String(row.quantity ?? "0"),
+    sourceType: String(row.sourceType ?? ""),
+    sourceId: String(row.sourceId ?? ""),
+    note: row.note ? String(row.note) : undefined,
+    occurredAt: String(row.occurredAt ?? ""),
+  }));
+}
+
+function triggerDownload(blob: Blob, filename: string) {
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
+export async function downloadReportCsv(
+  query: ReportQuery & { report: ReportKind; groupBy?: string },
+): Promise<void> {
+  const extra: Record<string, string> = { report: query.report };
+  if (query.groupBy) extra.group_by = query.groupBy;
+  if (demoMode) {
+    await delay();
+    triggerDownload(
+      new Blob(["key,label,count,grand_total_minor\n"], { type: "text/csv;charset=utf-8" }),
+      `${query.report}.csv`,
+    );
+    return;
+  }
+  const token = await accessToken();
+  const response = await fetch(`${apiUrl}/api/v1/reports/export/?${reportParams(query, extra)}`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
+  if (!response.ok) {
+    throw new Error("The export could not be generated.");
+  }
+  triggerDownload(await response.blob(), `${query.report}.csv`);
 }

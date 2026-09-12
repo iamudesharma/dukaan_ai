@@ -122,4 +122,51 @@ void main() {
     expect(party.toPayMinor, 0);
     expect(party.phone, '+919876543210');
   });
+
+  test('document report parses totals and grouped rows', () {
+    final report = DocumentReport.fromJson({
+      'group_by': 'party',
+      'totals': {
+        'key': 'totals',
+        'label': 'Total',
+        'count': 1,
+        'taxable_minor': 240000,
+        'tax_minor': 0,
+        'grand_total_minor': 240000,
+        'paid_minor': 150000,
+        'due_minor': 90000,
+      },
+      'rows': [
+        {
+          'key': 'party-1',
+          'label': 'Ramesh',
+          'count': 1,
+          'taxable_minor': 240000,
+          'tax_minor': 0,
+          'grand_total_minor': 240000,
+          'paid_minor': 150000,
+          'due_minor': 90000,
+        },
+      ],
+    });
+
+    expect(report.groupBy, 'party');
+    expect(report.rows.single.label, 'Ramesh');
+    expect(report.rows.single.grandTotalMinor, 240000);
+    expect(report.totals.dueMinor, 90000);
+  });
+
+  test('stock movement parses quantity and timestamp', () {
+    final movement = StockMovement.fromJson({
+      'id': 'movement-1',
+      'movement_type': 'SALE',
+      'quantity': '-3.000',
+      'occurred_at': '2026-09-12T10:30:00Z',
+      'note': '',
+    });
+
+    expect(movement.movementType, 'SALE');
+    expect(movement.quantity, '-3.000');
+    expect(movement.occurredAt.isUtc, isTrue);
+  });
 }

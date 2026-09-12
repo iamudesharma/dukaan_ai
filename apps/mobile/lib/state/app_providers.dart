@@ -90,6 +90,14 @@ final productsProvider = FutureProvider<List<Product>>((ref) async {
   return ref.watch(repositoryProvider).fetchProducts(location.id);
 });
 
+final stockReportProvider = FutureProvider<List<StockRow>>((ref) async {
+  final location = await ref.watch(activeLocationProvider.future);
+  return ref.watch(repositoryProvider).fetchStockReport(
+        businessId: location.businessId,
+        locationId: location.id,
+      );
+});
+
 final partiesProvider = FutureProvider<List<Party>>((ref) async {
   final location = await ref.watch(activeLocationProvider.future);
   return ref.watch(repositoryProvider).fetchParties(location.id);
@@ -104,6 +112,7 @@ void invalidateBusinessData(Ref ref) {
     ..invalidate(dashboardProvider)
     ..invalidate(entriesProvider)
     ..invalidate(productsProvider)
+    ..invalidate(stockReportProvider)
     ..invalidate(partiesProvider);
 }
 

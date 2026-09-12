@@ -23,7 +23,16 @@ from .models import (
     Sale,
     SaleLine,
     StockBalance,
+    StockMovement,
     StockTransfer,
+)
+from .reports import (
+    MANAGER_REPORTS,
+    REPORT_BUILDERS,
+    build_report,
+    csv_response,
+    parse_range,
+    report_csv,
 )
 from .serializers import (
     ExpenseCreateSerializer,
@@ -123,7 +132,47 @@ class PostingViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, viewsets.
                 )
             else:
                 queryset = queryset.filter(location_id=location_id)
-        return Response(self.get_serializer(queryset.order_by("-created_at")[:200], many=True).data)
+        status_value = request.query_params.get("status")
+        if status_value:
+            if status_value not in DocumentStatus.values:
+                raise ValidationError("Unknown status")
+            queryset = queryset.filter(status=status_value)
+        if request.query_params.get("from") or request.query_params.get("to"):
+            date_field = "payment_date" if self.queryset.model == Payment else "document_date"
+            start, end = parse_range(request)
+            if start:
+                queryset = queryset.filter(**{f"{date_field}__gte": start})
+            if end:
+                queryset = queryset.filter(**{f"{date_field}__lte": end})
+        if self.queryset.model == Payment and request.query_params.get("direction"):
+            direction = request.query_params["direction"]
+            if direction not in Payment.Direction.values:
+                raise ValidationError("Unknown direction")
+            queryset = queryset.filter(direction=direction)
+        queryset = queryset.order_by("-created_at")
+        limit_value = request.query_params.get("limit")
+        if limit_value:
+            try:
+                limit = int(limit_value)
+            except ValueError:
+                raise ValidationError("limit must be an integer") from None
+            if limit < 1 or limit > 500:
+                raise ValidationError("limit must be between 1 and 500")
+            try:
+                offset = max(0, int(request.query_params.get("offset", 0)))
+            except ValueError:
+                raise ValidationError("offset must be an integer") from None
+            total = queryset.count()
+            page = queryset[offset : offset + limit]
+            return Response(
+                {
+                    "count": total,
+                    "limit": limit,
+                    "offset": offset,
+                    "results": self.get_serializer(page, many=True).data,
+                }
+            )
+        return Response(self.get_serializer(queryset[:200], many=True).data)
 
     @extend_schema(request=None, responses=None)
     def create(self, request):
@@ -435,12 +484,111 @@ class DashboardView(APIView):
         )
 
 
+class BaseReportView(APIView):
+    report_name = ""
+    manager_only = False
+
+    def get(self, request):
+        business_id, location_ids = _report_scope(request)
+        if self.manager_only:
+            require_membership(
+                request.user,
+                business_id,
+                roles=[Membership.Role.OWNER, Membership.Role.MANAGER],
+            )
+        data = build_report(
+            self.report_name,
+            request=request,
+            business_id=business_id,
+            location_ids=location_ids,
+        )
+        return Response(data)
+
+
+class DayBookView(BaseReportView):
+    report_name = "day-book"
+    manager_only = True
+
+
+class SalesReportView(BaseReportView):
+    report_name = "sales"
+
+
+class PurchaseReportView(BaseReportView):
+    report_name = "purchases"
+    manager_only = True
+
+
+class GstReportView(BaseReportView):
+    report_name = "gst"
+    manager_only = True
+
+
+class PartyBalancesView(BaseReportView):
+    report_name = "party-balances"
+    manager_only = True
+
+
+class StockValuationView(BaseReportView):
+    report_name = "stock-valuation"
+    manager_only = True
+
+
+class ReportExportView(APIView):
+    def get(self, request):
+        name = request.query_params.get("report", "")
+        if name not in REPORT_BUILDERS:
+            raise ValidationError("Unknown report")
+        business_id, location_ids = _report_scope(request)
+        if name in MANAGER_REPORTS:
+            require_membership(
+                request.user,
+                business_id,
+                roles=[Membership.Role.OWNER, Membership.Role.MANAGER],
+            )
+        data = build_report(
+            name,
+            request=request,
+            business_id=business_id,
+            location_ids=location_ids,
+        )
+        headers, rows = report_csv(name=name, data=data)
+        filename = f"{name}-{timezone.localdate().isoformat()}.csv"
+        return csv_response(filename, headers, rows)
+
+
+class StockMovementListView(APIView):
+    def get(self, request):
+        business_id, location_ids = _report_scope(request)
+        movements = StockMovement.objects.filter(
+            business_id=business_id, location_id__in=location_ids
+        )
+        product_id = request.query_params.get("product_id")
+        if product_id:
+            movements = movements.filter(product_id=product_id)
+        movement_type = request.query_params.get("movement_type")
+        if movement_type:
+            if movement_type not in StockMovement.Type.values:
+                raise ValidationError("Unknown movement_type")
+            movements = movements.filter(movement_type=movement_type)
+        start, end = parse_range(request)
+        if start:
+            movements = movements.filter(occurred_at__date__gte=start)
+        if end:
+            movements = movements.filter(occurred_at__date__lte=end)
+        movements = movements.order_by("-occurred_at")[:200]
+        return Response(StockMovementSerializer(movements, many=True).data)
+
+
 class StockReportView(APIView):
     def get(self, request):
         business_id, location_ids = _report_scope(request)
         products = Product.objects.filter(
             business_id=business_id, is_active=True, track_inventory=True
         )
+        search = request.query_params.get("search")
+        if search:
+            products = products.filter(Q(name__icontains=search) | Q(sku__icontains=search))
         balances = StockBalance.objects.filter(
             business_id=business_id, location_id__in=location_ids
         )
@@ -475,6 +623,11 @@ class PartyLedgerReportView(APIView):
             location_id__in=location_ids,
             party_id=party_id,
         ).order_by("occurred_at", "created_at")
+        start, end = parse_range(request)
+        if start:
+            entries = entries.filter(occurred_at__date__gte=start)
+        if end:
+            entries = entries.filter(occurred_at__date__lte=end)
         account = request.query_params.get("account")
         if account:
             entries = entries.filter(account=account)
