@@ -34,6 +34,7 @@ class AuthApi {
     final data = response.data as Map<String, dynamic>;
     final tokens = AuthTokens.fromJson(data);
     await _sessionStore.writeAccessToken(tokens.access);
+    await _sessionStore.writeRefreshToken(tokens.refresh);
     return tokens;
   }
 
@@ -48,6 +49,7 @@ class AuthApi {
     final data = response.data as Map<String, dynamic>;
     final tokens = AuthTokens.fromJson(data);
     await _sessionStore.writeAccessToken(tokens.access);
+    await _sessionStore.writeRefreshToken(tokens.refresh);
     return tokens;
   }
 
@@ -71,6 +73,7 @@ class AuthApi {
     final data = response.data as Map<String, dynamic>;
     final tokens = AuthTokens.fromJson(data);
     await _sessionStore.writeAccessToken(tokens.access);
+    await _sessionStore.writeRefreshToken(tokens.refresh);
     return tokens;
   }
 

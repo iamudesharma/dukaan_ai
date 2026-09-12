@@ -32,6 +32,7 @@ class AssistantProposalSerializer(serializers.ModelSerializer):
             "command_type",
             "payload",
             "preview",
+            "preview_data",
             "warnings",
             "blocking_questions",
             "status",
@@ -48,6 +49,10 @@ class AssistantProposalSerializer(serializers.ModelSerializer):
 class ConfirmSerializer(serializers.Serializer):
     version = serializers.IntegerField(min_value=1)
     idempotency_key = serializers.CharField(max_length=128)
+    negative_stock_acknowledged = serializers.BooleanField(default=False)
+    negative_stock_reason = serializers.CharField(
+        max_length=240, required=False, allow_blank=True, default=""
+    )
 
 
 class CancelSerializer(serializers.Serializer):

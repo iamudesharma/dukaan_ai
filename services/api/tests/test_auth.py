@@ -1,9 +1,5 @@
-from unittest.mock import patch
-
 import pytest
 from django.contrib.auth import get_user_model
-from django.utils import timezone
-from datetime import timedelta
 from rest_framework import status
 from rest_framework.test import APIClient
 from rest_framework_simplejwt.tokens import RefreshToken
@@ -180,7 +176,8 @@ class TestLogout:
 @pytest.mark.django_db
 class TestPasswordChange:
     def test_change_password(self, api_client, user):
-        api_client.credentials(HTTP_AUTHORIZATION=f"Bearer {RefreshToken.for_user(user).access_token}")
+        token = RefreshToken.for_user(user).access_token
+        api_client.credentials(HTTP_AUTHORIZATION=f"Bearer {token}")
         response = api_client.post(
             "/api/v1/auth/password/change/",
             {"old_password": "SecurePass123!", "new_password": "NewSecurePass456!"},
@@ -190,7 +187,8 @@ class TestPasswordChange:
         assert user.check_password("NewSecurePass456!")
 
     def test_change_password_wrong_old(self, api_client, user):
-        api_client.credentials(HTTP_AUTHORIZATION=f"Bearer {RefreshToken.for_user(user).access_token}")
+        token = RefreshToken.for_user(user).access_token
+        api_client.credentials(HTTP_AUTHORIZATION=f"Bearer {token}")
         response = api_client.post(
             "/api/v1/auth/password/change/",
             {"old_password": "WrongPass123!", "new_password": "NewSecurePass456!"},

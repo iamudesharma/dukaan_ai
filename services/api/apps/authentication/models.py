@@ -16,6 +16,9 @@ class PhoneOTP(models.Model):
         ordering = ["-created_at"]
         indexes = [models.Index(fields=["phone_e164", "created_at"])]
 
+    def __str__(self) -> str:
+        return f"OTP for {self.phone_e164}"
+
     @staticmethod
     def hash_otp(otp: str) -> str:
         return hashlib.sha256(otp.encode()).hexdigest()
@@ -34,3 +37,6 @@ class BlacklistedToken(models.Model):
 
     class Meta:
         ordering = ["-created_at"]
+
+    def __str__(self) -> str:
+        return f"Blacklisted token {self.token_jti}"

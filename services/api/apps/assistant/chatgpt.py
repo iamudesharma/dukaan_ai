@@ -4,13 +4,14 @@ import json
 import logging
 import re
 from dataclasses import dataclass, field
-from decimal import Decimal
 
 from django.conf import settings
 
 logger = logging.getLogger(__name__)
 
-SYSTEM_PROMPT = """You are DukaanAI, a business assistant for Indian shop owners. Extract structured sale, purchase, payment, or expense information from natural language input in Hindi, Hinglish, or English.
+SYSTEM_PROMPT = """You are DukaanAI, a business assistant for Indian shop owners.
+Extract structured sale, purchase, payment, or expense information from natural
+language input in Hindi, Hinglish, or English.
 
 Respond ONLY with valid JSON in this exact format:
 {

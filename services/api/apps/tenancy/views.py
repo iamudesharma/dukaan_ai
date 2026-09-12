@@ -86,7 +86,7 @@ class MembershipViewSet(viewsets.ModelViewSet):
         if not business_id:
             return Membership.objects.none()
         require_membership(self.request.user, business_id, roles=[Membership.Role.OWNER])
-        return Membership.objects.filter(business_id=business_id)
+        return Membership.objects.filter(business_id=business_id).select_related("user")
 
     def perform_create(self, serializer):
         business = serializer.validated_data["business"]

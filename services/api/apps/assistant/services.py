@@ -4,7 +4,7 @@ import hashlib
 import json
 import re
 from datetime import timedelta
-from decimal import ROUND_HALF_UP, Decimal
+from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 
 from django.db import transaction
 from django.utils import timezone
@@ -95,6 +95,7 @@ def _record_revision(proposal):
                 "command_type",
                 "payload",
                 "preview",
+                "preview_data",
                 "warnings",
                 "blocking_questions",
                 "status",
@@ -122,6 +123,7 @@ def revise(*, proposal, actor, version, content=None):
     )
     proposal.payload = payload
     proposal.preview = preview
+    proposal.preview_data = _build_preview_data(payload, preview, blockers, proposal.location)
     proposal.warnings = warnings
     proposal.blocking_questions = blockers
     proposal.command_type = "SALE" if payload else "UNSUPPORTED"
@@ -156,6 +158,97 @@ def minor_to_rupees(minor: int) -> str:
     return f"{minor // 100}.{minor % 100:02d}"
 
 
+def _resolve_customer(business: Business, customer_name: str):
+    """Return (customer_id, new_customer_name, warnings, blockers)."""
+    if not customer_name:
+        return None, "", [], []
+    customers = list(
+        Party.objects.select_for_update().filter(
+            business=business, is_active=True, name__iexact=customer_name
+        )
+    )
+    if len(customers) > 1:
+        return (
+            None,
+            "",
+            [],
+            [f"More than one customer is named '{customer_name}'; select the correct customer."],
+        )
+    if customers:
+        if not customers[0].can_buy():
+            return None, "", [], [f"'{customer_name}' is not configured as a customer."]
+        return str(customers[0].id), "", [], []
+    return (
+        None,
+        customer_name,
+        [f"A new customer named '{customer_name}' will be created."],
+        [],
+    )
+
+
+def _resolve_product(business: Business, product_name: str):
+    """Return (product, pack, error_message)."""
+    product_terms = {product_name, product_name.rstrip("s"), f"{product_name}s"}
+    products = Product.objects.select_for_update().filter(business=business, is_active=True)
+    matched_products = []
+    for term in product_terms:
+        matched_products.extend(products.filter(name__iexact=term).prefetch_related("packs"))
+    unique_products = {product.id: product for product in matched_products}
+    if len(unique_products) != 1:
+        message = (
+            f"Select the exact product for '{product_name}'."
+            if unique_products
+            else f"Create or select the product '{product_name}' before confirming."
+        )
+        return None, None, message
+    product = next(iter(unique_products.values()))
+    pack = (
+        product.packs.select_for_update()
+        .filter(is_active=True, conversion_factor=Decimal("1"))
+        .first()
+        or product.packs.select_for_update().filter(is_active=True).first()
+    )
+    if not pack:
+        return (
+            None,
+            None,
+            f"Product '{product.name}' needs an active pack before it can be sold.",
+        )
+    return product, pack, ""
+
+
+def _build_preview_data(payload, summary, blockers, location: Location):
+    facts = []
+    customer_name = str(payload.get("new_customer_name") or "")
+    if payload.get("customer_id"):
+        customer = Party.objects.filter(pk=payload["customer_id"]).values("name").first()
+        if customer:
+            customer_name = customer["name"]
+    if customer_name:
+        facts.append({"label": "Party", "value": customer_name, "warning": False})
+    pack_ids = [line.get("pack_id") for line in payload.get("lines", []) if line.get("pack_id")]
+    packs = {
+        str(pack.id): pack
+        for pack in ProductPack.objects.filter(pk__in=pack_ids).select_related("product")
+    }
+    for line in payload.get("lines", []):
+        pack = packs.get(line.get("pack_id"))
+        product_name = pack.product.name if pack else "Item"
+        quantity = line.get("quantity", "")
+        unit_price = int(line.get("unit_price_minor") or 0)
+        value = f"{quantity} × ₹{minor_to_rupees(unit_price)}"
+        facts.append({"label": product_name, "value": value, "warning": False})
+    paid = int(payload.get("paid_amount_minor") or 0)
+    if paid:
+        facts.append({"label": "Paid", "value": f"₹{minor_to_rupees(paid)}", "warning": False})
+    facts.append({"label": "Location", "value": location.name, "warning": False})
+    return {
+        "summary": summary,
+        "facts": facts,
+        "questions": list(blockers),
+    }
+
+
 def _parse_sale(content: str, business: Business, location: Location):
     text = " ".join(content.strip().split())
     lowered = text.casefold()
@@ -183,53 +276,16 @@ def _parse_sale(content: str, business: Business, location: Location):
 
     count = _number(quantity_match.group("quantity"))
     product_name = quantity_match.group("product").strip(" ,.")
-    product_terms = {product_name, product_name.rstrip("s"), f"{product_name}s"}
-    products = Product.objects.select_for_update().filter(business=business, is_active=True)
-    matched_products = []
-    for term in product_terms:
-        matched_products.extend(products.filter(name__iexact=term).prefetch_related("packs"))
-    unique_products = {product.id: product for product in matched_products}
-    if len(unique_products) != 1:
-        blockers.append(
-            f"Select the exact product for '{product_name}'."
-            if unique_products
-            else f"Create or select the product '{product_name}' before confirming."
-        )
+    product, pack, product_error = _resolve_product(business, product_name)
+    if product is None:
+        blockers.append(product_error)
         return {}, "", warnings, blockers
-    product = next(iter(unique_products.values()))
-    pack = (
-        product.packs.select_for_update()
-        .filter(is_active=True, conversion_factor=Decimal("1"))
-        .first()
-        or product.packs.select_for_update().filter(is_active=True).first()
-    )
-    if not pack:
-        return (
-            {},
-            "",
-            warnings,
-            [f"Product '{product.name}' needs an active pack before it can be sold."],
-        )
 
-    customers = list(
-        Party.objects.select_for_update().filter(
-            business=business, is_active=True, name__iexact=customer_name
-        )
+    customer_id, new_customer_name, customer_warnings, customer_blockers = _resolve_customer(
+        business, customer_name
     )
-    customer_id = None
-    new_customer_name = ""
-    if len(customers) > 1:
-        blockers.append(
-            f"More than one customer is named '{customer_name}'; select the correct customer."
-        )
-    elif customers:
-        if not customers[0].can_buy():
-            blockers.append(f"'{customer_name}' is not configured as a customer.")
-        else:
-            customer_id = str(customers[0].id)
-    else:
-        new_customer_name = customer_name
-        warnings.append(f"A new customer named '{customer_name}' will be created.")
+    warnings.extend(customer_warnings)
+    blockers.extend(customer_blockers)
 
     total_minor = _rupees_to_minor(amounts[0])
     paid_minor = _rupees_to_minor(amounts[1])
@@ -288,13 +344,65 @@ def _interpret_with_ai(content: str, locale: str, business: Business, location: 
     if result is None or not result.is_valid:
         return None
 
+    warnings = list(result.warnings)
+    blockers = list(result.blocking_questions)
+
+    customer_id, new_customer_name, customer_warnings, customer_blockers = _resolve_customer(
+        business, (result.customer_name or "").strip()
+    )
+    warnings.extend(customer_warnings)
+    blockers.extend(customer_blockers)
+
+    lines = []
+    stated_total = 0
+    for item in result.items:
+        product_name = str(item.get("product") or "").strip()
+        try:
+            quantity = Decimal(str(item.get("quantity") or 0))
+        except (InvalidOperation, ValueError):
+            quantity = Decimal("0")
+        unit_price = int(item.get("unit_price_minor") or 0)
+        if not product_name or quantity <= 0:
+            blockers.append("Every item needs a product name and a positive quantity.")
+            continue
+        _, pack, product_error = _resolve_product(business, product_name)
+        if pack is None:
+            blockers.append(product_error)
+            continue
+        lines.append(
+            {
+                "pack_id": str(pack.id),
+                "quantity": str(quantity),
+                "unit_price_minor": unit_price,
+                "discount_minor": 0,
+            }
+        )
+        stated_total += _mul_round_half_up(quantity, unit_price)
+
+    if lines:
+        if result.total_minor and stated_total != int(result.total_minor):
+            blockers.append(
+                f"The item prices add up to ₹{minor_to_rupees(stated_total)}, "
+                f"but the stated total is ₹{minor_to_rupees(int(result.total_minor))}. "
+                "Please correct the amounts."
+            )
+    else:
+        blockers.append("No product could be matched; add the product before confirming.")
+
     payload = {
         "business_id": str(business.id),
         "location_id": str(location.id),
-        "customer_name": result.customer_name,
-        "items": result.items,
-        "total_minor": result.total_minor,
-        "paid_minor": result.paid_minor,
+        "customer_id": customer_id,
+        "new_customer_name": new_customer_name,
+        "invoice_date": str(timezone.localdate()),
+        "price_mode": Sale.PriceMode.RETAIL,
+        "tax_inclusive": business.gst_enabled,
+        "discount_total_minor": 0,
+        "lines": lines,
+        "paid_amount_minor": int(result.paid_minor or 0),
+        "payment_method": "CASH",
+        "negative_stock_acknowledged": False,
+        "negative_stock_reason": "",
     }
     preview_parts = []
     if result.customer_name:
@@ -307,7 +415,7 @@ def _interpret_with_ai(content: str, locale: str, business: Business, location: 
     if result.paid_minor:
         preview_parts.append(f"Paid: ₹{result.paid_minor / 100:.2f}")
     preview = "; ".join(preview_parts) if preview_parts else ""
-    return payload, preview, result.warnings, result.blocking_questions
+    return payload, preview, warnings, blockers
 
 
 @transaction.atomic
@@ -323,11 +431,12 @@ def interpret(
     ai_result = _interpret_with_ai(content, locale, business, location)
     if ai_result:
         payload, preview, warnings, blockers = ai_result
-        command_type = "SALE" if payload.get("items") else "UNSUPPORTED"
+        command_type = "SALE" if payload.get("lines") else "UNSUPPORTED"
     else:
         payload, preview, warnings, blockers = _parse_sale(content, business, location)
         command_type = "SALE" if payload else "UNSUPPORTED"
 
+    preview_data = _build_preview_data(payload, preview, blockers, location)
     proposal = AssistantProposal.objects.create(
         business=business,
         location=location,
@@ -338,6 +447,7 @@ def interpret(
         command_type=command_type,
         payload=payload,
         preview=preview,
+        preview_data=preview_data,
         warnings=warnings,
         blocking_questions=blockers,
         status=AssistantProposal.Status.DRAFT if blockers else AssistantProposal.Status.READY,
@@ -348,7 +458,15 @@ def interpret(
 
 
 @transaction.atomic
-def confirm(*, proposal: AssistantProposal, actor, version: int, idempotency_key: str):
+def confirm(
+    *,
+    proposal: AssistantProposal,
+    actor,
+    version: int,
+    idempotency_key: str,
+    negative_stock_acknowledged: bool = False,
+    negative_stock_reason: str = "",
+):
     Business.objects.select_for_update().get(pk=proposal.business_id)
     proposal = AssistantProposal.objects.select_for_update().get(pk=proposal.pk)
     if proposal.actor_id != actor.id:
@@ -402,6 +520,8 @@ def confirm(*, proposal: AssistantProposal, actor, version: int, idempotency_key
             kind=Party.Kind.CUSTOMER,
         )
         raw["customer_id"] = str(customer.id)
+    raw["negative_stock_acknowledged"] = bool(negative_stock_acknowledged)
+    raw["negative_stock_reason"] = negative_stock_reason
     raw["idempotency_key"] = idempotency_key
     serializer = SaleCreateSerializer(data=raw)
     serializer.is_valid(raise_exception=True)

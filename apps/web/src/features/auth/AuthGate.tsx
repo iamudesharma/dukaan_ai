@@ -1,6 +1,15 @@
 import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 import { KeyRound, LoaderCircle, LogOut, Phone, ShieldCheck, Store, UserPlus } from "lucide-react";
 import { demoMode, getAccessToken, setTokens, clearTokens } from "../../lib/supabase";
+import {
+  confirmPasswordReset,
+  login,
+  logout,
+  requestPasswordReset,
+  sendOtp,
+  signup,
+  verifyOtp,
+} from "../../data/repository";
 
 interface Props {
   children: ReactNode;
@@ -42,20 +51,11 @@ export function AuthGate({ children }: Props) {
     setDevOtp(null);
     const normalized = phone.replace(/[\s()-]/g, "");
     try {
-      const res = await fetch("/api/v1/auth/otp/send/", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ phone: normalized }),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        setMessage(data.detail ?? "Could not send code.");
-      } else {
-        setStep("otp");
-        if (data.dev_otp) setDevOtp(data.dev_otp);
-      }
-    } catch {
-      setMessage("Network error. Please try again.");
+      const devOtpValue = await sendOtp(normalized);
+      setStep("otp");
+      if (devOtpValue) setDevOtp(devOtpValue);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Could not send code.");
     } finally {
       setSubmitting(false);
     }
@@ -67,20 +67,11 @@ export function AuthGate({ children }: Props) {
     setMessage(null);
     const normalized = phone.replace(/[\s()-]/g, "");
     try {
-      const res = await fetch("/api/v1/auth/login/", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ phone: normalized, password }),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        setMessage(data.detail ?? "Invalid phone or password.");
-      } else {
-        setTokens({ access: data.access, refresh: data.refresh });
-        setAuth({ authenticated: true, loading: false });
-      }
-    } catch {
-      setMessage("Network error. Please try again.");
+      const tokens = await login(normalized, password);
+      setTokens(tokens);
+      setAuth({ authenticated: true, loading: false });
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Invalid phone or password.");
     } finally {
       setSubmitting(false);
     }
@@ -92,20 +83,11 @@ export function AuthGate({ children }: Props) {
     setMessage(null);
     const normalized = phone.replace(/[\s()-]/g, "");
     try {
-      const res = await fetch("/api/v1/auth/otp/verify/", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ phone: normalized, otp }),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        setMessage(data.detail ?? "Invalid code.");
-      } else {
-        setTokens({ access: data.access, refresh: data.refresh });
-        setAuth({ authenticated: true, loading: false });
-      }
-    } catch {
-      setMessage("Network error. Please try again.");
+      const tokens = await verifyOtp(normalized, otp);
+      setTokens(tokens);
+      setAuth({ authenticated: true, loading: false });
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Invalid code.");
     } finally {
       setSubmitting(false);
     }
@@ -117,20 +99,11 @@ export function AuthGate({ children }: Props) {
     setMessage(null);
     const normalized = phone.replace(/[\s()-]/g, "");
     try {
-      const res = await fetch("/api/v1/auth/signup/", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ phone: normalized, password, ...(displayName ? { display_name: displayName } : {}) }),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        setMessage(data.detail ?? "Could not create your account.");
-      } else {
-        setTokens({ access: data.access, refresh: data.refresh });
-        setAuth({ authenticated: true, loading: false });
-      }
-    } catch {
-      setMessage("Network error. Please try again.");
+      const tokens = await signup(normalized, password, displayName || undefined);
+      setTokens(tokens);
+      setAuth({ authenticated: true, loading: false });
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Could not create your account.");
     } finally {
       setSubmitting(false);
     }
@@ -143,20 +116,11 @@ export function AuthGate({ children }: Props) {
     setDevOtp(null);
     const normalized = phone.replace(/[\s()-]/g, "");
     try {
-      const res = await fetch("/api/v1/auth/password/reset/", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ phone: normalized }),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        setMessage(data.detail ?? "Could not send a reset code.");
-      } else {
-        setStep("reset-confirm");
-        if (data.dev_otp) setDevOtp(data.dev_otp);
-      }
-    } catch {
-      setMessage("Network error. Please try again.");
+      const devOtpValue = await requestPasswordReset(normalized);
+      setStep("reset-confirm");
+      if (devOtpValue) setDevOtp(devOtpValue);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Could not send a reset code.");
     } finally {
       setSubmitting(false);
     }
@@ -168,20 +132,11 @@ export function AuthGate({ children }: Props) {
     setMessage(null);
     const normalized = phone.replace(/[\s()-]/g, "");
     try {
-      const res = await fetch("/api/v1/auth/password/reset/confirm/", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ phone: normalized, otp, new_password: newPassword }),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        setMessage(data.detail ?? "Invalid code.");
-      } else {
-        setMessage("Password has been reset. Sign in with your new password.");
-        setStep("password");
-      }
-    } catch {
-      setMessage("Network error. Please try again.");
+      await confirmPasswordReset(normalized, otp, newPassword);
+      setMessage("Password has been reset. Sign in with your new password.");
+      setStep("password");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Invalid code.");
     } finally {
       setSubmitting(false);
     }
@@ -189,17 +144,9 @@ export function AuthGate({ children }: Props) {
 
   async function logout() {
     try {
-      const refresh = localStorage.getItem("dukaan_refresh_token");
-      await fetch("/api/v1/auth/logout/", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${getAccessToken() ?? ""}`,
-        },
-        body: JSON.stringify({ refresh }),
-      });
+      await logout();
     } catch {
-      // ignore
+      // Still clear local tokens on network failure.
     }
     clearTokens();
     setAuth({ authenticated: false, loading: false });
@@ -241,7 +188,7 @@ export function AuthGate({ children }: Props) {
       </section>
       <section className="auth-card" aria-label="Sign in">
         {step === "phone" ? (
-          <form onSubmit={submitPhone}>
+          <form onSubmit={(event) => (password ? void submitLogin(event) : void submitPhone(event))}>
             <Phone className="auth-icon" aria-hidden="true" />
             <h2>Phone sign in</h2>
             <p>We'll send a one-time code or use your password.</p>
@@ -264,11 +211,7 @@ export function AuthGate({ children }: Props) {
               onChange={(event) => setPassword(event.target.value)}
               placeholder="Leave blank for OTP"
             />
-            <button className="primary-button full" disabled={submitting} onClick={() => {
-              if (password) {
-                void submitPhone(new Event("submit") as unknown as FormEvent);
-              }
-            }}>
+            <button className="primary-button full" type="submit" disabled={submitting}>
               {submitting ? <LoaderCircle className="spin" aria-hidden="true" /> : null}
               {password ? "Sign in with password" : "Send OTP"}
             </button>

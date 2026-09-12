@@ -17,7 +17,9 @@ class SignupSerializer(serializers.Serializer):
     def validate_phone(self, value: str) -> str:
         normalized = re.sub(r"[\s()-]", "", value)
         if not PHONE_REGEX.match(normalized):
-            raise serializers.ValidationError("Enter a valid phone number with country code, e.g. +919876543210.")
+            raise serializers.ValidationError(
+                "Enter a valid phone number with country code, e.g. +919876543210."
+            )
         if User.objects.filter(phone_e164=normalized, is_active=True).exists():
             raise serializers.ValidationError("An account with this phone number already exists.")
         return normalized
@@ -45,7 +47,9 @@ class LoginSerializer(serializers.Serializer):
     def validate(self, attrs: dict) -> dict:
         user = authenticate(username=f"phone_{attrs['phone']}", password=attrs["password"])
         if not user:
-            raise serializers.ValidationError("Invalid phone number or password.", "invalid_credentials")
+            raise serializers.ValidationError(
+                "Invalid phone number or password.", "invalid_credentials"
+            )
         if not user.is_active:
             raise serializers.ValidationError("This account has been disabled.", "account_disabled")
         attrs["user"] = user
@@ -58,7 +62,9 @@ class OtpSendSerializer(serializers.Serializer):
     def validate_phone(self, value: str) -> str:
         normalized = re.sub(r"[\s()-]", "", value)
         if not PHONE_REGEX.match(normalized):
-            raise serializers.ValidationError("Enter a valid phone number with country code, e.g. +919876543210.")
+            raise serializers.ValidationError(
+                "Enter a valid phone number with country code, e.g. +919876543210."
+            )
         return normalized
 
 
@@ -94,7 +100,9 @@ class PasswordResetRequestSerializer(serializers.Serializer):
     def validate_phone(self, value: str) -> str:
         normalized = re.sub(r"[\s()-]", "", value)
         if not PHONE_REGEX.match(normalized):
-            raise serializers.ValidationError("Enter a valid phone number with country code, e.g. +919876543210.")
+            raise serializers.ValidationError(
+                "Enter a valid phone number with country code, e.g. +919876543210."
+            )
         return normalized
 
 

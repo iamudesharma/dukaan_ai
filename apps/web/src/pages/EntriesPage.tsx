@@ -47,8 +47,8 @@ export function EntriesPage() {
   const [reversingId, setReversingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const reverse = useMutation({
-    mutationFn: ({ id, kind }: { id: string; kind: EntryKind }) =>
-      reverseDocument(collectionFor(kind), id, "Reversed from Entries page"),
+    mutationFn: ({ id, kind, reason }: { id: string; kind: EntryKind; reason: string }) =>
+      reverseDocument(collectionFor(kind), id, reason),
     onSuccess: () => queryClient.invalidateQueries(),
     onSettled: () => setReversingId(null),
     onError: (err) => setError(err instanceof Error ? err.message : "Could not reverse this entry."),
@@ -96,7 +96,7 @@ export function EntriesPage() {
                         if (!reason) return;
                         setError(null);
                         setReversingId(entry.id);
-                        reverse.mutate({ id: entry.id, kind: entry.kind });
+                        reverse.mutate({ id: entry.id, kind: entry.kind, reason });
                       }}
                     >{reversingId === entry.id ? "Reversing…" : "Reverse"}</button>
                   ) : null}</td>

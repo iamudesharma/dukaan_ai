@@ -1,3 +1,5 @@
+from decimal import ROUND_HALF_UP, Decimal
+
 from django.db.models import Q, Sum
 from django.utils import timezone
 from drf_spectacular.utils import extend_schema
@@ -17,7 +19,9 @@ from .models import (
     PartyLedgerEntry,
     Payment,
     Purchase,
+    PurchaseLine,
     Sale,
+    SaleLine,
     StockBalance,
     StockTransfer,
 )
@@ -284,6 +288,60 @@ def _report_scope(request):
     return business_id, location_ids
 
 
+def _inr(minor: int) -> str:
+    sign = "-" if minor < 0 else ""
+    minor = abs(int(minor))
+    return f"{sign}{minor // 100:,}.{minor % 100:02d}"
+
+
+def _low_stock_count(business_id, location_ids) -> int:
+    products = Product.objects.filter(business_id=business_id, is_active=True, track_inventory=True)
+    totals = {
+        row["product_id"]: row["total"]
+        for row in StockBalance.objects.filter(
+            business_id=business_id, location_id__in=location_ids
+        )
+        .values("product_id")
+        .annotate(total=Sum("quantity"))
+    }
+    return sum(
+        1 for product in products if (totals.get(product.id) or 0) <= product.low_stock_threshold
+    )
+
+
+def _gross_profit_minor(sales_queryset, business_id) -> int:
+    """Revenue less cost of goods sold.
+
+    Cost basis v1: the latest posted purchase cost per product (documented
+    approximation until moving weighted-average costing lands). Revenue is the
+    taxable value, so GST is not counted as profit."""
+    latest_cost: dict = {}
+    purchase_lines = (
+        PurchaseLine.objects.filter(
+            purchase__business_id=business_id,
+            purchase__status=DocumentStatus.POSTED,
+        )
+        .select_related("purchase")
+        .order_by("purchase__posted_at")
+        .values("product_id", "unit_cost_minor", "conversion_factor")
+    )
+    for row in purchase_lines:
+        factor = row["conversion_factor"]
+        if factor:
+            latest_cost[row["product_id"]] = Decimal(row["unit_cost_minor"]) / factor
+    revenue = sales_queryset.aggregate(total=Sum("taxable_total_minor"))["total"] or 0
+    cogs = 0
+    for row in SaleLine.objects.filter(sale__in=sales_queryset).values(
+        "product_id", "base_quantity"
+    ):
+        unit_cost = latest_cost.get(row["product_id"])
+        if unit_cost is not None:
+            cogs += int(
+                (row["base_quantity"] * unit_cost).to_integral_value(rounding=ROUND_HALF_UP)
+            )
+    return int(revenue) - cogs
+
+
 class DashboardView(APIView):
     def get(self, request):
         business_id, location_ids = _report_scope(request)
@@ -328,15 +386,27 @@ class DashboardView(APIView):
             or 0
         )
         expense_total = expenses.aggregate(v=Sum("total_minor"))["v"] or 0
+        sales_today = (
+            sales.filter(document_date=today).aggregate(v=Sum("grand_total_minor"))["v"] or 0
+        )
+        receipts_today = (
+            payments.filter(direction=Payment.Direction.RECEIPT, payment_date=today).aggregate(
+                v=Sum("amount_minor")
+            )["v"]
+            or 0
+        )
+        low_stock_count = _low_stock_count(business_id, location_ids)
+        gross_profit = _gross_profit_minor(sales, business_id)
+        summary = (
+            f"Today: ₹{_inr(sales_today)} sales, ₹{_inr(receipts_today)} collected. "
+            f"₹{_inr(receivable)} to collect, ₹{_inr(payable)} to pay."
+        )
         return Response(
             {
                 "business_id": business_id,
                 "as_of": today,
                 "today": {
-                    "sales": sales.filter(document_date=today).aggregate(
-                        v=Sum("grand_total_minor")
-                    )["v"]
-                    or 0,
+                    "sales": sales_today,
                     "purchases": purchases.filter(document_date=today).aggregate(
                         v=Sum("grand_total_minor")
                     )["v"]
@@ -345,6 +415,7 @@ class DashboardView(APIView):
                         v=Sum("total_minor")
                     )["v"]
                     or 0,
+                    "receipts": receipts_today,
                 },
                 "books": {
                     "sales": sales.aggregate(v=Sum("grand_total_minor"))["v"] or 0,
@@ -353,7 +424,13 @@ class DashboardView(APIView):
                     "receivable": receivable,
                     "payable": payable,
                     "cash_flow": receipts - supplier_payments - expense_total,
+                    "receipts": receipts,
+                    "payments_out": supplier_payments,
+                    "gross_profit_minor": gross_profit,
                 },
+                "receipts_minor": receipts,
+                "low_stock_count": low_stock_count,
+                "summary": summary,
             }
         )
 

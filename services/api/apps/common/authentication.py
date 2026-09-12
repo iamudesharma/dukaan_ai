@@ -3,10 +3,9 @@ from __future__ import annotations
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.db import connection
-from django.utils import timezone
-from rest_framework import authentication, exceptions
+from rest_framework import exceptions
 from rest_framework_simplejwt.authentication import JWTAuthentication
-from rest_framework_simplejwt.exceptions import InvalidToken, TokenError
+from rest_framework_simplejwt.exceptions import TokenError
 
 from apps.authentication.models import BlacklistedToken
 

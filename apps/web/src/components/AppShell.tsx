@@ -21,7 +21,8 @@ import {
 } from "lucide-react";
 import { NavLink, useLocation } from "react-router-dom";
 import { useWorkspace } from "../app/WorkspaceContext";
-import { clearTokens, demoMode, getAccessToken } from "../lib/supabase";
+import { clearTokens, demoMode } from "../lib/supabase";
+import { logout } from "../data/repository";
 import { AssistantPanel } from "../features/assistant/AssistantPanel";
 
 const primaryNavigation = [
@@ -70,14 +71,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   async function signOut() {
     try {
-      await fetch("/api/v1/auth/logout/", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${await getAccessToken() ?? ""}`,
-        },
-        body: JSON.stringify({ refresh: localStorage.getItem("dukaan_refresh_token") }),
-      });
+      await logout();
     } catch {
       // Still clear local tokens on network failure.
     }

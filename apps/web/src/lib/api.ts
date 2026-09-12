@@ -46,13 +46,34 @@ async function refreshAccessToken(): Promise<string | null> {
     if (!res.ok) return null;
     const data = await res.json();
     if (data.access) {
-      setTokens({ access: data.access, refresh });
+      setTokens({ access: data.access, refresh: data.refresh ?? refresh });
       return data.access;
     }
   } catch {
     // fall through
   }
   return null;
+}
+
+function errorMessage(value: unknown): string | undefined {
+  if (typeof value === "string") return value;
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const message = errorMessage(item);
+      if (message) return message;
+    }
+    return undefined;
+  }
+  if (value && typeof value === "object") {
+    const record = value as Record<string, unknown>;
+    if (typeof record.message === "string") return record.message;
+    if (typeof record.detail === "string") return record.detail;
+    for (const item of Object.values(record)) {
+      const message = errorMessage(item);
+      if (message) return message;
+    }
+  }
+  return undefined;
 }
 
 export async function apiRequest<T>(path: string, options: RequestOptions = {}): Promise<T> {
@@ -79,6 +100,9 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
         headers,
         body: options.body === undefined ? undefined : JSON.stringify(options.body),
       });
+    } else {
+      // The session is no longer refreshable; force a clean sign-in.
+      clearTokens();
     }
   }
 
@@ -90,14 +114,15 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
     };
     let detail = fallback;
     try {
-      const raw = await response.json();
-      const server = raw.error?.detail;
+      const raw = (await response.json()) as Record<string, unknown>;
+      const envelope = raw.error as Record<string, unknown> | undefined;
+      const server = envelope?.detail;
+      const message = errorMessage(server) ?? errorMessage(raw.detail);
       detail = {
         ...fallback,
-        ...(raw.error ? {} : raw),
-        ...(server && typeof server === "object" && server.message
-          ? { message: String(server.message), code: String(server.code ?? raw.error.code) }
-          : typeof server === "string" ? { message: server, code: raw.error.code } : {}),
+        message: message ?? fallback.message,
+        code: envelope?.code ? String(envelope.code) : fallback.code,
+        ...(raw.fields ? { fields: raw.fields as Record<string, string[]> } : {}),
       };
     } catch {
       // A safe normalized response is returned for non-JSON upstream failures.

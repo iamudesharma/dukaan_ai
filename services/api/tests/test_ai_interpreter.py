@@ -1,3 +1,4 @@
+import uuid
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -29,7 +30,7 @@ def user(db):
 @pytest.fixture
 def business(db, user):
     biz = Business.objects.create(name="Test Shop")
-    location = Location.objects.create(business=biz, code="MAIN", name="Main Store")
+    Location.objects.create(business=biz, code="MAIN", name="Main Store")
     Membership.objects.create(user=user, business=biz, role="OWNER", is_active=True)
     return biz
 
@@ -42,7 +43,12 @@ def location(db, business):
 class TestChatGPTService:
     def test_parse_valid_json_response(self):
         service = ChatGPTService(session_token="fake-token")
-        response = 'Here is the result:\n```json\n{"command_type": "SALE", "customer_name": "Ramesh", "items": [{"product": "shirt", "quantity": 3, "unit_price_minor": 80000}], "total_minor": 240000, "paid_minor": 150000, "warnings": [], "blocking_questions": []}\n```'
+        response = (
+            'Here is the result:\n```json\n{"command_type": "SALE", "customer_name": "Ramesh", '
+            '"items": [{"product": "shirt", "quantity": 3, "unit_price_minor": 80000}], '
+            '"total_minor": 240000, "paid_minor": 150000, "warnings": [], '
+            '"blocking_questions": []}\n```'
+        )
         result = service._parse_response(response)
         assert result.command_type == "SALE"
         assert result.customer_name == "Ramesh"
@@ -58,7 +64,10 @@ class TestChatGPTService:
     def test_interpret_returns_interpretation(self):
         service = ChatGPTService(session_token="fake-token")
         mock_client = MagicMock()
-        mock_client.ask.return_value = '{"command_type": "SALE", "total_minor": 240000, "paid_minor": 150000, "items": [], "warnings": [], "blocking_questions": []}'
+        mock_client.ask.return_value = (
+            '{"command_type": "SALE", "total_minor": 240000, "paid_minor": 150000, '
+            '"items": [], "warnings": [], "blocking_questions": []}'
+        )
         with patch.object(service, "_get_client", return_value=mock_client):
             result = service.interpret("Ramesh bought 3 shirts for 2400")
             assert result.command_type == "SALE"
@@ -118,10 +127,18 @@ class TestAssistantWithAI:
                 {
                     "business_id": str(business.id),
                     "location_id": str(location.id),
-                    "customer_name": "Ramesh",
-                    "items": [{"product": "shirt", "quantity": 3, "unit_price_minor": 80000}],
+                    "customer_id": None,
+                    "new_customer_name": "Ramesh",
+                    "lines": [
+                        {
+                            "pack_id": str(uuid.uuid4()),
+                            "quantity": "3",
+                            "unit_price_minor": 80000,
+                            "discount_minor": 0,
+                        }
+                    ],
+                    "paid_amount_minor": 150000,
                     "total_minor": 240000,
-                    "paid_minor": 150000,
                 },
                 "Party: Ramesh; 3 × shirt; Total: ₹2400.00; Paid: ₹1500.00",
                 [],
@@ -142,3 +159,5 @@ class TestAssistantWithAI:
             assert response.status_code == status.HTTP_201_CREATED
             assert response.data["command_type"] == "SALE"
             assert "Ramesh" in response.data["preview"]
+            labels = [fact["label"] for fact in response.data["preview_data"]["facts"]]
+            assert "Party" in labels

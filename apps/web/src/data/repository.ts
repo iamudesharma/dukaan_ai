@@ -1,5 +1,5 @@
 import { apiRequest, newIdempotencyKey } from "../lib/api";
-import { demoMode } from "../lib/supabase";
+import { demoMode, getRefreshToken } from "../lib/supabase";
 import type {
   AssistantProposal,
   Bootstrap,
@@ -72,15 +72,16 @@ export async function getDashboard(
   );
   const today = (raw.today ?? {}) as Record<string, unknown>;
   const books = (raw.books ?? {}) as Record<string, unknown>;
+  const dash = (record: Record<string, unknown>, key: string) => Number(record[key] ?? 0);
   return {
     asOf: String(raw.asOf ?? new Date().toISOString()),
-    salesMinor: minorFrom(today, "salesMinor", "sales"),
-    collectionsMinor: minorFrom(books, "receiptsMinor", "receipts"),
-    expensesMinor: minorFrom(today, "expensesMinor", "expenses"),
-    receivableMinor: minorFrom(books, "receivableMinor", "receivable"),
-    payableMinor: minorFrom(books, "payableMinor", "payable"),
+    salesMinor: dash(today, "sales"),
+    collectionsMinor: dash(books, "receipts"),
+    expensesMinor: dash(today, "expenses"),
+    receivableMinor: dash(books, "receivable"),
+    payableMinor: dash(books, "payable"),
     lowStockCount: Number(raw.lowStockCount ?? 0),
-    grossProfitMinor: minorFrom(books, "grossProfitMinor", "grossProfit"),
+    grossProfitMinor: dash(books, "grossProfitMinor"),
     summary: String(raw.summary ?? "Your figures are based on posted entries for this location."),
   };
 }
@@ -98,8 +99,13 @@ export async function getEntries(businessId: string, locationId: string): Promis
     apiRequest<unknown>(`/api/v1/expenses/?${params}`),
   ]);
   const convert = (rows: Record<string, unknown>[], kind: Entry["kind"]): Entry[] => rows.map((row) => {
-    const party = (row.customer ?? row.supplier ?? row.party) as Record<string, unknown> | string | undefined;
-    const partyName = typeof party === "object" ? String(party.name ?? "") : "";
+    const nestedParty = row.customer ?? row.supplier ?? row.party;
+    const nestedName = typeof nestedParty === "object" && nestedParty !== null
+      ? String((nestedParty as Record<string, unknown>).name ?? "")
+      : "";
+    const partyName = String(
+      row.customerName ?? row.supplierName ?? row.partyName ?? nestedName ?? "",
+    );
     const totalMinor = kind === "EXPENSE"
       ? minorFrom(row, "totalMinor", "total")
       : kind === "PAYMENT_IN" || kind === "PAYMENT_OUT"
@@ -110,7 +116,9 @@ export async function getEntries(businessId: string, locationId: string): Promis
       number: String(row.number ?? row.reference ?? "—"),
       kind,
       partyName: partyName || String(row.partyName ?? "Cash customer"),
-      occurredAt: String(row.postedAt ?? row.paymentDate ?? row.createdAt ?? new Date().toISOString()),
+      occurredAt: String(
+        row.occurredAt ?? row.postedAt ?? row.paymentDate ?? row.createdAt ?? new Date().toISOString(),
+      ),
       totalMinor,
       outstandingMinor: minorFrom(row, "dueTotalMinor", "dueTotal"),
       status: String(row.status ?? "POSTED") as Entry["status"],
@@ -139,11 +147,11 @@ export async function getProducts(businessId: string, locationId: string): Promi
     const pack = packs[0] ?? {};
     return {
       id: String(row.id),
-      packId: String(pack.id ?? row.defaultPackId ?? row.id),
+      packId: String(row.defaultPackId ?? pack.id ?? row.id),
       name: String(row.name),
       sku: String(row.sku ?? ""),
       unit: String(row.baseUnit ?? row.unit ?? "PIECE").toLowerCase(),
-      onHand: String(row.onHand ?? row.quantityOnHand ?? row.stock ?? "0"),
+      onHand: String(row.stockQuantity ?? row.onHand ?? row.quantityOnHand ?? row.stock ?? "0"),
       reorderLevel: String(row.lowStockThreshold ?? row.reorderLevel ?? "0"),
       retailPriceMinor: minorFrom(pack, "retailPriceMinor", "retailPrice"),
       wholesalePriceMinor: minorFrom(pack, "wholesalePriceMinor", "wholesalePrice"),
@@ -163,10 +171,10 @@ export async function getParties(businessId: string): Promise<Party[]> {
   return recordList(response).map((row) => ({
     id: String(row.id),
     name: String(row.name),
-    phone: row.phoneE164 ? String(row.phoneE164) : undefined,
+    phone: row.phone ?? row.phoneE164 ? String(row.phone ?? row.phoneE164) : undefined,
     kind: String(row.kind ?? "CUSTOMER") as Party["kind"],
-    receivableMinor: minorFrom(row, "receivableMinor", "receivableBalance"),
-    payableMinor: minorFrom(row, "payableMinor", "payableBalance"),
+    receivableMinor: Number(row.receivableMinor ?? 0),
+    payableMinor: Number(row.payableMinor ?? 0),
     priceTier: String(row.priceTier ?? "RETAIL") as Party["priceTier"],
   }));
 }
@@ -362,8 +370,61 @@ export async function recordManualSale(input: ManualSaleInput): Promise<Entry> {
 }
 
 // ---------------------------------------------------------------------------
-// Auth (beyond login/OTP already in AuthGate + refresh in lib/api)
+// Auth: OTP, password, signup and logout all speak to the same API base URL.
 // ---------------------------------------------------------------------------
+
+export interface AuthTokens {
+  access: string;
+  refresh: string;
+}
+
+export async function sendOtp(phone: string): Promise<string | undefined> {
+  if (demoMode) {
+    await delay();
+    return "123456";
+  }
+  const res = await apiRequest<Record<string, unknown>>("/api/v1/auth/otp/send/", {
+    method: "POST",
+    body: { phone },
+  });
+  return res.devOtp ? String(res.devOtp) : undefined;
+}
+
+export async function login(phone: string, password: string): Promise<AuthTokens> {
+  if (demoMode) {
+    await delay();
+    return { access: "demo-access", refresh: "demo-refresh" };
+  }
+  const res = await apiRequest<Record<string, unknown>>("/api/v1/auth/login/", {
+    method: "POST",
+    body: { phone, password },
+  });
+  return { access: String(res.access ?? ""), refresh: String(res.refresh ?? "") };
+}
+
+export async function verifyOtp(phone: string, otp: string): Promise<AuthTokens> {
+  if (demoMode) {
+    await delay();
+    return { access: "demo-access", refresh: "demo-refresh" };
+  }
+  const res = await apiRequest<Record<string, unknown>>("/api/v1/auth/otp/verify/", {
+    method: "POST",
+    body: { phone, otp },
+  });
+  return { access: String(res.access ?? ""), refresh: String(res.refresh ?? "") };
+}
+
+export async function logout(): Promise<void> {
+  if (demoMode) {
+    await delay(120);
+    return;
+  }
+  const refresh = getRefreshToken();
+  await apiRequest("/api/v1/auth/logout/", {
+    method: "POST",
+    body: refresh ? { refresh } : {},
+  });
+}
 
 export async function signup(phone: string, password: string, displayName?: string) {
   if (demoMode) {
