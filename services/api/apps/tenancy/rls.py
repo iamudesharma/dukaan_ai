@@ -53,6 +53,9 @@ CHILD_TABLES = [
 
 # Tables with a direct business_id column (tenancy_outboxevent included;
 # its policy additionally hides business-less system rows from tenants).
+# tenancy_invitation is intentionally absent: it is created by tenancy 0003,
+# which applies its own policy after the table exists (migration 0002 runs
+# before that table exists on fresh installs).
 DIRECT_TABLES = [
     "tenancy_gstregistration",
     "tenancy_location",

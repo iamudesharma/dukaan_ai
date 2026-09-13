@@ -92,14 +92,34 @@ class AuthApi {
 
   Future<void> logout({String? refresh}) async {
     final token = await _sessionStore.readAccessToken();
-    await _dio.post<Object>(
-      'auth/logout/',
-      data: {if (refresh != null) 'refresh': refresh},
-      options: Options(
-        headers: {if (token != null) 'Authorization': 'Bearer $token'},
-      ),
-    );
-    await _sessionStore.clear();
+    final refreshToken = refresh ?? await _sessionStore.readRefreshToken();
+    try {
+      await _dio.post<Object>(
+        'auth/logout/',
+        data: {if (refreshToken != null) 'refresh': refreshToken},
+        options: Options(
+          headers: {if (token != null) 'Authorization': 'Bearer $token'},
+        ),
+      );
+    } finally {
+      await _sessionStore.clear();
+    }
+  }
+
+  Future<void> logoutAll() async {
+    final token = await _sessionStore.readAccessToken();
+    final refreshToken = await _sessionStore.readRefreshToken();
+    try {
+      await _dio.post<Object>(
+        'auth/logout-all/',
+        data: {if (refreshToken != null) 'refresh': refreshToken},
+        options: Options(
+          headers: {if (token != null) 'Authorization': 'Bearer $token'},
+        ),
+      );
+    } finally {
+      await _sessionStore.clear();
+    }
   }
 
   Future<void> changePassword({

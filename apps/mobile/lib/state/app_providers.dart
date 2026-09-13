@@ -4,6 +4,7 @@ import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:dio/dio.dart';
 import 'package:dukaan_ai_mobile/core/config.dart';
 import 'package:dukaan_ai_mobile/data/api_client.dart';
+import 'package:dukaan_ai_mobile/data/auth_api.dart';
 import 'package:dukaan_ai_mobile/data/draft_store.dart';
 import 'package:dukaan_ai_mobile/data/dukaan_repository.dart';
 import 'package:dukaan_ai_mobile/data/session_store.dart';
@@ -17,6 +18,29 @@ final draftStoreProvider = Provider<DraftStore>(
 );
 
 final sessionStoreProvider = Provider<SessionStore>((ref) => SecureSessionStore());
+
+final authApiProvider = Provider<AuthApi>((ref) => AuthApi(ref.watch(sessionStoreProvider)));
+
+/// Current access token. AuthGate watches this: null means signed out.
+/// Bumped explicitly after login/logout since secure storage has no stream.
+final sessionTokenProvider = FutureProvider<String?>((ref) async {
+  ref.watch(sessionVersionProvider);
+  return ref.watch(sessionStoreProvider).readAccessToken();
+});
+
+final sessionVersionProvider = StateProvider<int>((ref) => 0);
+
+void bumpSession(WidgetRef ref) => ref.read(sessionVersionProvider.notifier).state++;
+
+final businessesProvider = FutureProvider<List<Business>>(
+  (ref) => ref.watch(repositoryProvider).listBusinesses(),
+);
+
+/// Sale draft picked from the offline list for review; consumed by the sale form.
+final saleDraftResumeProvider = StateProvider<SaleDraft?>((ref) => null);
+
+/// Assistant text picked from the offline list; consumed by the ask screen.
+final assistantResumeProvider = StateProvider<String?>((ref) => null);
 
 final dioProvider = Provider<Dio>(
   (ref) => createDio(ref.watch(sessionStoreProvider)),
@@ -107,13 +131,12 @@ final localDraftsProvider = FutureProvider<List<LocalDraft>>(
   (ref) => ref.watch(draftStoreProvider).listDrafts(),
 );
 
-void invalidateBusinessData(Ref ref) {
-  ref
-    ..invalidate(dashboardProvider)
-    ..invalidate(entriesProvider)
-    ..invalidate(productsProvider)
-    ..invalidate(stockReportProvider)
-    ..invalidate(partiesProvider);
+void invalidateBusinessData(void Function(ProviderOrFamily provider) invalidate) {
+  invalidate(dashboardProvider);
+  invalidate(entriesProvider);
+  invalidate(productsProvider);
+  invalidate(stockReportProvider);
+  invalidate(partiesProvider);
 }
 
 enum AssistantStage {
@@ -252,7 +275,7 @@ class AssistantController extends StateNotifier<AssistantState> {
     );
     try {
       final result = await _ref.read(repositoryProvider).confirmProposal(proposal);
-      invalidateBusinessData(_ref);
+      invalidateBusinessData(_ref.invalidate);
       state = AssistantState(
         stage: AssistantStage.saved,
         input: state.input,

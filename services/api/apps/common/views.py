@@ -1,3 +1,5 @@
+import json
+
 from django.db import connection
 from django.http import JsonResponse
 from rest_framework.permissions import AllowAny
@@ -42,6 +44,26 @@ class MeView(APIView):
                     }
                     for m in memberships
                 ],
+            }
+        )
+
+    def patch(self, request):
+        try:
+            data = json.loads(request.body or "{}")
+        except ValueError:
+            return JsonResponse({"detail": "Invalid JSON."}, status=400)
+        display_name = data.get("display_name", "")
+        if not isinstance(display_name, str) or len(display_name) > 120:
+            return JsonResponse(
+                {"detail": "Display name must be at most 120 characters."}, status=400
+            )
+        request.user.display_name = display_name.strip()
+        request.user.save(update_fields=["display_name"])
+        return JsonResponse(
+            {
+                "id": str(request.user.id),
+                "phone": request.user.phone_e164,
+                "display_name": request.user.display_name,
             }
         )
 

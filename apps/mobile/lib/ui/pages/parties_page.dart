@@ -4,6 +4,7 @@ import 'package:dukaan_ai_mobile/l10n/app_strings.dart';
 import 'package:dukaan_ai_mobile/state/app_providers.dart';
 import 'package:dukaan_ai_mobile/ui/common/async_content.dart';
 import 'package:dukaan_ai_mobile/ui/common/ledger_sheet.dart';
+import 'package:dukaan_ai_mobile/ui/common/party_sheet.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:share_plus/share_plus.dart';
@@ -25,14 +26,22 @@ class _PartiesPageState extends ConsumerState<PartiesPage> {
       children: [
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 6),
-          child: Align(
-            alignment: Alignment.centerLeft,
-            child: Text(
-              context.strings.t('parties'),
-              style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                    fontWeight: FontWeight.w800,
-                  ),
-            ),
+          child: Row(
+            children: [
+              Expanded(
+                child: Text(
+                  context.strings.t('parties'),
+                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                        fontWeight: FontWeight.w800,
+                      ),
+                ),
+              ),
+              FilledButton.icon(
+                onPressed: () => showPartySheet(context, ref),
+                icon: const Icon(Icons.add_rounded),
+                label: Text(context.strings.t('addParty')),
+              ),
+            ],
           ),
         ),
         SizedBox(
@@ -204,6 +213,14 @@ class _PartyCard extends ConsumerWidget {
                   ),
                 ),
               ],
+              Align(
+                alignment: Alignment.centerRight,
+                child: TextButton.icon(
+                  onPressed: () => showPartySheet(context, ref, party: party),
+                  icon: const Icon(Icons.edit_outlined, size: 18),
+                  label: Text(context.strings.t('editParty')),
+                ),
+              ),
             ],
           ),
         ),

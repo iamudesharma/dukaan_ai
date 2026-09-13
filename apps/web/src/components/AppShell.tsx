@@ -23,7 +23,9 @@ import { NavLink, useLocation } from "react-router-dom";
 import { useWorkspace } from "../app/WorkspaceContext";
 import { clearTokens, demoMode } from "../lib/supabase";
 import { logout } from "../data/repository";
+import { canSee } from "../lib/permissions";
 import { AssistantPanel } from "../features/assistant/AssistantPanel";
+import { ManualSaleDialog } from "../features/entries/ManualSaleDialog";
 
 const primaryNavigation = [
   { to: "/", label: "Overview", icon: LayoutDashboard },
@@ -51,7 +53,7 @@ const pageNames: Record<string, string> = {
 };
 
 export function AppShell({ children }: { children: ReactNode }) {
-  const { bootstrap, locationId, setLocationId, openAssistant } = useWorkspace();
+  const { bootstrap, locationId, setLocationId, openAssistant, manualSaleOpen, closeManualSale } = useWorkspace();
   const [menuOpen, setMenuOpen] = useState(false);
   const [online, setOnline] = useState(navigator.onLine);
   const location = useLocation();
@@ -85,6 +87,9 @@ export function AppShell({ children }: { children: ReactNode }) {
       <span>{label}</span>
     </NavLink>
   ));
+  const permissions = bootstrap.permissions ?? [];
+  const showReports = canSee(permissions, "reports");
+  const showManage = canSee(permissions, "manage");
 
   return (
     <div className="app-shell">
@@ -100,9 +105,13 @@ export function AppShell({ children }: { children: ReactNode }) {
 
         <nav aria-label="Main navigation">
           <p className="nav-heading">Workspace</p>
-          {nav(primaryNavigation)}
-          <p className="nav-heading second">Manage</p>
-          {nav(adminNavigation)}
+          {nav(primaryNavigation.filter((item) => item.to !== "/reports" || showReports))}
+          {showManage ? (
+            <>
+              <p className="nav-heading second">Manage</p>
+              {nav(adminNavigation)}
+            </>
+          ) : null}
         </nav>
 
         <div className="sidebar-footer">
@@ -150,6 +159,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         </nav>
       </div>
       <AssistantPanel />
+      <ManualSaleDialog open={manualSaleOpen} onClose={closeManualSale} />
     </div>
   );
 }

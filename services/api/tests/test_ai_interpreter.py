@@ -143,6 +143,7 @@ class TestAssistantWithAI:
                 "Party: Ramesh; 3 × shirt; Total: ₹2400.00; Paid: ₹1500.00",
                 [],
                 [],
+                "SALE",
             )
             refresh = RefreshToken.for_user(user)
             api_client.credentials(HTTP_AUTHORIZATION=f"Bearer {refresh.access_token}")

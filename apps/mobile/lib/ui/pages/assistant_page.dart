@@ -32,6 +32,16 @@ class _AssistantPageState extends ConsumerState<AssistantPage> {
   }
 
   @override
+  void initState() {
+    super.initState();
+    final resume = ref.read(assistantResumeProvider);
+    if (resume != null && resume.isNotEmpty) {
+      _controller.text = resume;
+      ref.read(assistantResumeProvider.notifier).state = null;
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     final state = ref.watch(assistantControllerProvider);
     return SafeArea(

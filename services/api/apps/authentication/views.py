@@ -7,7 +7,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.tokens import RefreshToken
 
-from .models import BlacklistedToken
+from .models import BlacklistedToken, SessionRevocation
 from .otp import OTPService, TooManyRequests
 from .serializers import (
     LoginSerializer,
@@ -137,6 +137,16 @@ class RefreshView(APIView):
                 return Response(
                     {"detail": "Token has been revoked."}, status=status.HTTP_401_UNAUTHORIZED
                 )
+            from apps.common.authentication import is_session_revoked
+
+            try:
+                token_user = User.objects.get(pk=token["user_id"])
+            except (User.DoesNotExist, KeyError):
+                token_user = None
+            if token_user is None or is_session_revoked(token_user, token):
+                return Response(
+                    {"detail": "Session has been revoked."}, status=status.HTTP_401_UNAUTHORIZED
+                )
             return Response({"access": str(token.access_token)})
         except Exception:
             return Response(
@@ -174,6 +184,42 @@ class LogoutView(APIView):
                 },
             )
         return Response({"detail": "Signed out."})
+
+
+class LogoutAllView(APIView):
+    """Revoke every session for the caller on all devices.
+
+    Records a revocation timestamp; access and refresh tokens issued at or
+    before it are rejected everywhere (see SessionRevocation). The presented
+    tokens are additionally blacklisted so they fail fast with a clear code."""
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request):
+        now = timezone.now()
+        SessionRevocation.objects.update_or_create(user=request.user, defaults={"revoked_at": now})
+        refresh_token = request.data.get("refresh")
+        if refresh_token:
+            try:
+                token = RefreshToken(refresh_token)
+                exp_timestamp = token["exp"]
+                if isinstance(exp_timestamp, int | float):
+                    exp_datetime = datetime.fromtimestamp(exp_timestamp, tz=UTC)
+                else:
+                    exp_datetime = exp_timestamp
+                BlacklistedToken.objects.get_or_create(
+                    token_jti=token["jti"],
+                    defaults={"user": request.user, "expires_at": exp_datetime},
+                )
+            except Exception:
+                pass
+        access_jti = getattr(request.auth, "get", lambda k: None)("jti")
+        if access_jti:
+            BlacklistedToken.objects.get_or_create(
+                token_jti=access_jti,
+                defaults={"user": request.user, "expires_at": now + timedelta(minutes=30)},
+            )
+        return Response({"detail": "Signed out everywhere."})
 
 
 class PasswordChangeView(APIView):

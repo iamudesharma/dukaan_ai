@@ -3,6 +3,7 @@ import 'package:dukaan_ai_mobile/domain/models.dart';
 import 'package:dukaan_ai_mobile/l10n/app_strings.dart';
 import 'package:dukaan_ai_mobile/state/app_providers.dart';
 import 'package:dukaan_ai_mobile/ui/common/async_content.dart';
+import 'package:dukaan_ai_mobile/ui/common/entry_sheet.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -41,6 +42,16 @@ class _EntriesPageState extends ConsumerState<EntriesPage> {
                 onPressed: () => context.go('/sale/new'),
                 icon: const Icon(Icons.add_rounded),
                 label: Text(strings.t('manualSale')),
+              ),
+              const SizedBox(width: 8),
+              PopupMenuButton<String>(
+                tooltip: strings.t('more'),
+                icon: const Icon(Icons.add_circle_outline_rounded),
+                onSelected: (value) => context.go('/quick/$value'),
+                itemBuilder: (context) => [
+                  PopupMenuItem(value: 'purchase', child: Text(strings.t('newPurchase'))),
+                  PopupMenuItem(value: 'expense', child: Text(strings.t('newExpense'))),
+                ],
               ),
             ],
           ),
@@ -150,6 +161,35 @@ class _DraftCard extends ConsumerWidget {
 
   final LocalDraft draft;
 
+  Future<void> _review(BuildContext context, WidgetRef ref) async {
+    if (draft.kind == DraftKind.sale) {
+      try {
+        final resume = SaleDraft.fromLocalJson(draft.payload);
+        ref.read(saleDraftResumeProvider.notifier).state = resume;
+        if (context.mounted) context.go('/sale/new');
+      } on Object catch (error) {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(error.toString())),
+          );
+        }
+      }
+      return;
+    }
+    final input = draft.payload['input'];
+    final text = input is Map
+        ? (input['content'] ?? input['display_text'] ?? '').toString()
+        : '';
+    ref.read(assistantResumeProvider.notifier).state =
+        text.isEmpty ? draft.label : text;
+    if (context.mounted) {
+      context.go('/ask');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(context.strings.t('draftResumed'))),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final locale = Localizations.localeOf(context).languageCode;
@@ -169,13 +209,23 @@ class _DraftCard extends ConsumerWidget {
           subtitle: Text(
             '${context.strings.t('offline')} · ${formatDateTime(draft.createdAt, locale)}',
           ),
-          trailing: IconButton(
-            tooltip: context.strings.t('cancel'),
-            onPressed: () async {
-              await ref.read(draftStoreProvider).deleteDraft(draft.id);
-              ref.invalidate(localDraftsProvider);
-            },
-            icon: const Icon(Icons.delete_outline_rounded),
+          trailing: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              IconButton(
+                tooltip: context.strings.t('reviewDraft'),
+                onPressed: () => _review(context, ref),
+                icon: const Icon(Icons.rate_review_outlined),
+              ),
+              IconButton(
+                tooltip: context.strings.t('cancel'),
+                onPressed: () async {
+                  await ref.read(draftStoreProvider).deleteDraft(draft.id);
+                  ref.invalidate(localDraftsProvider);
+                },
+                icon: const Icon(Icons.delete_outline_rounded),
+              ),
+            ],
           ),
         ),
       ),
@@ -183,13 +233,13 @@ class _DraftCard extends ConsumerWidget {
   }
 }
 
-class _EntryCard extends StatelessWidget {
+class _EntryCard extends ConsumerWidget {
   const _EntryCard({required this.entry});
 
   final BusinessEntry entry;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final locale = Localizations.localeOf(context).languageCode;
     final (label, icon) = switch (entry.type) {
       EntryType.sale => (context.strings.t('sales'), Icons.arrow_outward_rounded),
@@ -230,6 +280,7 @@ class _EntryCard extends StatelessWidget {
                   ),
               ],
             ),
+            onTap: () => showEntryDetailSheet(context, ref, entry: entry),
           ),
         ),
       ),

@@ -9,7 +9,6 @@ import { StatusBadge } from "../components/StatusBadge";
 import { getDocument, getEntries, reverseDocument } from "../data/repository";
 import { formatDateTime, formatKind, formatMoney } from "../lib/format";
 import type { Entry, EntryKind } from "../types";
-import { ManualSaleDialog } from "../features/entries/ManualSaleDialog";
 import { QuickEntryDialog } from "../features/entries/QuickEntryDialog";
 
 const entryCollection: Record<Exclude<EntryKind, "PAYMENT_IN" | "PAYMENT_OUT"> | "PAYMENT", "sales" | "purchases" | "payments" | "expenses"> = {
@@ -34,13 +33,12 @@ const filters: Array<{ label: string; value: "ALL" | EntryKind }> = [
 ];
 
 export function EntriesPage() {
-  const { bootstrap, locationId, openAssistant } = useWorkspace();
+  const { bootstrap, locationId, openAssistant, openManualSale } = useWorkspace();
   const [filter, setFilter] = useState<"ALL" | EntryKind>("ALL");
   const [search, setSearch] = useState("");
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
   const [selected, setSelected] = useState<Entry | null>(null);
-  const [manualSaleOpen, setManualSaleOpen] = useState(false);
   const [quickKind, setQuickKind] = useState<"purchase" | "payment" | "expense" | null>(null);
   const query = useQuery({
     queryKey: ["entries", bootstrap.business.id, locationId, from, to],
@@ -72,7 +70,7 @@ export function EntriesPage() {
         eyebrow="Operations"
         title="Entries"
         description="A single timeline for sales, purchases, payments and expenses. Posted entries are corrected through reversals."
-        actions={<><button className="secondary-button"><Download />Export</button><button className="secondary-button" onClick={() => setManualSaleOpen(true)}><Plus />Manual sale</button><button className="secondary-button" onClick={() => setQuickKind("purchase")}><Plus />Purchase</button><button className="secondary-button" onClick={() => setQuickKind("payment")}><Plus />Payment</button><button className="secondary-button" onClick={() => setQuickKind("expense")}><Plus />Expense</button><button className="primary-button" onClick={openAssistant}><Plus />Ask / Add</button></>}
+        actions={<><button className="secondary-button"><Download />Export</button><button className="secondary-button" onClick={openManualSale}><Plus />Manual sale</button><button className="secondary-button" onClick={() => setQuickKind("purchase")}><Plus />Purchase</button><button className="secondary-button" onClick={() => setQuickKind("payment")}><Plus />Payment</button><button className="secondary-button" onClick={() => setQuickKind("expense")}><Plus />Expense</button><button className="primary-button" onClick={openAssistant}><Plus />Ask / Add</button></>}
       />
       <section className="panel data-panel">
         <div className="filter-row">
@@ -152,7 +150,6 @@ export function EntriesPage() {
           ) : null}
         </section>
       ) : null}
-      <ManualSaleDialog open={manualSaleOpen} onClose={() => setManualSaleOpen(false)} />
       <QuickEntryDialog kind={quickKind} onClose={() => setQuickKind(null)} />
     </>
   );

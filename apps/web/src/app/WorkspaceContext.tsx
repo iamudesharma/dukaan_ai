@@ -14,6 +14,9 @@ interface WorkspaceValue {
   assistantOpen: boolean;
   openAssistant: () => void;
   closeAssistant: () => void;
+  manualSaleOpen: boolean;
+  openManualSale: () => void;
+  closeManualSale: () => void;
 }
 
 const WorkspaceContext = createContext<WorkspaceValue | null>(null);
@@ -21,6 +24,7 @@ const WorkspaceContext = createContext<WorkspaceValue | null>(null);
 export function WorkspaceProvider({ bootstrap, children }: { bootstrap: Bootstrap; children: ReactNode }) {
   const [locationId, setLocationId] = useState(bootstrap.locations[0]?.id ?? "");
   const [assistantOpen, setAssistantOpen] = useState(false);
+  const [manualSaleOpen, setManualSaleOpen] = useState(false);
   const value = useMemo<WorkspaceValue>(
     () => ({
       bootstrap,
@@ -29,8 +33,11 @@ export function WorkspaceProvider({ bootstrap, children }: { bootstrap: Bootstra
       assistantOpen,
       openAssistant: () => setAssistantOpen(true),
       closeAssistant: () => setAssistantOpen(false),
+      manualSaleOpen,
+      openManualSale: () => setManualSaleOpen(true),
+      closeManualSale: () => setManualSaleOpen(false),
     }),
-    [assistantOpen, bootstrap, locationId],
+    [assistantOpen, bootstrap, locationId, manualSaleOpen],
   );
   return <WorkspaceContext.Provider value={value}>{children}</WorkspaceContext.Provider>;
 }

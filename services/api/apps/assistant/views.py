@@ -5,7 +5,12 @@ from rest_framework.decorators import action
 from rest_framework.exceptions import PermissionDenied
 from rest_framework.response import Response
 
-from apps.operations.serializers import SaleSerializer
+from apps.operations.serializers import (
+    ExpenseSerializer,
+    PaymentSerializer,
+    PurchaseSerializer,
+    SaleSerializer,
+)
 from apps.tenancy.access import require_membership
 
 from .models import AssistantProposal
@@ -73,13 +78,22 @@ class ProposalViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, viewsets
         proposal = self.get_object()
         serializer = ConfirmSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        sale, replayed = confirm(proposal=proposal, actor=request.user, **serializer.validated_data)
+        instance, replayed = confirm(
+            proposal=proposal, actor=request.user, **serializer.validated_data
+        )
+        result_serializers = {
+            "operations.sale": SaleSerializer,
+            "operations.purchase": PurchaseSerializer,
+            "operations.payment": PaymentSerializer,
+            "operations.expense": ExpenseSerializer,
+        }
+        # confirm() saves the proposal in the same transaction; re-read it.
+        confirmed = AssistantProposal.objects.get(pk=proposal.pk)
+        result_serializer = result_serializers.get(confirmed.confirmed_result_type, SaleSerializer)
         return Response(
             {
-                "proposal": AssistantProposalSerializer(
-                    AssistantProposal.objects.get(pk=proposal.pk)
-                ).data,
-                "result": SaleSerializer(sale).data,
+                "proposal": AssistantProposalSerializer(confirmed).data,
+                "result": result_serializer(instance).data,
             },
             headers={"Idempotent-Replay": str(replayed).lower()},
         )

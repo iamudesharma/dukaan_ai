@@ -10,6 +10,7 @@ import type {
   Entry,
   GstReport,
   GstRegistration,
+  Invitation,
   LedgerReport,
   Location,
   LocationInput,
@@ -242,7 +243,8 @@ async function mapProposal(
     const packId = String(line.packId ?? "");
     const product = products.find((candidate) => candidate.packId === packId);
     const quantity = String(line.quantity ?? "1");
-    const unitPriceMinor = minorFrom(line, "unitPriceMinor", "unitPrice");
+    const unitPriceMinor = minorFrom(line, "unitPriceMinor", "unitPrice") ||
+      minorFrom(line, "unitCostMinor", "unitCost");
     return {
       productId: product?.id,
       productName: product?.name ?? "Product",
@@ -252,21 +254,39 @@ async function mapProposal(
       lineTotalMinor: Math.round(Number(quantity) * unitPriceMinor),
     };
   });
-  const totalMinor = lines.reduce((sum, line) => sum + line.lineTotalMinor, 0);
-  const paidMinor = minorFrom(payload, "paidMinor", "paidAmount");
-  const customerId = payload.customerId ? String(payload.customerId) : undefined;
-  const party = parties.find((candidate) => candidate.id === customerId);
+  const linesTotalMinor = lines.reduce((sum, line) => sum + line.lineTotalMinor, 0);
+  const commandType = String(raw.commandType ?? "SALE");
+  const intent = commandType === "PURCHASE"
+    ? "RECORD_PURCHASE"
+    : commandType === "PAYMENT"
+      ? "RECORD_PAYMENT"
+      : commandType === "EXPENSE"
+        ? "RECORD_EXPENSE"
+        : "RECORD_SALE";
+  // Payments and expenses carry a single amount instead of item lines.
+  const amountMinor = minorFrom(payload, "amountMinor", "amount");
+  const totalMinor = lines.length || intent === "RECORD_SALE" || intent === "RECORD_PURCHASE"
+    ? linesTotalMinor
+    : amountMinor;
+  const paidMinor = intent === "RECORD_PAYMENT" || intent === "RECORD_EXPENSE"
+    ? amountMinor
+    : minorFrom(payload, "paidMinor", "paidAmount");
+  const partyId = payload.customerId ?? payload.supplierId ?? payload.partyId;
+  const partyIdText = partyId !== undefined && partyId !== null ? String(partyId) : undefined;
+  const party = parties.find((candidate) => candidate.id === partyIdText);
+  const proposedName = payload.newCustomerName ?? payload.newSupplierName;
   const warnings = Array.isArray(raw.warnings) ? raw.warnings.map(String) : [];
   const questions = Array.isArray(raw.blockingQuestions) ? raw.blockingQuestions.map(String) : [];
+  const status = raw.status === "READY" ? "READY" : raw.status === "CONFIRMED" ? "CONFIRMED" : "NEEDS_DETAILS";
   return {
     id: String(raw.id),
     version: Number(raw.version ?? 1),
-    status: raw.status === "READY" ? "READY" : "NEEDS_DETAILS",
-    intent: String(raw.commandType ?? "SALE") === "SALE" ? "RECORD_SALE" : "RECORD_EXPENSE",
+    status,
+    intent,
     sourceText: String(raw.content ?? text),
-    partyId: customerId,
-    partyName: party?.name ?? (payload.newCustomerName ? String(payload.newCustomerName) : undefined),
-    partyProposedNew: Boolean(payload.newCustomerName),
+    partyId: partyIdText,
+    partyName: party?.name ?? (proposedName ? String(proposedName) : undefined),
+    partyProposedNew: Boolean(proposedName),
     lines,
     totalMinor,
     paidMinor,
@@ -276,12 +296,24 @@ async function mapProposal(
     warnings,
     questions,
     effects: {
-      stock: lines.map((line) => `Reduce ${line.productName} stock by ${line.quantity} ${line.unit}`),
-      ledger: totalMinor > paidMinor
-        ? `Add ₹${((totalMinor - paidMinor) / 100).toLocaleString("en-IN")} to the customer's outstanding balance`
-        : "No outstanding balance",
+      stock: intent === "RECORD_SALE"
+        ? lines.map((line) => `Reduce ${line.productName} stock by ${line.quantity} ${line.unit}`)
+        : intent === "RECORD_PURCHASE"
+          ? lines.map((line) => `Add ${line.productName} stock by ${line.quantity} ${line.unit}`)
+          : [],
+      ledger: intent === "RECORD_PAYMENT"
+        ? `Settle ${formatMinor(totalMinor)} against the oldest pending bill`
+        : intent === "RECORD_EXPENSE"
+          ? `Record ${formatMinor(totalMinor)} as a business expense`
+          : totalMinor > paidMinor
+            ? `Add ${formatMinor(totalMinor - paidMinor)} to the party's outstanding balance`
+            : "No outstanding balance",
     },
   };
+}
+
+function formatMinor(minor: number): string {
+  return `₹${(minor / 100).toLocaleString("en-IN")}`;
 }
 
 export async function confirmCommand(
@@ -302,14 +334,27 @@ export async function confirmCommand(
     },
   );
   const result = response.result;
+  const direction = String(result.direction ?? "");
+  const kind = proposal.intent === "RECORD_PURCHASE"
+    ? "PURCHASE"
+    : proposal.intent === "RECORD_PAYMENT"
+      ? direction === "PAYMENT" ? "PAYMENT_OUT" : "PAYMENT_IN"
+      : proposal.intent === "RECORD_EXPENSE"
+        ? "EXPENSE"
+        : "SALE";
+  const totalMinor = kind === "EXPENSE"
+    ? Number(result.totalMinor ?? proposal.totalMinor)
+    : kind === "PAYMENT_IN"
+      ? Number(result.amountMinor ?? proposal.totalMinor)
+      : Number(result.grandTotalMinor ?? proposal.totalMinor);
   return {
     id: String(result.id),
-    number: String(result.number),
-    kind: "SALE",
+    number: String(result.number ?? result.reference ?? "—"),
+    kind,
     partyName: proposal.partyName ?? "Cash customer",
-    occurredAt: String(result.postedAt ?? new Date().toISOString()),
-    totalMinor: minorFrom(result, "grandTotalMinor", "grandTotal"),
-    outstandingMinor: minorFrom(result, "dueTotalMinor", "dueTotal"),
+    occurredAt: String(result.occurredAt ?? result.postedAt ?? new Date().toISOString()),
+    totalMinor,
+    outstandingMinor: Number(result.dueTotalMinor ?? proposal.outstandingMinor ?? 0),
     status: "POSTED",
     paymentMode: proposal.paidMinor > 0 ? "CASH" : undefined,
   };
@@ -376,7 +421,7 @@ export async function recordManualSale(input: ManualSaleInput): Promise<Entry> {
     number: String(response.number),
     kind: "SALE",
     partyName: input.customerName ?? "Cash customer",
-    occurredAt: String(response.postedAt ?? new Date().toISOString()),
+    occurredAt: String(response.occurredAt ?? response.postedAt ?? new Date().toISOString()),
     totalMinor: Number(response.grandTotalMinor),
     outstandingMinor: Number(response.dueTotalMinor),
     status: "POSTED",
@@ -427,6 +472,35 @@ export async function verifyOtp(phone: string, otp: string): Promise<AuthTokens>
     body: { phone, otp },
   });
   return { access: String(res.access ?? ""), refresh: String(res.refresh ?? "") };
+}
+
+export async function updateMe(displayName: string): Promise<MeProfile> {
+  if (demoMode) {
+    await delay();
+    return { id: "user-demo", phone: "+91 98765 43210", displayName, memberships: [] };
+  }
+  const raw = await apiRequest<Record<string, unknown>>("/api/v1/me/", {
+    method: "PATCH",
+    body: { display_name: displayName },
+  });
+  return {
+    id: String(raw.id),
+    phone: String(raw.phone ?? ""),
+    displayName: String(raw.displayName ?? ""),
+    memberships: [],
+  };
+}
+
+export async function logoutAll(): Promise<void> {
+  if (demoMode) {
+    await delay(120);
+    return;
+  }
+  const refresh = getRefreshToken();
+  await apiRequest("/api/v1/auth/logout-all/", {
+    method: "POST",
+    body: refresh ? { refresh } : {},
+  });
 }
 
 export async function logout(): Promise<void> {
@@ -535,7 +609,40 @@ export async function createBusiness(input: { name: string; legalName?: string }
     method: "POST",
     body: { name: input.name, legal_name: input.legalName ?? input.name },
   });
-  return { id: String(row.id), name: String(row.name), legalName: String(row.legalName ?? row.name), currency: "INR", timezone: "Asia/Kolkata" };
+  return {
+    id: String(row.id),
+    name: String(row.name),
+    legalName: String(row.legalName ?? row.name),
+    currency: "INR",
+    timezone: "Asia/Kolkata",
+    defaultPriceMode: row.defaultPriceMode === "WHOLESALE" ? "WHOLESALE" : "RETAIL",
+  };
+}
+
+export async function updateBusiness(
+  id: string,
+  patch: { name?: string; legalName?: string; defaultPriceMode?: "RETAIL" | "WHOLESALE" },
+): Promise<Business> {
+  if (demoMode) {
+    await delay();
+    return { ...demoBootstrap.business, id, name: patch.name ?? demoBootstrap.business.name };
+  }
+  const row = await apiRequest<Record<string, unknown>>(`/api/v1/businesses/${id}/`, {
+    method: "PATCH",
+    body: {
+      ...(patch.name !== undefined ? { name: patch.name } : {}),
+      ...(patch.legalName !== undefined ? { legal_name: patch.legalName } : {}),
+      ...(patch.defaultPriceMode ? { default_price_mode: patch.defaultPriceMode } : {}),
+    },
+  });
+  return {
+    id: String(row.id),
+    name: String(row.name),
+    legalName: String(row.legalName ?? row.name),
+    currency: "INR",
+    timezone: "Asia/Kolkata",
+    defaultPriceMode: row.defaultPriceMode === "WHOLESALE" ? "WHOLESALE" : "RETAIL",
+  };
 }
 
 export async function getBusiness(id: string): Promise<Business> {
@@ -544,7 +651,14 @@ export async function getBusiness(id: string): Promise<Business> {
     return demoBootstrap.business;
   }
   const row = await apiRequest<Record<string, unknown>>(`/api/v1/businesses/${id}/`);
-  return { id: String(row.id), name: String(row.name), legalName: String(row.legalName ?? row.name), currency: "INR", timezone: "Asia/Kolkata" };
+  return {
+    id: String(row.id),
+    name: String(row.name),
+    legalName: String(row.legalName ?? row.name),
+    currency: "INR",
+    timezone: "Asia/Kolkata",
+    defaultPriceMode: row.defaultPriceMode === "WHOLESALE" ? "WHOLESALE" : "RETAIL",
+  };
 }
 
 export async function listLocations(businessId: string): Promise<Location[]> {
@@ -665,6 +779,8 @@ export async function listMemberships(businessId: string): Promise<Membership[]>
   return recordList(res).map((row) => ({
     id: String(row.id),
     user: String(row.user),
+    userName: row.userName ? String(row.userName) : undefined,
+    userPhone: row.userPhone ? String(row.userPhone) : undefined,
     business: String(row.business),
     role: String(row.role) as Role,
     locations: Array.isArray(row.locations) ? (row.locations as unknown[]).map(String) : [],
@@ -693,6 +809,101 @@ export async function deleteMembership(id: string) {
     return;
   }
   await apiRequest(`/api/v1/memberships/${id}/`, { method: "DELETE" });
+}
+
+export async function revokeMembership(id: string): Promise<Membership> {
+  if (demoMode) {
+    await delay();
+    return {
+      id,
+      user: "demo-user",
+      business: "demo-business",
+      role: "CASHIER",
+      locations: [],
+      isActive: false,
+    };
+  }
+  const row = await apiRequest<Record<string, unknown>>(`/api/v1/memberships/${id}/revoke/`, {
+    method: "POST",
+  });
+  return {
+    id: String(row.id),
+    user: String(row.user),
+    userName: row.userName ? String(row.userName) : undefined,
+    userPhone: row.userPhone ? String(row.userPhone) : undefined,
+    business: String(row.business),
+    role: String(row.role) as Role,
+    locations: Array.isArray(row.locations) ? (row.locations as unknown[]).map(String) : [],
+    isActive: Boolean(row.isActive ?? true),
+  };
+}
+
+export async function listInvitations(businessId: string, status?: string): Promise<Invitation[]> {
+  if (demoMode) {
+    await delay();
+    return [];
+  }
+  const params = new URLSearchParams({ business_id: businessId, ...(status ? { status } : {}) });
+  const res = await apiRequest<unknown>(`/api/v1/invitations/?${params}`);
+  return recordList(res).map((row) => ({
+    id: String(row.id),
+    business: String(row.business),
+    phoneE164: String(row.phoneE164 ?? ""),
+    role: String(row.role) as Role,
+    locations: Array.isArray(row.locations) ? (row.locations as unknown[]).map(String) : [],
+    status: String(row.status ?? "PENDING") as Invitation["status"],
+    expiresAt: String(row.expiresAt ?? ""),
+    createdAt: String(row.createdAt ?? ""),
+  }));
+}
+
+export async function createInvitation(input: {
+  business: string;
+  phoneE164: string;
+  role: Role;
+  locations?: string[];
+}): Promise<Invitation & { token?: string }> {
+  if (demoMode) {
+    await delay();
+    return {
+      id: crypto.randomUUID(),
+      business: input.business,
+      phoneE164: input.phoneE164,
+      role: input.role,
+      locations: input.locations ?? [],
+      status: "PENDING",
+      expiresAt: new Date(Date.now() + 7 * 86400000).toISOString(),
+      createdAt: new Date().toISOString(),
+    };
+  }
+  const row = await apiRequest<Record<string, unknown>>("/api/v1/invitations/", {
+    method: "POST",
+    body: {
+      business: input.business,
+      phone_e164: input.phoneE164,
+      role: input.role,
+      locations: input.locations ?? [],
+    },
+  });
+  return {
+    id: String(row.id),
+    business: String(row.business),
+    phoneE164: String(row.phoneE164 ?? ""),
+    role: String(row.role) as Role,
+    locations: Array.isArray(row.locations) ? (row.locations as unknown[]).map(String) : [],
+    status: String(row.status ?? "PENDING") as Invitation["status"],
+    expiresAt: String(row.expiresAt ?? ""),
+    createdAt: String(row.createdAt ?? ""),
+    token: row.token ? String(row.token) : undefined,
+  };
+}
+
+export async function revokeInvitation(id: string): Promise<void> {
+  if (demoMode) {
+    await delay();
+    return;
+  }
+  await apiRequest(`/api/v1/invitations/${id}/revoke/`, { method: "POST" });
 }
 
 // ---------------------------------------------------------------------------

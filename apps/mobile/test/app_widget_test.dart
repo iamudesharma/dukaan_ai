@@ -1,11 +1,24 @@
 import 'package:dukaan_ai_mobile/app.dart';
 import 'package:dukaan_ai_mobile/data/draft_store.dart';
+import 'package:dukaan_ai_mobile/data/dukaan_repository.dart';
+import 'package:dukaan_ai_mobile/data/session_store.dart';
 import 'package:dukaan_ai_mobile/state/app_providers.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'fakes.dart';
+
+Future<List<Override>> signedInOverrides({DukaanRepository? repository}) async {
+  final session = MemorySessionStore();
+  await session.writeAccessToken('test-token');
+  return [
+    repositoryProvider.overrideWithValue(repository ?? FakeDukaanRepository()),
+    sessionStoreProvider.overrideWithValue(session),
+    draftStoreProvider.overrideWithValue(MemoryDraftStore()),
+    networkStatusProvider.overrideWith((ref) => Stream.value(true)),
+  ];
+}
 
 void main() {
   testWidgets('shell navigates to assistant and confirms only from review', (tester) async {
@@ -17,11 +30,7 @@ void main() {
 
     await tester.pumpWidget(
       ProviderScope(
-        overrides: [
-          repositoryProvider.overrideWithValue(repository),
-          draftStoreProvider.overrideWithValue(MemoryDraftStore()),
-          networkStatusProvider.overrideWith((ref) => Stream.value(true)),
-        ],
+        overrides: await signedInOverrides(repository: repository),
         child: const DukaanApp(),
       ),
     );
@@ -56,11 +65,7 @@ void main() {
 
     await tester.pumpWidget(
       ProviderScope(
-        overrides: [
-          repositoryProvider.overrideWithValue(FakeDukaanRepository()),
-          draftStoreProvider.overrideWithValue(MemoryDraftStore()),
-          networkStatusProvider.overrideWith((ref) => Stream.value(true)),
-        ],
+        overrides: await signedInOverrides(),
         child: const DukaanApp(),
       ),
     );

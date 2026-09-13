@@ -5,11 +5,21 @@ from .models import (
     Business,
     GSTRegistration,
     IdempotencyRecord,
+    Invitation,
     Location,
     Membership,
     OutboxEvent,
 )
 
 admin.site.register(
-    [Business, GSTRegistration, Location, Membership, IdempotencyRecord, AuditEvent, OutboxEvent]
+    [
+        Business,
+        GSTRegistration,
+        Location,
+        Membership,
+        Invitation,
+        IdempotencyRecord,
+        AuditEvent,
+        OutboxEvent,
+    ]
 )

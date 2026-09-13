@@ -42,7 +42,7 @@ class SaleCreateSerializer(serializers.Serializer):
     )
     invoice_date = serializers.DateField(required=False)
     price_mode = serializers.ChoiceField(
-        choices=Sale.PriceMode.choices, default=Sale.PriceMode.RETAIL
+        choices=Sale.PriceMode.choices, required=False, allow_null=True
     )
     tax_inclusive = serializers.BooleanField(default=False)
     discount_total_minor = serializers.IntegerField(min_value=0, default=0)
@@ -55,6 +55,16 @@ class SaleCreateSerializer(serializers.Serializer):
     negative_stock_acknowledged = serializers.BooleanField(default=False)
     negative_stock_reason = serializers.CharField(max_length=240, required=False, allow_blank=True)
     idempotency_key = serializers.CharField(max_length=128)
+
+    def validate(self, attrs):
+        if not attrs.get("price_mode"):
+            business = attrs.get("business")
+            attrs["price_mode"] = (
+                business.default_price_mode
+                if business and business.default_price_mode in Sale.PriceMode.values
+                else Sale.PriceMode.RETAIL
+            )
+        return attrs
 
 
 class SaleLineSerializer(serializers.ModelSerializer):

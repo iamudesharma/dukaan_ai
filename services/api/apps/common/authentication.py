@@ -7,9 +7,33 @@ from rest_framework import exceptions
 from rest_framework_simplejwt.authentication import JWTAuthentication
 from rest_framework_simplejwt.exceptions import TokenError
 
-from apps.authentication.models import BlacklistedToken
+from apps.authentication.models import BlacklistedToken, SessionRevocation
 
 User = get_user_model()
+
+
+def _token_issued_at(validated_token):
+    """Unix timestamp a token was issued at, or None when absent."""
+    issued_at = validated_token.get("iat")
+    if isinstance(issued_at, int | float):
+        return float(issued_at)
+    return None
+
+
+def is_session_revoked(user, validated_token) -> bool:
+    """True when the user revoked all sessions after this token was issued.
+
+    Fail closed: a token without an ``iat`` claim is rejected whenever any
+    revocation record exists for the user."""
+    revocation = (
+        SessionRevocation.objects.filter(user=user).values_list("revoked_at", flat=True).first()
+    )
+    if revocation is None:
+        return False
+    issued_at = _token_issued_at(validated_token)
+    if issued_at is None:
+        return True
+    return issued_at <= revocation.timestamp()
 
 
 class CustomJWTAuthentication(JWTAuthentication):
@@ -38,6 +62,8 @@ class CustomJWTAuthentication(JWTAuthentication):
         user = self.get_user(validated_token)
         if not user.is_active:
             raise exceptions.AuthenticationFailed("User is disabled")
+        if is_session_revoked(user, validated_token):
+            raise exceptions.AuthenticationFailed("Session has been revoked")
 
         from apps.tenancy import rls
 
