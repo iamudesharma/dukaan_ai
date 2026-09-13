@@ -17,6 +17,7 @@ dependencies = [
   "psycopg[binary]>=3.2,<4",
   "PyJWT[crypto]>=2.10,<3",
   "celery[redis]>=5.5,<6",
+  "pypdf>=5,<6",
   "gunicorn>=23,<24",
   "whitenoise>=6.9,<7",
   "sentry-sdk[django]>=2.29,<3",

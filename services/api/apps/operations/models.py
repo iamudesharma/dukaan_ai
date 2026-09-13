@@ -427,11 +427,15 @@ class ExportJob(UUIDModel):
 
 
 class Attachment(UUIDModel):
-    """A tenant-owned file, e.g. a generated sale invoice PDF.
+    """A tenant-owned file.
 
-    Created PENDING with an outbox event (``invoice.generate``) in the same
-    transaction; the worker renders the PDF into private storage. Only
-    members of the owning business can fetch the row or its bytes.
+    Two lifecycles share this table:
+
+    - ``sale-invoice``: rendered by the worker (``invoice.generate``) from a
+      posted sale; ``sale`` is set, ``uploaded_by`` is empty.
+    - ``upload-*``: uploaded by a member (bill photo/PDF/audio);
+      ``uploaded_by`` is set. Linked to proposals for extraction provenance;
+      only members of the owning business can fetch the row or its bytes.
     """
 
     class Status(models.TextChoices):
@@ -439,8 +443,14 @@ class Attachment(UUIDModel):
         READY = "READY", "Ready"
         FAILED = "FAILED", "Failed"
 
+    class Kind(models.TextChoices):
+        SALE_INVOICE = "sale-invoice", "Sale invoice"
+        UPLOAD_PHOTO = "upload-photo", "Uploaded photo"
+        UPLOAD_PDF = "upload-pdf", "Uploaded PDF"
+        UPLOAD_AUDIO = "upload-audio", "Uploaded audio"
+
     business = models.ForeignKey(Business, on_delete=models.PROTECT, related_name="attachments")
-    kind = models.CharField(max_length=32, default="sale-invoice")
+    kind = models.CharField(max_length=32, default=Kind.SALE_INVOICE)
     sale = models.ForeignKey(
         "operations.Sale",
         null=True,
@@ -448,9 +458,25 @@ class Attachment(UUIDModel):
         on_delete=models.PROTECT,
         related_name="attachments",
     )
+    proposal = models.ForeignKey(
+        "assistant.AssistantProposal",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="linked_attachments",
+    )
+    uploaded_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="attachments",
+    )
+    original_name = models.CharField(max_length=255, blank=True)
     file = models.FileField(upload_to=_phase3_upload_to, null=True, blank=True)
     mime_type = models.CharField(max_length=80, default="application/pdf")
     size_bytes = models.PositiveBigIntegerField(default=0)
+    extracted_text = models.TextField(blank=True)
     status = models.CharField(max_length=10, choices=Status.choices, default=Status.PENDING)
     error = models.TextField(blank=True)
 

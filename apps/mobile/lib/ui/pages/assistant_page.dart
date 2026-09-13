@@ -1,4 +1,3 @@
-import 'dart:convert';
 import 'dart:io';
 
 import 'package:dukaan_ai_mobile/domain/models.dart';
@@ -206,14 +205,27 @@ class _AssistantPageState extends ConsumerState<AssistantPage> {
     required List<int> bytes,
     required String mimeType,
     required String label,
-  }) {
-    return ref.read(assistantControllerProvider.notifier).interpret(
-          AssistantInput(
-            type: AssistantInputType.image,
-            content: 'data:$mimeType;base64,${base64Encode(bytes)}',
-            displayText: label,
-          ),
-        );
+  }) async {
+    final notifier = ref.read(assistantControllerProvider.notifier);
+    try {
+      final uploaded = await ref.read(repositoryProvider).uploadAttachment(
+            bytes: bytes,
+            filename: label,
+            mimeType: mimeType,
+          );
+      final attachmentId = (uploaded['id'] ?? '').toString();
+      if (attachmentId.isEmpty) throw StateError('upload failed');
+      await notifier.interpret(
+        AssistantInput(
+          type: AssistantInputType.image,
+          content: '',
+          displayText: label,
+          attachmentIds: [attachmentId],
+        ),
+      );
+    } on Object {
+      if (mounted) _showMessage(context.strings.t('captureFailed'));
+    }
   }
 
   void _showMessage(String message) {
@@ -437,6 +449,22 @@ class _ProposalStateState extends State<_ProposalState> {
                         fontWeight: FontWeight.w900,
                       ),
                 ),
+                if (proposal.attachments.isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 6,
+                    children: [
+                      for (final file in proposal.attachments)
+                        Chip(
+                          avatar: const Icon(Icons.attach_file_rounded, size: 16),
+                          label: Text(
+                            file['name']!.isEmpty ? 'Attached bill' : file['name']!,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                    ],
+                  ),
+                ],
                 const SizedBox(height: 14),
                 ...proposal.facts.map(
                   (fact) => Padding(

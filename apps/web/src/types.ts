@@ -301,9 +301,10 @@ export interface AssistantLine {
 export interface AssistantProposal {
   id: string;
   version: number;
-  status: "NEEDS_DETAILS" | "READY" | "CONFIRMED" | "FAILED";
+  status: "NEEDS_DETAILS" | "READY" | "CONFIRMED" | "FAILED" | "PROCESSING";
   intent: "RECORD_SALE" | "RECORD_PURCHASE" | "RECORD_PAYMENT" | "RECORD_EXPENSE";
   sourceText: string;
+  attachments?: Array<{ id: string; name: string; mime: string }>;
   partyId?: string;
   partyName?: string;
   partyProposedNew?: boolean;

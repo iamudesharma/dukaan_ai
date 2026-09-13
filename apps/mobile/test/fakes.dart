@@ -174,6 +174,24 @@ class FakeDukaanRepository implements DukaanRepository {
   Future<List<int>> downloadBytes(String path) async => const [];
 
   @override
+  Future<AssistantProposal> pollAssistantProposal(String id) async => throw UnimplementedError();
+
+  @override
+  Future<Map<String, dynamic>> uploadAttachment({
+    required List<int> bytes,
+    required String filename,
+    required String mimeType,
+    String? businessId,
+  }) async =>
+      {'id': 'attachment-test', 'status': 'READY'};
+
+  @override
+  Future<Map<String, dynamic>> searchAll(String query, {String? businessId}) async => {
+        'query': query,
+        'results': {'parties': [], 'products': [], 'documents': []},
+      };
+
+  @override
   Future<Product> fetchProduct(String id) async => product;
 
   @override

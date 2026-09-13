@@ -11,6 +11,7 @@ from .phase3_views import (
     ReminderSuggestionsView,
     SaleInvoiceView,
 )
+from .phase4_views import AttachmentListCreateView, AttachmentPresignView, SearchView
 from .views import (
     DashboardView,
     DayBookView,
@@ -60,5 +61,8 @@ urlpatterns = [
     path("exports/", ExportListCreateView.as_view(), name="exports"),
     path("exports/<uuid:pk>/", ExportDetailView.as_view(), name="export-detail"),
     path("sales/<uuid:pk>/invoice/", SaleInvoiceView.as_view(), name="sale-invoice"),
+    path("attachments/", AttachmentListCreateView.as_view(), name="attachments"),
+    path("attachments/presign/", AttachmentPresignView.as_view(), name="attachment-presign"),
     path("attachments/<uuid:pk>/", AttachmentDetailView.as_view(), name="attachment-detail"),
+    path("search/", SearchView.as_view(), name="search"),
 ] + router.urls

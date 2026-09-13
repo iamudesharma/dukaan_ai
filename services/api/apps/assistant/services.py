@@ -651,13 +651,35 @@ def _build_proposal_data(content: str, business: Business, location: Location, l
 
 @transaction.atomic
 def interpret(
-    *, actor, business: Business, location: Location, input_type: str, content: str, locale: str
+    *,
+    actor,
+    business: Business,
+    location: Location,
+    input_type: str,
+    content: str,
+    locale: str,
+    attachment_ids=(),
 ):
     require_membership(actor, business.id, location_id=location.id)
     if location.business_id != business.id:
         raise ValidationError("Location does not belong to the business")
     business = Business.objects.select_for_update().get(pk=business.pk)
     location = Location.objects.select_for_update().get(pk=location.pk)
+
+    attachments = _resolve_attachments(attachment_ids, business)
+    if attachments or input_type in (
+        AssistantProposal.InputType.IMAGE,
+        AssistantProposal.InputType.VOICE,
+    ):
+        return _interpret_deferred(
+            actor=actor,
+            business=business,
+            location=location,
+            input_type=input_type,
+            content=content or "",
+            locale=locale,
+            attachments=attachments,
+        )
 
     payload, preview, warnings, blockers, command_type = _build_proposal_data(
         content, business, location, locale
@@ -680,6 +702,147 @@ def interpret(
         status=AssistantProposal.Status.DRAFT if blockers else AssistantProposal.Status.READY,
         expires_at=timezone.now() + timedelta(hours=24),
     )
+    _record_revision(proposal)
+    return proposal
+
+
+def _resolve_attachments(attachment_ids, business: Business):
+    """Validate upload attachments for a proposal.
+
+    Every id must name a READY upload owned by this business. Invoice PDFs
+    and other businesses' files are rejected: extraction input is always
+    tenant-scoped and member-uploaded.
+    """
+    from apps.operations.models import Attachment
+
+    ids = [str(candidate) for candidate in (attachment_ids or [])]
+    if not ids:
+        return []
+    rows = list(Attachment.objects.select_for_update().filter(pk__in=ids, business_id=business.pk))
+    if len(rows) != len(set(ids)):
+        raise ValidationError("One or more attachments were not found")
+    for attachment in rows:
+        if not attachment.kind.startswith("upload-"):
+            raise ValidationError("Only uploaded bill media can seed a proposal")
+        if attachment.status != Attachment.Status.READY:
+            raise ValidationError("Every attachment must finish uploading first")
+    return rows
+
+
+def _interpret_deferred(
+    *,
+    actor,
+    business: Business,
+    location: Location,
+    input_type: str,
+    content: str,
+    locale: str,
+    attachments: list,
+):
+    """Create a PROCESSING proposal; the worker extracts and understands it.
+
+    The intent row + outbox event commit together, so a worker restart never
+    loses the request. The client polls the proposal until it flips to
+    READY/DRAFT.
+    """
+    from apps.tenancy.models import OutboxEvent
+
+    provenance = [
+        {
+            "id": str(attachment.pk),
+            "name": attachment.original_name or str(attachment.pk),
+            "mime": attachment.mime_type,
+        }
+        for attachment in attachments
+    ]
+    proposal = AssistantProposal.objects.create(
+        business=business,
+        location=location,
+        actor=actor,
+        input_type=input_type,
+        locale=locale,
+        content=content,
+        attachments=provenance,
+        command_type="UNSUPPORTED",
+        payload={},
+        preview="",
+        preview_data={"summary": "", "facts": [], "questions": []},
+        warnings=[],
+        blocking_questions=[],
+        status=AssistantProposal.Status.PROCESSING,
+        expires_at=timezone.now() + timedelta(hours=24),
+    )
+    for attachment in attachments:
+        attachment.proposal = proposal
+        attachment.save(update_fields=["proposal", "updated_at"])
+    OutboxEvent.objects.get_or_create(
+        dedupe_key=f"proposal.extract:{proposal.pk}",
+        defaults={
+            "business": business,
+            "topic": "proposal.extract",
+            "payload": {"proposal_id": str(proposal.pk)},
+            "available_at": timezone.now(),
+        },
+    )
+    _record_revision(proposal)
+    return proposal
+
+
+@transaction.atomic
+def finalize_proposal_extraction(proposal_id) -> AssistantProposal:
+    """Fold worker-extracted attachment text into a reviewable proposal.
+
+    Idempotent: non-PROCESSING proposals are returned untouched so outbox
+    redelivery never re-interprets. Extracted text is provenance, not truth:
+    the normal interpret pipeline (AI + deterministic fallback) still
+    validates products, parties, and totals, and the source files stay
+    linked for review.
+    """
+    from apps.operations.models import Attachment
+
+    proposal = AssistantProposal.objects.select_for_update().get(pk=proposal_id)
+    if proposal.status != AssistantProposal.Status.PROCESSING:
+        return proposal
+    Business.objects.select_for_update().get(pk=proposal.business_id)
+    Location.objects.select_for_update().get(pk=proposal.location_id)
+    business = Business.objects.get(pk=proposal.business_id)
+    location = Location.objects.get(pk=proposal.location_id)
+    linked = list(
+        Attachment.objects.filter(proposal_id=proposal.pk, business_id=proposal.business_id)
+    )
+    texts = [
+        attachment.extracted_text.strip() for attachment in linked if attachment.extracted_text
+    ]
+    names = [item.get("name", "") for item in (proposal.attachments or []) if item.get("name")]
+    if texts:
+        content = "\n".join([proposal.content.strip(), *texts]).strip()
+    else:
+        content = proposal.content.strip()
+    payload, preview, warnings, blockers, command_type = _build_proposal_data(
+        content, business, location, proposal.locale
+    )
+    if names:
+        warnings = [
+            f"Read from {', '.join(names)}; verify the amounts before recording.",
+            *warnings,
+        ]
+    if not texts:
+        blockers = [
+            "The attachment could not be read automatically; describe the bill "
+            "(party, items, total) and the proposal will be re-read.",
+            *blockers,
+        ]
+    proposal.content = content
+    proposal.payload = payload
+    proposal.preview = preview
+    proposal.preview_data = _build_preview_data(payload, preview, blockers, location)
+    proposal.warnings = warnings
+    proposal.blocking_questions = blockers
+    proposal.command_type = command_type
+    proposal.status = AssistantProposal.Status.DRAFT if blockers else AssistantProposal.Status.READY
+    proposal.version += 1
+    proposal.expires_at = timezone.now() + timedelta(hours=24)
+    proposal.save()
     _record_revision(proposal)
     return proposal
 

@@ -205,6 +205,7 @@ export async function interpretCommand(
   businessId: string,
   locationId: string,
   text: string,
+  options: { inputType?: string; attachmentIds?: string[] } = {},
 ): Promise<AssistantProposal> {
   if (demoMode) {
     await delay(550);
@@ -214,10 +215,111 @@ export async function interpretCommand(
     "/api/v1/assistant/proposals/",
     {
       method: "POST",
-      body: { business_id: businessId, input_type: "TEXT", content: text, location_id: locationId, locale: "en-IN" },
+      body: {
+        business_id: businessId,
+        input_type: options.inputType ?? "TEXT",
+        content: text,
+        location_id: locationId,
+        locale: "en-IN",
+        ...(options.attachmentIds?.length ? { attachment_ids: options.attachmentIds } : {}),
+      },
     },
   );
   return mapProposal(raw, businessId, locationId, text);
+}
+
+export async function pollProposal(
+  businessId: string,
+  locationId: string,
+  sourceText: string,
+  id: string,
+  attempts = 20,
+): Promise<AssistantProposal> {
+  for (let i = 0; i < attempts; i++) {
+    const raw = await apiRequest<Record<string, unknown>>(
+      `/api/v1/assistant/proposals/${id}/`,
+    );
+    const proposal = await mapProposal(raw, businessId, locationId, sourceText);
+    if (proposal.status !== "PROCESSING") return proposal;
+    await delay(1000);
+  }
+  const raw = await apiRequest<Record<string, unknown>>(`/api/v1/assistant/proposals/${id}/`);
+  return mapProposal(raw, businessId, locationId, sourceText);
+}
+
+export interface UploadedAttachment {
+  id: string;
+  kind: string;
+  status: string;
+  originalName?: string;
+  mimeType?: string;
+}
+
+export async function uploadAttachment(businessId: string, file: File): Promise<UploadedAttachment> {
+  if (demoMode) {
+    await delay(500);
+    return { id: crypto.randomUUID(), kind: "upload-photo", status: "READY", originalName: file.name };
+  }
+  const token = await accessToken();
+  const form = new FormData();
+  form.append("business_id", businessId);
+  form.append("file", file, file.name);
+  const response = await fetch(`${apiUrl}/api/v1/attachments/`, {
+    method: "POST",
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    body: form,
+  });
+  if (!response.ok) {
+    throw new Error(
+      response.status === 400
+        ? "This file cannot be used. Photos, PDFs and audio under 10 MB are supported."
+        : "The upload could not be completed.",
+    );
+  }
+  const row = await response.json() as Record<string, unknown>;
+  return {
+    id: String(row.id),
+    kind: String(row.kind ?? ""),
+    status: String(row.status ?? ""),
+    originalName: row.originalName ? String(row.originalName) : undefined,
+    mimeType: row.mimeType ? String(row.mimeType) : undefined,
+  };
+}
+
+export interface SearchResults {
+  parties: Array<{ id: string; name: string; kind: string }>;
+  products: Array<{ id: string; name: string; sku: string }>;
+  documents: Array<{ id: string; kind: string; number: string; party: string; totalMinor: number }>;
+}
+
+export async function searchAll(businessId: string, query: string): Promise<SearchResults> {
+  if (demoMode || query.trim().length < 2) {
+    await delay(200);
+    return { parties: [], products: [], documents: [] };
+  }
+  const params = new URLSearchParams({ business_id: businessId, q: query.trim() });
+  const res = await apiRequest<{ results: Record<string, Array<Record<string, unknown>>> }>(
+    `/api/v1/search/?${params}`,
+  );
+  return {
+    parties: (res.results.parties ?? []).map((row) => ({
+      id: String(row.id),
+      name: String(row.name ?? ""),
+      kind: String(row.kind ?? ""),
+    })),
+    products: (res.results.products ?? []).map((row) => ({
+      id: String(row.id),
+      name: String(row.name ?? ""),
+      sku: String(row.sku ?? ""),
+    })),
+    documents: (res.results.documents ?? []).map((row) => ({
+      id: String(row.id),
+      kind: String(row.kind ?? ""),
+      number: String(row.number ?? ""),
+      party: String(row.party ?? ""),
+      totalMinor: Number(row.totalMinor ?? 0),
+    })),
+  };
 }
 
 export async function reviseCommand(
@@ -283,13 +385,25 @@ async function mapProposal(
   const proposedName = payload.newCustomerName ?? payload.newSupplierName;
   const warnings = Array.isArray(raw.warnings) ? raw.warnings.map(String) : [];
   const questions = Array.isArray(raw.blockingQuestions) ? raw.blockingQuestions.map(String) : [];
-  const status = raw.status === "READY" ? "READY" : raw.status === "CONFIRMED" ? "CONFIRMED" : "NEEDS_DETAILS";
+  const status = raw.status === "READY"
+    ? "READY"
+    : raw.status === "CONFIRMED"
+      ? "CONFIRMED"
+      : raw.status === "PROCESSING"
+        ? "PROCESSING"
+        : "NEEDS_DETAILS";
+  const rawAttachments = Array.isArray(raw.attachments) ? raw.attachments as Record<string, unknown>[] : [];
   return {
     id: String(raw.id),
     version: Number(raw.version ?? 1),
     status,
     intent,
     sourceText: String(raw.content ?? text),
+    attachments: rawAttachments.map((item) => ({
+      id: String(item.id ?? ""),
+      name: String(item.name ?? ""),
+      mime: String(item.mime ?? ""),
+    })),
     partyId: partyIdText,
     partyName: party?.name ?? (proposedName ? String(proposedName) : undefined),
     partyProposedNew: Boolean(proposedName),
