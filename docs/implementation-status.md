@@ -1,4 +1,34 @@
-# Implementation checkpoint — 2026-09-05
+# Implementation checkpoint — 2026-09-13
+
+Phases 0–5 are implemented across the Django API, React console, and
+Flutter app (PRs #17–#21, stacked). Verified: API 98 passed + RLS proofs
+on PostgreSQL, web lint+test+build plus a passing Playwright golden path,
+Flutter analyze+test plus an integration golden path.
+
+Shipped since the 2026-09-05 baseline:
+
+- Truthful contracts (Phase 0): nested dashboard aggregates, stock/balance
+  list fields, `preview_data`, negative-stock ack on confirm, VITE_API_URL
+  auth, Dio refresh, nested-dashboard parsing.
+- Reporting & reads (Phase 1): day-book/sales/purchases/GST/party-balances/
+  stock-valuation endpoints with role gating, sync CSV export, stock
+  movements, six-card Reports pages on both clients.
+- Writes/team/onboarding (Phase 2): multi-intent assistant confirm
+  (SALE/PURCHASE/PAYMENT/EXPENSE), invitations + session revocation,
+  `default_price_mode`, onboarding wizards, role-gated navigation.
+- Activity/reminders/exports (Phase 3): audit feed, notification prefs +
+  device tokens, durable reminders/exports/invoice PDFs via outbox workers.
+- Media/search (Phase 4): bill uploads, PROCESSING extraction proposals
+  with provenance, scoped global search.
+- Hardening (Phase 5): committed OpenAPI contract + drift tests, generated
+  TS/Dart clients (incrementally adopted), RLS proofs for every new table,
+  Playwright + integration golden paths, negative-stock ack in both sale
+  forms, CORS allowlist for browser headers.
+
+Remaining launch gates (accounts/credentials, not code): SMS/DLT sender,
+FCM project, private storage signing, AI vision/transcription provider,
+moving-weighted-average costing (D1 approximation documented in
+docs/api/CONTRACT.md).
 
 This repository is a working development foundation, not a completed production launch.
 

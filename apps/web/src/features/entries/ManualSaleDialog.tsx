@@ -4,6 +4,7 @@ import { AlertTriangle, Check, LoaderCircle, PackageMinus, ReceiptText, X } from
 import { useWorkspace } from "../../app/WorkspaceContext";
 import { getParties, getProducts, recordManualSale } from "../../data/repository";
 import { formatMoney } from "../../lib/format";
+import { ApiError } from "../../lib/api";
 import { saveOfflineDraft } from "../../lib/offlineDrafts";
 import type { ManualSaleInput } from "../../types";
 
@@ -25,6 +26,8 @@ export function ManualSaleDialog({ open, onClose }: Props) {
   const [paymentMode, setPaymentMode] = useState<ManualSaleInput["paymentMode"]>("CASH");
   const [reviewing, setReviewing] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [stockAck, setStockAck] = useState(false);
+  const [stockReason, setStockReason] = useState("");
   const queryClient = useQueryClient();
   const selectedProduct = products.data?.find((product) => product.id === productId);
   const selectedCustomer = parties.data?.find((party) => party.id === customerId);
@@ -47,7 +50,10 @@ export function ManualSaleDialog({ open, onClose }: Props) {
     paidMinor,
     paymentMode,
     priceMode,
-  }) : null, [bootstrap.business.id, locationId, paidMinor, paymentMode, priceMode, quantity, selectedCustomer, selectedProduct, unitPriceMinor]);
+    ...(stockAck && stockReason.trim()
+      ? { negativeStockAcknowledged: true, negativeStockReason: stockReason.trim() }
+      : {}),
+  }) : null, [bootstrap.business.id, locationId, paidMinor, paymentMode, priceMode, quantity, selectedCustomer, selectedProduct, stockAck, stockReason, unitPriceMinor]);
 
   const post = useMutation({
     mutationFn: (sale: ManualSaleInput) => recordManualSale(sale),
@@ -66,6 +72,8 @@ export function ManualSaleDialog({ open, onClose }: Props) {
       setQuantity("1");
       setUnitPrice("");
       setPaid("0");
+      setStockAck(false);
+      setStockReason("");
       post.reset();
     }
   }, [open]);
@@ -119,6 +127,15 @@ export function ManualSaleDialog({ open, onClose }: Props) {
               <div className="due"><dt>Pending</dt><dd>{formatMoney(dueMinor)}</dd></div>
             </dl>
             <div className="effects-card"><p><PackageMinus />Reduce {selectedProduct?.name} stock by {quantity}</p><p><ReceiptText />{dueMinor ? `Add ${formatMoney(dueMinor)} to ${selectedCustomer?.name}'s outstanding balance` : "No outstanding balance"}</p></div>
+            {post.error instanceof ApiError && post.error.detail.code === "negative_stock_confirmation_required" ? (
+              <div className="warning-card" role="group" aria-label="Negative stock approval">
+                <AlertTriangle aria-hidden="true" />
+                <div>
+                  <label><input type="checkbox" checked={stockAck} onChange={(event) => setStockAck(event.target.checked)} /> I confirm this sale takes stock below zero</label>
+                  <label>Reason<input value={stockReason} onChange={(event) => setStockReason(event.target.value)} placeholder="Why is this sale going ahead?" maxLength={240} /></label>
+                </div>
+              </div>
+            ) : null}
             <div className="review-actions"><button type="button" className="secondary-button" onClick={() => setReviewing(false)}>Back and edit</button><button className="primary-button" disabled={post.isPending}>{post.isPending ? <LoaderCircle className="spin" /> : <Check />}{post.isPending ? "Recording…" : `Record sale ${formatMoney(totalMinor)}`}</button></div>
             {post.error ? <p className="form-error" role="alert">{post.error.message}</p> : null}
           </form>

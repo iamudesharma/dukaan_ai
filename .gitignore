@@ -45,6 +45,10 @@ htmlcov/
 *.egg-info/
 services/api/staticfiles/
 services/api/mediafiles/
+# Playwright e2e artifacts
+apps/web/test-results/
+apps/web/playwright-report/
+apps/web/blob-report/
 
 # Flutter / Dart
 .dart_tool/

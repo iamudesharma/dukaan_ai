@@ -4,6 +4,8 @@ from django.db import transaction
 from django.db.models import Q, Sum
 from django.http import FileResponse
 from django.utils import timezone
+from drf_spectacular.types import OpenApiTypes
+from drf_spectacular.utils import OpenApiParameter, extend_schema
 from rest_framework.exceptions import NotFound, ValidationError
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -57,6 +59,14 @@ def _member_or_404(request, business_id):
 class ActivityView(APIView):
     """Newest-first audit feed over append-only AuditEvent."""
 
+    @extend_schema(
+        parameters=[
+            OpenApiParameter("business_id", OpenApiTypes.UUID, required=True),
+            OpenApiParameter("kind", OpenApiTypes.STR, required=False),
+            OpenApiParameter("location_id", OpenApiTypes.UUID, required=False),
+        ],
+        tags=["activity"],
+    )
     def get(self, request):
         business_id = request.query_params.get("business_id")
         if not business_id:
@@ -136,6 +146,9 @@ class ReminderListCreateView(APIView):
         reminders = reminders.order_by("-created_at")[:200]
         return Response(ReminderSerializer(reminders, many=True).data)
 
+    @extend_schema(
+        request=ReminderCreateSerializer, responses=ReminderSerializer, tags=["reminders"]
+    )
     @transaction.atomic
     def post(self, request):
         serializer = ReminderCreateSerializer(data=request.data)
@@ -277,6 +290,7 @@ class ExportListCreateView(APIView):
         jobs = ExportJob.objects.filter(business_id=business_id).order_by("-created_at")[:100]
         return Response(ExportJobSerializer(jobs, many=True).data)
 
+    @extend_schema(request=ExportCreateSerializer, responses=ExportJobSerializer, tags=["exports"])
     @transaction.atomic
     def post(self, request):
         serializer = ExportCreateSerializer(data=request.data)
@@ -376,6 +390,7 @@ class ExportDetailView(APIView):
 class SaleInvoiceView(APIView):
     """Get-or-create the invoice PDF for a posted sale (idempotent)."""
 
+    @extend_schema(responses=AttachmentSerializer, tags=["attachments"])
     @transaction.atomic
     def post(self, request, pk):
         try:

@@ -4,7 +4,14 @@ import 'package:decimal/decimal.dart';
 import 'package:dio/dio.dart';
 import 'package:dukaan_ai_mobile/core/config.dart';
 import 'package:dukaan_ai_mobile/domain/models.dart';
+import 'package:dukaan_api_client/api.dart' as client;
 import 'package:uuid/uuid.dart';
+
+client.InputTypeEnum _interpretInputType(AssistantInputType type) => switch (type) {
+      AssistantInputType.text => client.InputTypeEnum.TEXT,
+      AssistantInputType.voice => client.InputTypeEnum.VOICE,
+      AssistantInputType.image => client.InputTypeEnum.IMAGE,
+    };
 
 abstract interface class DukaanRepository {
   Future<List<BusinessLocation>> fetchLocations();
@@ -242,16 +249,19 @@ class ApiDukaanRepository implements DukaanRepository {
     required String locale,
   }) async {
     final businessId = await _resolveBusinessId();
+    // First generated-model adoption: the request body is typed by the
+    // OpenAPI client, so a renamed/removed field fails analysis, not prod.
+    final body = client.Interpret(
+      businessId: businessId,
+      locationId: locationId,
+      inputType: _interpretInputType(input.type),
+      content: input.content,
+      locale: locale,
+      attachmentIds: input.attachmentIds,
+    ).toJson();
     final response = await _dio.post<Object>(
       'assistant/proposals/',
-      data: {
-        'business_id': businessId,
-        'location_id': locationId,
-        'input_type': input.type.apiValue,
-        'content': input.content,
-        'locale': locale,
-        if (input.attachmentIds.isNotEmpty) 'attachment_ids': input.attachmentIds,
-      },
+      data: body,
       options: Options(extra: {'locale': locale}),
     );
     return _proposalFromJson(_object(response.data));

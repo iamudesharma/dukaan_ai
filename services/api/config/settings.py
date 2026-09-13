@@ -6,6 +6,7 @@ from pathlib import Path
 
 import dj_database_url
 import sentry_sdk
+from corsheaders.defaults import default_headers
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -134,6 +135,9 @@ CORS_ALLOWED_ORIGINS = [
     v.strip() for v in os.getenv("CORS_ALLOWED_ORIGINS", "").split(",") if v.strip()
 ]
 CORS_ALLOW_CREDENTIALS = False
+# The web client identifies itself (X-Client) and replays safely
+# (Idempotency-Key); browsers preflight both, so they must be allowed.
+CORS_ALLOW_HEADERS = [*default_headers, "x-client", "idempotency-key"]
 CSRF_COOKIE_SECURE = not DEBUG
 SESSION_COOKIE_SECURE = not DEBUG
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")

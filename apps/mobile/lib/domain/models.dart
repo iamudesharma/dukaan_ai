@@ -309,6 +309,8 @@ class SaleDraft {
     this.customerName,
     this.paymentReference,
     this.createdAt,
+    this.negativeStockAcknowledged = false,
+    this.negativeStockReason = '',
   });
 
   final String id;
@@ -323,6 +325,10 @@ class SaleDraft {
   final String? paymentReference;
   final DateTime? createdAt;
 
+  /// Manager/owner approval for below-zero stock, with a mandatory reason.
+  final bool negativeStockAcknowledged;
+  final String negativeStockReason;
+
   int get totalMinor => lines.fold(0, (sum, line) => sum + line.totalMinor);
   int get pendingMinor {
     final difference = totalMinor - paidAmountMinor;
@@ -336,8 +342,8 @@ class SaleDraft {
         'price_mode': priceMode.apiValue,
         'tax_inclusive': false,
         'discount_total_minor': 0,
-        'negative_stock_acknowledged': false,
-        'negative_stock_reason': '',
+        'negative_stock_acknowledged': negativeStockAcknowledged,
+        'negative_stock_reason': negativeStockReason,
         'lines': lines
             .map(
               (line) => {
@@ -365,6 +371,8 @@ class SaleDraft {
         'price_mode': priceMode.name,
         'payment_method': paymentMethod.name,
         'payment_reference': paymentReference,
+        'negative_stock_acknowledged': negativeStockAcknowledged,
+        'negative_stock_reason': negativeStockReason,
         'created_at': (createdAt ?? DateTime.now()).toIso8601String(),
       };
 
@@ -383,6 +391,8 @@ class SaleDraft {
             PaymentMethod.values.byName((json['payment_method'] ?? 'cash').toString()),
         paymentReference: json['payment_reference']?.toString(),
         createdAt: DateTime.tryParse((json['created_at'] ?? '').toString()),
+        negativeStockAcknowledged: json['negative_stock_acknowledged'] == true,
+        negativeStockReason: (json['negative_stock_reason'] ?? '').toString(),
       );
 }
 

@@ -32,6 +32,13 @@ Flutter Android app / React web console
 - **Render Key Value (Valkey-compatible):** Celery broker only. It is not authoritative business storage.
 - **Celery worker:** performs retryable OCR, notifications, summaries, exports, and other slow work.
 - **Scheduled dispatcher:** runs once per minute, claims due rows/outbox work in Postgres, and enqueues idempotent tasks.
+- **Outbox topics:** `sale|purchase|payment|expense|transfer.posted|reversed`
+  (audit fan-out), `reminder.send`, `export.run`, `invoice.generate`,
+  `proposal.extract` (bill-media text extraction → proposal finalize).
+- **API contract:** `docs/api/openapi.yml` generated from code
+  (`make api-schema`), drift-tested in CI; typed clients generated for web
+  (`npm run gen:api`) and Flutter (`make mobile-gen`), adopted
+  incrementally. See [API contract](./api/CONTRACT.md).
 
 All Render services run in Singapore. The Supabase project should use the closest available Southeast Asia region. Keeping the API, queue, and database near one another reduces latency and avoids unnecessary cross-region data movement.
 
@@ -39,7 +46,14 @@ All Render services run in Singapore. The Supabase project should use the closes
 
 Every tenant-owned aggregate carries an immutable `business_id`. Membership maps a Supabase user ID to a business and a role. The API derives the active user from the verified token and validates access to the requested business; it never trusts a client-supplied user ID.
 
-The baseline defense is application-enforced tenant scoping plus database constraints. Privileged database credentials are server-only. If direct client database access is introduced later, Row Level Security must be enabled and tested before that path ships.
+The baseline defense is application-enforced tenant scoping plus database
+constraints. Since 2026-09-05 this is proven, not planned: `FORCE ROW LEVEL
+SECURITY` covers every tenant table including Phase 2–4 additions
+(invitations, notification preferences, reminders, export jobs,
+attachments), verified by direct as-`dukaan_app`-role tests
+(`tests/test_rls.py`: fail-closed reads, scoped reads, rejected
+cross-tenant writes, child inheritance, scoped self-bootstrap).
+Privileged database credentials are server-only.
 
 Recommended invariants:
 
