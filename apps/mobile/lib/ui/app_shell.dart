@@ -78,6 +78,8 @@ class AppShell extends ConsumerWidget {
             icon: const Icon(Icons.more_vert_rounded),
             onSelected: (value) async {
               switch (value) {
+                case 'search':
+                  context.go('/search');
                 case 'team':
                   context.go('/team');
                 case 'activity':
@@ -90,6 +92,15 @@ class AppShell extends ConsumerWidget {
               }
             },
             itemBuilder: (context) => [
+              PopupMenuItem(
+                value: 'search',
+                child: ListTile(
+                  dense: true,
+                  contentPadding: EdgeInsets.zero,
+                  leading: const Icon(Icons.search_rounded),
+                  title: Text(strings.t('searchTitle')),
+                ),
+              ),
               PopupMenuItem(value: 'team', child: Text(strings.t('team'))),
               PopupMenuItem(value: 'activity', child: Text(strings.t('activity'))),
               PopupMenuItem(value: 'settings', child: Text(strings.t('settings'))),

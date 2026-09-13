@@ -197,11 +197,18 @@ class AssistantController extends StateNotifier<AssistantState> {
     state = AssistantState(stage: AssistantStage.parsing, input: input);
     try {
       final locale = _ref.read(localeProvider).languageCode;
-      final proposal = await _ref.read(repositoryProvider).interpret(
+      var proposal = await _ref.read(repositoryProvider).interpret(
             input: input,
             locationId: location.id,
             locale: locale,
           );
+      // Media proposals extract on the server: poll until the worker
+      // finishes reading, then show the review. The parsing stage covers
+      // the wait so the confirm button never appears early.
+      for (var i = 0; i < 20 && proposal.isProcessing; i++) {
+        await Future<void>.delayed(const Duration(seconds: 1));
+        proposal = await _ref.read(repositoryProvider).pollAssistantProposal(proposal.id);
+      }
       state = AssistantState(
         stage: proposal.canConfirm ? AssistantStage.ready : AssistantStage.needsDetails,
         input: input,

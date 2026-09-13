@@ -232,6 +232,10 @@ class AppStrings {
       'exportPdf': 'Export PDF',
       'exportPreparing': 'Preparing PDF…',
       'exportFailed': 'The PDF export could not be generated.',
+      'searchTitle': 'Search your business',
+      'searchHint': 'Parties, products, invoice numbers…',
+      'searchHelp': 'Type at least 2 letters. Searches cover names, phones, SKUs and invoice numbers.',
+      'noSearchResults': 'Nothing found.',
     },
     'hi': {
       'appName': 'दुकानAI',
@@ -443,6 +447,10 @@ class AppStrings {
       'exportPdf': 'PDF निकालें',
       'exportPreparing': 'PDF बन रहा है…',
       'exportFailed': 'PDF नहीं बन सका।',
+      'searchTitle': 'अपना कारोबार खोजें',
+      'searchHint': 'पार्टी, सामान, इनवॉइस नंबर…',
+      'searchHelp': 'कम से कम 2 अक्षर लिखें। नाम, फ़ोन, SKU और इनवॉइस नंबर खोजे जाते हैं।',
+      'noSearchResults': 'कुछ नहीं मिला।',
     },
   };
 }

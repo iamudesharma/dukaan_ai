@@ -14,6 +14,7 @@ class AssistantProposal(UUIDModel):
     class Status(models.TextChoices):
         DRAFT = "DRAFT", "Needs clarification"
         READY = "READY", "Ready to confirm"
+        PROCESSING = "PROCESSING", "Reading attachment"
         CONFIRMED = "CONFIRMED", "Confirmed"
         CANCELLED = "CANCELLED", "Cancelled"
         EXPIRED = "EXPIRED", "Expired"
@@ -30,6 +31,10 @@ class AssistantProposal(UUIDModel):
     input_type = models.CharField(max_length=8, choices=InputType.choices)
     locale = models.CharField(max_length=16, default="hi-IN")
     content = models.TextField()
+    # Provenance for media-sourced proposals: [{id, name, mime}]. The
+    # extracted text is folded into content by the worker; this preserves
+    # which files the proposal came from for review.
+    attachments = models.JSONField(default=list, blank=True)
     command_type = models.CharField(max_length=32, default="UNSUPPORTED")
     payload = models.JSONField(default=dict)
     preview = models.TextField(blank=True)

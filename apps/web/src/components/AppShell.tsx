@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import {
   Activity,
   BarChart3,
@@ -19,10 +19,10 @@ import {
   Users,
   X,
 } from "lucide-react";
-import { NavLink, useLocation } from "react-router-dom";
+import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import { useWorkspace } from "../app/WorkspaceContext";
 import { clearTokens, demoMode } from "../lib/supabase";
-import { logout } from "../data/repository";
+import { logout, searchAll, type SearchResults } from "../data/repository";
 import { canSee } from "../lib/permissions";
 import { AssistantPanel } from "../features/assistant/AssistantPanel";
 import { ManualSaleDialog } from "../features/entries/ManualSaleDialog";
@@ -142,7 +142,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             <ChevronDown aria-hidden="true" />
           </label>
           <div className="topbar-actions">
-            <button className="search-button" type="button"><Search aria-hidden="true" /><span>Search business</span><kbd>⌘ K</kbd></button>
+            <GlobalSearch />
             {demoMode ? <span className="demo-pill">Demo data</span> : null}
             <button className="primary-button compact" onClick={openAssistant}><Sparkles aria-hidden="true" />Ask / Add</button>
           </div>
@@ -161,5 +161,134 @@ export function AppShell({ children }: { children: ReactNode }) {
       <AssistantPanel />
       <ManualSaleDialog open={manualSaleOpen} onClose={closeManualSale} />
     </div>
+  );
+}
+
+function GlobalSearch() {
+  const { bootstrap } = useWorkspace();
+  const navigate = useNavigate();
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const [results, setResults] = useState<SearchResults | null>(null);
+  const [searching, setSearching] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const timer = window.setTimeout(() => inputRef.current?.focus(), 60);
+    return () => window.clearTimeout(timer);
+  }, [open ]);
+
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
+        event.preventDefault();
+        setOpen((current) => !current);
+      }
+      if (event.key === "Escape") setOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
+  useEffect(() => {
+    const trimmed = query.trim();
+    if (trimmed.length < 2) {
+      setResults(null);
+      setSearching(false);
+      return;
+    }
+    setSearching(true);
+    const timer = window.setTimeout(() => {
+      searchAll(bootstrap.business.id, trimmed)
+        .then(setResults)
+        .catch(() => setResults(null))
+        .finally(() => setSearching(false));
+    }, 250);
+    return () => window.clearTimeout(timer);
+  }, [query, bootstrap.business.id]);
+
+  function go(to: string) {
+    setOpen(false);
+    setQuery("");
+    setResults(null);
+    navigate(to);
+  }
+
+  const empty =
+    results !== null &&
+    !results.parties.length &&
+    !results.products.length &&
+    !results.documents.length;
+
+  return (
+    <>
+      <button className="search-button" type="button" onClick={() => setOpen(true)}>
+        <Search aria-hidden="true" />
+        <span>Search business</span>
+        <kbd>⌘ K</kbd>
+      </button>
+      {open ? (
+        <div className="assistant-backdrop" role="presentation" onMouseDown={(event) => {
+          if (event.currentTarget === event.target) setOpen(false);
+        }}>
+          <section className="assistant-panel" role="dialog" aria-modal="true" aria-label="Search business">
+            <div className="assistant-input-wrap">
+              <input
+                ref={inputRef}
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder="Parties, products, invoice numbers… (min 2 letters)"
+                aria-label="Search business"
+              />
+            </div>
+            {searching ? <p role="status">Searching…</p> : null}
+            {empty ? <p className="muted-copy">Nothing found. Searches cover names, phones, SKUs and invoice numbers.</p> : null}
+            {results && results.parties.length ? (
+              <div>
+                <p className="section-label">Parties</p>
+                <ul>
+                  {results.parties.map((party) => (
+                    <li key={party.id}>
+                      <button type="button" className="text-button" onClick={() => go("/parties")}>
+                        {party.name} · {party.kind.toLowerCase()}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
+            {results && results.products.length ? (
+              <div>
+                <p className="section-label">Products</p>
+                <ul>
+                  {results.products.map((product) => (
+                    <li key={product.id}>
+                      <button type="button" className="text-button" onClick={() => go("/stock")}>
+                        {product.name}{product.sku ? ` · ${product.sku}` : ""}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
+            {results && results.documents.length ? (
+              <div>
+                <p className="section-label">Entries</p>
+                <ul>
+                  {results.documents.map((document) => (
+                    <li key={document.id}>
+                      <button type="button" className="text-button" onClick={() => go("/entries")}>
+                        {document.number} · {document.party}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
+          </section>
+        </div>
+      ) : null}
+    </>
   );
 }

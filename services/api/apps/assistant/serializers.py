@@ -15,8 +15,11 @@ class InterpretSerializer(serializers.Serializer):
     input_type = serializers.ChoiceField(
         choices=AssistantProposal.InputType.choices, default=AssistantProposal.InputType.TEXT
     )
-    content = serializers.CharField(max_length=5000)
+    content = serializers.CharField(max_length=5000, allow_blank=True, default="")
     locale = serializers.CharField(max_length=16, default="hi-IN")
+    attachment_ids = serializers.ListField(
+        child=serializers.UUIDField(), required=False, default=list, max_length=5
+    )
 
 
 class AssistantProposalSerializer(serializers.ModelSerializer):
@@ -29,6 +32,7 @@ class AssistantProposalSerializer(serializers.ModelSerializer):
             "input_type",
             "locale",
             "content",
+            "attachments",
             "command_type",
             "payload",
             "preview",

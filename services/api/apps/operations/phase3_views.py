@@ -415,11 +415,14 @@ class AttachmentDetailView(APIView):
             and attachment.status == Attachment.Status.READY
             and attachment.file
         ):
+            filename = (
+                attachment.original_name or f"invoice-{attachment.sale_id or attachment.pk}.pdf"
+            )
             return FileResponse(
                 attachment.file.open("rb"),
                 content_type=attachment.mime_type or "application/pdf",
                 as_attachment=True,
-                filename=f"invoice-{attachment.sale_id or attachment.pk}.pdf",
+                filename=filename,
             )
         from .phase3_serializers import AttachmentSerializer as _Serializer
 

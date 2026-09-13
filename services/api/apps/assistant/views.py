@@ -112,7 +112,11 @@ class ProposalViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, viewsets
             raise DomainConflict(
                 "The proposal changed; review the latest version", "stale_proposal_version"
             )
-        if proposal.status not in {AssistantProposal.Status.DRAFT, AssistantProposal.Status.READY}:
+        if proposal.status not in {
+            AssistantProposal.Status.DRAFT,
+            AssistantProposal.Status.READY,
+            AssistantProposal.Status.PROCESSING,
+        }:
             from apps.operations.services import DomainConflict
 
             raise DomainConflict("Only an open proposal can be cancelled", "proposal_not_open")

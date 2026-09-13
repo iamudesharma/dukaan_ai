@@ -63,6 +63,14 @@ abstract interface class DukaanRepository {
   Future<Map<String, dynamic>> createSaleInvoice(String saleId);
   Future<Map<String, dynamic>> fetchAttachment(String id);
   Future<List<int>> downloadBytes(String path);
+  Future<AssistantProposal> pollAssistantProposal(String id);
+  Future<Map<String, dynamic>> uploadAttachment({
+    required List<int> bytes,
+    required String filename,
+    required String mimeType,
+    String? businessId,
+  });
+  Future<Map<String, dynamic>> searchAll(String query, {String? businessId});
 
   // Catalog detail + write.
   Future<Product> fetchProduct(String id);
@@ -242,10 +250,43 @@ class ApiDukaanRepository implements DukaanRepository {
         'input_type': input.type.apiValue,
         'content': input.content,
         'locale': locale,
+        if (input.attachmentIds.isNotEmpty) 'attachment_ids': input.attachmentIds,
       },
       options: Options(extra: {'locale': locale}),
     );
     return _proposalFromJson(_object(response.data));
+  }
+
+  @override
+  Future<AssistantProposal> pollAssistantProposal(String id) async {
+    final response = await _dio.get<Object>('assistant/proposals/$id/');
+    return _proposalFromJson(_object(response.data));
+  }
+
+  @override
+  Future<Map<String, dynamic>> uploadAttachment({
+    required List<int> bytes,
+    required String filename,
+    required String mimeType,
+    String? businessId,
+  }) async {
+    final resolved = businessId ?? await _resolveBusinessId();
+    final form = FormData.fromMap({
+      'business_id': resolved,
+      'file': MultipartFile.fromBytes(bytes, filename: filename),
+    });
+    final response = await _dio.post<Object>('attachments/', data: form);
+    return _object(response.data);
+  }
+
+  @override
+  Future<Map<String, dynamic>> searchAll(String query, {String? businessId}) async {
+    final resolved = businessId ?? await _resolveBusinessId();
+    final response = await _dio.get<Object>(
+      'search/',
+      queryParameters: {'business_id': resolved, 'q': query},
+    );
+    return _object(response.data);
   }
 
   @override
@@ -946,6 +987,8 @@ class ApiDukaanRepository implements DukaanRepository {
       id: json['id'].toString(),
       version: (json['version'] as num?)?.toInt() ?? 1,
       commandType: (json['command_type'] ?? 'ENTRY').toString(),
+      status: (json['status'] ?? '').toString(),
+      attachments: _proposalAttachments(json['attachments']),
       title: (preview['title'] ??
               preview['summary'] ??
               (previewText.isNotEmpty ? previewText : 'Proposed entry'))
@@ -957,6 +1000,18 @@ class ApiDukaanRepository implements DukaanRepository {
           ? Map<String, dynamic>.from(json['payload'] as Map)
           : const {},
     );
+  }
+
+  static List<Map<String, String>> _proposalAttachments(Object? value) {
+    if (value is! List) return const [];
+    return value
+        .whereType<Map>()
+        .map((item) => {
+              'id': (item['id'] ?? '').toString(),
+              'name': (item['name'] ?? '').toString(),
+              'mime': (item['mime'] ?? '').toString(),
+            })
+        .toList(growable: false);
   }
 
   static List<String> _strings(Object? value) {
@@ -1405,6 +1460,36 @@ class DemoDukaanRepository implements DukaanRepository {
 
   @override
   Future<List<int>> downloadBytes(String path) => _pause(const []);
+
+  @override
+  Future<AssistantProposal> pollAssistantProposal(String id) => _pause(
+        AssistantProposal(
+          id: id,
+          version: 1,
+          commandType: 'SALE',
+          status: 'READY',
+          title: 'Sale to Ramesh Kumar',
+          facts: const [],
+          warnings: const [],
+          blockingQuestions: const [],
+          rawPayload: const {},
+        ),
+      );
+
+  @override
+  Future<Map<String, dynamic>> uploadAttachment({
+    required List<int> bytes,
+    required String filename,
+    required String mimeType,
+    String? businessId,
+  }) =>
+      _pause({'id': 'attachment-demo', 'status': 'READY'});
+
+  @override
+  Future<Map<String, dynamic>> searchAll(String query, {String? businessId}) => _pause({
+        'query': query,
+        'results': {'parties': [], 'products': [], 'documents': []},
+      });
 
   @override
   Future<Product> fetchProduct(String id) =>

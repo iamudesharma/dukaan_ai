@@ -299,6 +299,44 @@ def _handle_invoice_generate(event: OutboxEvent) -> None:
     )
 
 
+def _handle_proposal_extract(event: OutboxEvent) -> None:
+    """Extract bill text for a PROCESSING proposal, then finalize it.
+
+    Idempotent: attachments already carrying extracted_text are skipped, and
+    finalize is a no-op once the proposal leaves PROCESSING — redelivery
+    after a crash resumes instead of duplicating.
+    """
+    from apps.assistant.models import AssistantProposal
+    from apps.assistant.services import finalize_proposal_extraction
+    from apps.operations.extraction import extract_text
+    from apps.operations.models import Attachment
+
+    proposal_id = (event.payload or {}).get("proposal_id")
+    try:
+        proposal = AssistantProposal.objects.get(pk=proposal_id)
+    except Exception as exc:
+        raise _PermanentFailure(f"Proposal {proposal_id} not found") from exc
+    if proposal.status != AssistantProposal.Status.PROCESSING:
+        return
+    for attachment in Attachment.objects.filter(
+        proposal_id=proposal.pk, business_id=proposal.business_id
+    ):
+        if attachment.extracted_text or not attachment.file:
+            continue
+        try:
+            text, _note = extract_text(
+                filename=attachment.original_name,
+                mime_type=attachment.mime_type,
+                file_path=attachment.file.path,
+            )
+        except Exception:
+            logger.exception("Attachment text extraction failed")
+            continue
+        attachment.extracted_text = text[:5000]
+        attachment.save(update_fields=["extracted_text", "updated_at"])
+    finalize_proposal_extraction(proposal.pk)
+
+
 _HANDLERS = {
     "sale.posted": _handle_domain_posted,
     "purchase.posted": _handle_domain_posted,
@@ -313,4 +351,5 @@ _HANDLERS = {
     "reminder.send": _handle_reminder_send,
     "export.run": _handle_export_run,
     "invoice.generate": _handle_invoice_generate,
+    "proposal.extract": _handle_proposal_extract,
 }

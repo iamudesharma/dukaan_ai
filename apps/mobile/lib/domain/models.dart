@@ -398,11 +398,15 @@ class AssistantInput {
     required this.type,
     required this.content,
     required this.displayText,
+    this.attachmentIds = const [],
   });
 
   final AssistantInputType type;
   final String content;
   final String displayText;
+
+  /// Server attachment ids (bill photo/PDF/audio) linked to this request.
+  final List<String> attachmentIds;
 
   Map<String, dynamic> toJson() => {
         'type': type.name,
@@ -431,6 +435,8 @@ class AssistantProposal {
     required this.warnings,
     required this.blockingQuestions,
     required this.rawPayload,
+    this.status = '',
+    this.attachments = const [],
   });
 
   final String id;
@@ -442,12 +448,22 @@ class AssistantProposal {
   final List<String> blockingQuestions;
   final Map<String, dynamic> rawPayload;
 
-  bool get canConfirm => blockingQuestions.isEmpty;
+  /// Server lifecycle status (READY/DRAFT/PROCESSING/...). Empty for demo.
+  final String status;
+
+  /// Bill media this proposal was read from: [{id, name, mime}].
+  final List<Map<String, String>> attachments;
+
+  bool get isProcessing => status == 'PROCESSING';
+
+  bool get canConfirm => !isProcessing && blockingQuestions.isEmpty;
 
   Map<String, dynamic> toJson() => {
         'id': id,
         'version': version,
         'command_type': commandType,
+        'status': status,
+        'attachments': attachments,
         'title': title,
         'facts': facts
             .map((fact) => {
