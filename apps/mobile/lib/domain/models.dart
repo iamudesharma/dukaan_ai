@@ -669,3 +669,93 @@ class ProposalRevision {
         createdAt: DateTime.tryParse((json['created_at'] ?? '').toString()),
       );
 }
+
+@immutable
+class ReportRow {
+  const ReportRow({
+    required this.key,
+    required this.label,
+    required this.count,
+    this.quantity,
+    required this.taxableMinor,
+    required this.taxMinor,
+    required this.grandTotalMinor,
+    required this.paidMinor,
+    required this.dueMinor,
+  });
+
+  final String key;
+  final String label;
+  final int count;
+  final String? quantity;
+  final int taxableMinor;
+  final int taxMinor;
+  final int grandTotalMinor;
+  final int paidMinor;
+  final int dueMinor;
+
+  factory ReportRow.fromJson(Map<String, dynamic> json) => ReportRow(
+        key: (json['key'] ?? '').toString(),
+        label: (json['label'] ?? '').toString(),
+        count: (json['count'] as num?)?.toInt() ?? 0,
+        quantity: json['quantity']?.toString(),
+        taxableMinor: minorFromRecord(json, 'taxable_minor', 'taxable'),
+        taxMinor: minorFromRecord(json, 'tax_minor', 'tax'),
+        grandTotalMinor: minorFromRecord(json, 'grand_total_minor', 'grand_total'),
+        paidMinor: minorFromRecord(json, 'paid_minor', 'paid'),
+        dueMinor: minorFromRecord(json, 'due_minor', 'due'),
+      );
+}
+
+@immutable
+class DocumentReport {
+  const DocumentReport({
+    required this.groupBy,
+    required this.totals,
+    required this.rows,
+  });
+
+  final String groupBy;
+  final ReportRow totals;
+  final List<ReportRow> rows;
+
+  factory DocumentReport.fromJson(Map<String, dynamic> json) => DocumentReport(
+        groupBy: (json['group_by'] ?? 'day').toString(),
+        totals: ReportRow.fromJson(
+          json['totals'] is Map
+              ? Map<String, dynamic>.from(json['totals'] as Map)
+              : const {},
+        ),
+        rows: json['rows'] is List
+            ? (json['rows'] as List)
+                .whereType<Map>()
+                .map((row) => ReportRow.fromJson(Map<String, dynamic>.from(row)))
+                .toList(growable: false)
+            : const [],
+      );
+}
+
+@immutable
+class StockMovement {
+  const StockMovement({
+    required this.id,
+    required this.movementType,
+    required this.quantity,
+    required this.occurredAt,
+    this.note = '',
+  });
+
+  final String id;
+  final String movementType;
+  final String quantity;
+  final DateTime occurredAt;
+  final String note;
+
+  factory StockMovement.fromJson(Map<String, dynamic> json) => StockMovement(
+        id: (json['id'] ?? '').toString(),
+        movementType: (json['movement_type'] ?? '').toString(),
+        quantity: (json['quantity'] ?? '0').toString(),
+        occurredAt: DateTime.tryParse((json['occurred_at'] ?? '').toString()) ?? DateTime.now(),
+        note: (json['note'] ?? '').toString(),
+      );
+}

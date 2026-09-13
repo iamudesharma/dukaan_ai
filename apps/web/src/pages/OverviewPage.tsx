@@ -10,17 +10,19 @@ import {
   TrendingUp,
   Users,
 } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import { useWorkspace } from "../app/WorkspaceContext";
 import { EmptyState } from "../components/EmptyState";
 import { LoadingBlock } from "../components/LoadingBlock";
 import { MetricCard } from "../components/MetricCard";
 import { PageHeader } from "../components/PageHeader";
 import { StatusBadge } from "../components/StatusBadge";
-import { getDashboard, getEntries, getProducts } from "../data/repository";
+import { getDashboard, getEntries, getPartyBalances, getProducts } from "../data/repository";
 import { formatDateTime, formatKind, formatMoney } from "../lib/format";
 
 export function OverviewPage() {
   const { bootstrap, locationId, openAssistant } = useWorkspace();
+  const navigate = useNavigate();
   const dashboard = useQuery({
     queryKey: ["dashboard", bootstrap.business.id, locationId],
     queryFn: () => getDashboard(bootstrap.business.id, locationId),
@@ -33,7 +35,16 @@ export function OverviewPage() {
     queryKey: ["products", bootstrap.business.id, locationId],
     queryFn: () => getProducts(bootstrap.business.id, locationId),
   });
+  const isManager = bootstrap.user.role !== "CASHIER";
+  const balances = useQuery({
+    queryKey: ["party-balances", bootstrap.business.id, locationId],
+    queryFn: () => getPartyBalances({ businessId: bootstrap.business.id, locationId }),
+    enabled: isManager,
+  });
   const location = bootstrap.locations.find((candidate) => candidate.id === locationId);
+  const dueRows = (balances.data?.rows ?? [])
+    .filter((row) => row.receivableMinor > 0)
+    .sort((a, b) => b.receivableMinor - a.receivableMinor);
 
   if (dashboard.isLoading) return <LoadingBlock />;
   if (dashboard.error || !dashboard.data) {
@@ -78,9 +89,13 @@ export function OverviewPage() {
         <article className="panel attention-panel">
           <div className="panel-heading simple"><div><h2>Needs attention</h2><p>Act before these become a problem.</p></div></div>
           <div className="attention-list">
-            <button type="button"><span className="attention-icon amber"><PackageX /></span><span><strong>{lowStock.length} products are low on stock</strong><small>Review reorder levels</small></span><span className="arrow">→</span></button>
-            <button type="button"><span className="attention-icon blue"><Users /></span><span><strong>₹1,24,000 due from Ramesh</strong><small>Reminder due today</small></span><span className="arrow">→</span></button>
-            <button type="button"><span className="attention-icon green"><MessageCircleMore /></span><span><strong>3 customer reminders ready</strong><small>Review before sharing</small></span><span className="arrow">→</span></button>
+            <button type="button" onClick={() => navigate("/stock")}><span className="attention-icon amber"><PackageX /></span><span><strong>{lowStock.length} {lowStock.length === 1 ? "product is" : "products are"} low on stock</strong><small>Review reorder levels</small></span><span className="arrow">→</span></button>
+            {dueRows[0] ? (
+              <button type="button" onClick={() => navigate("/parties")}><span className="attention-icon blue"><Users /></span><span><strong>{formatMoney(dueRows[0].receivableMinor)} due from {dueRows[0].name}</strong><small>Largest customer outstanding</small></span><span className="arrow">→</span></button>
+            ) : (
+              <button type="button" onClick={() => navigate("/parties")}><span className="attention-icon blue"><Users /></span><span><strong>No customer dues</strong><small>Every customer is settled</small></span><span className="arrow">→</span></button>
+            )}
+            <button type="button" onClick={() => navigate("/parties")}><span className="attention-icon green"><MessageCircleMore /></span><span><strong>{dueRows.length} {dueRows.length === 1 ? "customer has" : "customers have"} pending dues</strong><small>Review before sharing a reminder</small></span><span className="arrow">→</span></button>
           </div>
         </article>
       </section>

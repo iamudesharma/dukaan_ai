@@ -69,6 +69,11 @@ class AppShell extends ConsumerWidget {
         ),
         actions: [
           IconButton(
+            tooltip: strings.t('reports'),
+            onPressed: () => context.go('/reports'),
+            icon: const Icon(Icons.bar_chart_rounded),
+          ),
+          IconButton(
             tooltip: strings.t('changeLanguage'),
             onPressed: ref.read(localeProvider.notifier).toggle,
             icon: const Icon(Icons.translate_rounded),

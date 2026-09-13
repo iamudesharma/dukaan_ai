@@ -3,6 +3,7 @@ import 'package:dukaan_ai_mobile/domain/models.dart';
 import 'package:dukaan_ai_mobile/l10n/app_strings.dart';
 import 'package:dukaan_ai_mobile/state/app_providers.dart';
 import 'package:dukaan_ai_mobile/ui/common/async_content.dart';
+import 'package:dukaan_ai_mobile/ui/common/ledger_sheet.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:share_plus/share_plus.dart';
@@ -126,13 +127,13 @@ class _PartyFilter extends StatelessWidget {
       );
 }
 
-class _PartyCard extends StatelessWidget {
+class _PartyCard extends ConsumerWidget {
   const _PartyCard({required this.party});
 
   final Party party;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final locale = Localizations.localeOf(context).languageCode;
     final hasReceivable = party.toReceiveMinor > 0;
     final balanceLabel = hasReceivable
@@ -147,47 +148,50 @@ class _PartyCard extends StatelessWidget {
           padding: const EdgeInsets.fromLTRB(14, 14, 10, 10),
           child: Column(
             children: [
-              Row(
-                children: [
-                  CircleAvatar(
-                    child: Text(
-                      party.name.isEmpty ? '?' : party.name.characters.first.toUpperCase(),
-                      style: const TextStyle(fontWeight: FontWeight.w800),
+              InkWell(
+                onTap: () => showPartyLedgerSheet(context, ref, party: party),
+                child: Row(
+                  children: [
+                    CircleAvatar(
+                      child: Text(
+                        party.name.isEmpty ? '?' : party.name.characters.first.toUpperCase(),
+                        style: const TextStyle(fontWeight: FontWeight.w800),
+                      ),
                     ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(party.name, style: const TextStyle(fontWeight: FontWeight.w800)),
-                        if (party.phone.isNotEmpty) Text(party.phone),
-                      ],
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(party.name, style: const TextStyle(fontWeight: FontWeight.w800)),
+                          if (party.phone.isNotEmpty) Text(party.phone),
+                        ],
+                      ),
                     ),
-                  ),
-                  Semantics(
-                    label: '$balanceLabel, $balanceText',
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.end,
-                      children: [
-                        ExcludeSemantics(
-                          child: Text(
-                            balanceText,
-                            style: TextStyle(
-                              fontWeight: FontWeight.w900,
-                              color: hasReceivable
-                                  ? Theme.of(context).colorScheme.primary
-                                  : Theme.of(context).colorScheme.error,
+                    Semantics(
+                      label: '$balanceLabel, $balanceText',
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          ExcludeSemantics(
+                            child: Text(
+                              balanceText,
+                              style: TextStyle(
+                                fontWeight: FontWeight.w900,
+                                color: hasReceivable
+                                    ? Theme.of(context).colorScheme.primary
+                                    : Theme.of(context).colorScheme.error,
+                              ),
                             ),
                           ),
-                        ),
-                        ExcludeSemantics(
-                          child: Text(balanceLabel, style: Theme.of(context).textTheme.bodySmall),
-                        ),
-                      ],
+                          ExcludeSemantics(
+                            child: Text(balanceLabel, style: Theme.of(context).textTheme.bodySmall),
+                          ),
+                        ],
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
               if (hasReceivable) ...[
                 const Divider(height: 22),

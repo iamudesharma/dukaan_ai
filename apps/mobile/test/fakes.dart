@@ -240,6 +240,36 @@ class FakeDukaanRepository implements DukaanRepository {
       LedgerReport(partyId: partyId, balanceMinor: 0, entries: const []);
 
   @override
+  Future<DocumentReport> fetchDocumentReport({
+    required String kind,
+    required String locationId,
+    String groupBy = 'day',
+    DateTime? from,
+    DateTime? to,
+  }) async =>
+      DocumentReport(
+        groupBy: groupBy,
+        totals: const ReportRow(
+          key: 'totals',
+          label: 'Total',
+          count: 0,
+          taxableMinor: 0,
+          taxMinor: 0,
+          grandTotalMinor: 0,
+          paidMinor: 0,
+          dueMinor: 0,
+        ),
+        rows: const [],
+      );
+
+  @override
+  Future<List<StockMovement>> fetchStockMovements({
+    required String locationId,
+    String? productId,
+  }) async =>
+      const [];
+
+  @override
   Future<List<ProposalSummary>> listProposals() async => const [];
 
   @override

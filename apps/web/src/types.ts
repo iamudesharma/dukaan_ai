@@ -264,3 +264,116 @@ export interface ApiErrorShape {
   request_id?: string;
   retryable?: boolean;
 }
+
+export type ReportKind =
+  | "day-book"
+  | "sales"
+  | "purchases"
+  | "party-balances"
+  | "stock-valuation"
+  | "gst";
+
+export interface DayBookEntry {
+  date: string;
+  kind: string;
+  number: string;
+  partyName: string;
+  direction: "IN" | "OUT";
+  amountMinor: number;
+  status: string;
+}
+
+export interface DayBookReport {
+  from?: string | null;
+  to?: string | null;
+  summary: {
+    salesMinor: number;
+    purchasesMinor: number;
+    receiptsMinor: number;
+    paymentsMinor: number;
+    expensesMinor: number;
+    netCashMinor: number;
+  };
+  entries: DayBookEntry[];
+}
+
+export interface ReportGroupRow {
+  key: string;
+  label: string;
+  count: number;
+  quantity?: string;
+  taxableMinor: number;
+  taxMinor: number;
+  grandTotalMinor: number;
+  paidMinor: number;
+  dueMinor: number;
+}
+
+export interface DocumentReport {
+  from?: string | null;
+  to?: string | null;
+  groupBy: "day" | "party" | "product";
+  totals: ReportGroupRow;
+  rows: ReportGroupRow[];
+}
+
+export interface GstRateRow {
+  rateBps: number;
+  taxableMinor: number;
+  cgstMinor: number;
+  sgstMinor: number;
+  igstMinor: number;
+  taxMinor: number;
+}
+
+export interface GstReport {
+  from?: string | null;
+  to?: string | null;
+  output: { rows: GstRateRow[]; totals: Omit<GstRateRow, "rateBps"> };
+  input: { rows: GstRateRow[]; totals: Omit<GstRateRow, "rateBps"> };
+  b2b: { count: number; taxableMinor: number; taxMinor: number };
+  b2c: { count: number; taxableMinor: number; taxMinor: number };
+}
+
+export interface PartyBalanceRow {
+  partyId: string;
+  name: string;
+  kind: string;
+  phone: string;
+  receivableMinor: number;
+  payableMinor: number;
+}
+
+export interface PartyBalancesReport {
+  totals: { receivableMinor: number; payableMinor: number };
+  rows: PartyBalanceRow[];
+}
+
+export interface StockValuationRow {
+  productId: string;
+  name: string;
+  unit: string;
+  quantity: string;
+  costPerBaseUnitMinor: string | null;
+  stockValueCostMinor: number | null;
+  retailPerBaseUnitMinor: string | null;
+  stockValueRetailMinor: number | null;
+}
+
+export interface StockValuationReport {
+  totals: { costValueMinor: number; retailValueMinor: number; knownCostRows: number };
+  rows: StockValuationRow[];
+}
+
+export interface StockMovementRow {
+  id: string;
+  location: string;
+  product: string;
+  movementType: string;
+  quantity: string;
+  sourceType: string;
+  sourceId: string;
+  note?: string;
+  occurredAt: string;
+}
+

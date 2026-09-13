@@ -104,6 +104,17 @@ abstract interface class DukaanRepository {
     required String partyId,
     String? account,
   });
+  Future<DocumentReport> fetchDocumentReport({
+    required String kind,
+    required String locationId,
+    String groupBy = 'day',
+    DateTime? from,
+    DateTime? to,
+  });
+  Future<List<StockMovement>> fetchStockMovements({
+    required String locationId,
+    String? productId,
+  });
 
   // Assistant proposals.
   Future<List<ProposalSummary>> listProposals();
@@ -580,6 +591,50 @@ class ApiDukaanRepository implements DukaanRepository {
       },
     );
     return LedgerReport.fromJson(_object(response.data));
+  }
+
+  static String _dateParam(DateTime date) =>
+      '${date.year.toString().padLeft(4, '0')}-'
+      '${date.month.toString().padLeft(2, '0')}-'
+      '${date.day.toString().padLeft(2, '0')}';
+
+  @override
+  Future<DocumentReport> fetchDocumentReport({
+    required String kind,
+    required String locationId,
+    String groupBy = 'day',
+    DateTime? from,
+    DateTime? to,
+  }) async {
+    final businessId = await _resolveBusinessId();
+    final response = await _dio.get<Object>(
+      'reports/$kind/',
+      queryParameters: {
+        'business_id': businessId,
+        'location_id': locationId,
+        'group_by': groupBy,
+        if (from != null) 'from': _dateParam(from),
+        if (to != null) 'to': _dateParam(to),
+      },
+    );
+    return DocumentReport.fromJson(_object(response.data));
+  }
+
+  @override
+  Future<List<StockMovement>> fetchStockMovements({
+    required String locationId,
+    String? productId,
+  }) async {
+    final businessId = await _resolveBusinessId();
+    final response = await _dio.get<Object>(
+      'stock/movements/',
+      queryParameters: {
+        'business_id': businessId,
+        'location_id': locationId,
+        if (productId != null) 'product_id': productId,
+      },
+    );
+    return _rows(response.data).map(StockMovement.fromJson).toList(growable: false);
   }
 
   @override
@@ -1252,6 +1307,64 @@ class DemoDukaanRepository implements DukaanRepository {
     String? account,
   }) =>
       _pause(LedgerReport(partyId: partyId, balanceMinor: 0, entries: const []));
+
+  @override
+  Future<DocumentReport> fetchDocumentReport({
+    required String kind,
+    required String locationId,
+    String groupBy = 'day',
+    DateTime? from,
+    DateTime? to,
+  }) {
+    final type = kind == 'purchases' ? EntryType.purchase : EntryType.sale;
+    final rows = _entries
+        .where((entry) => entry.type == type)
+        .map(
+          (entry) => ReportRow(
+            key: entry.id,
+            label: groupBy == 'party'
+                ? entry.partyName
+                : entry.occurredAt.toIso8601String().substring(0, 10),
+            count: 1,
+            taxableMinor: entry.totalMinor,
+            taxMinor: 0,
+            grandTotalMinor: entry.totalMinor,
+            paidMinor: entry.totalMinor - entry.pendingMinor,
+            dueMinor: entry.pendingMinor,
+          ),
+        )
+        .toList(growable: false);
+    final totals = rows.fold<ReportRow>(
+      const ReportRow(
+        key: 'totals',
+        label: 'Total',
+        count: 0,
+        taxableMinor: 0,
+        taxMinor: 0,
+        grandTotalMinor: 0,
+        paidMinor: 0,
+        dueMinor: 0,
+      ),
+      (accumulator, row) => ReportRow(
+        key: 'totals',
+        label: 'Total',
+        count: accumulator.count + 1,
+        taxableMinor: accumulator.taxableMinor + row.taxableMinor,
+        taxMinor: accumulator.taxMinor + row.taxMinor,
+        grandTotalMinor: accumulator.grandTotalMinor + row.grandTotalMinor,
+        paidMinor: accumulator.paidMinor + row.paidMinor,
+        dueMinor: accumulator.dueMinor + row.dueMinor,
+      ),
+    );
+    return _pause(DocumentReport(groupBy: groupBy, totals: totals, rows: rows));
+  }
+
+  @override
+  Future<List<StockMovement>> fetchStockMovements({
+    required String locationId,
+    String? productId,
+  }) =>
+      _pause(const []);
 
   @override
   Future<List<ProposalSummary>> listProposals() => _pause(const []);
