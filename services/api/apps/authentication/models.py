@@ -59,3 +59,32 @@ class SessionRevocation(models.Model):
 
     def __str__(self) -> str:
         return f"Session revocation for {self.user_id}"
+
+
+class DeviceToken(models.Model):
+    """Push-notification device registration for one user.
+
+    Identity-scoped like the other authentication tables (no business_id,
+    no tenant rows), so no RLS policy applies. Tokens are never listed
+    across users: every query filters to the caller.
+    """
+
+    class Platform(models.TextChoices):
+        ANDROID = "ANDROID", "Android"
+        IOS = "IOS", "iOS"
+        WEB = "WEB", "Web"
+
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="device_tokens"
+    )
+    token = models.CharField(max_length=255, unique=True, db_index=True)
+    platform = models.CharField(max_length=10, choices=Platform.choices, default=Platform.ANDROID)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        indexes = [models.Index(fields=["user", "is_active"])]
+
+    def __str__(self) -> str:
+        return f"Device token for {self.user_id} ({self.platform})"

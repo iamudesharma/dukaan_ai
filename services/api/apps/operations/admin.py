@@ -1,13 +1,16 @@
 from django.contrib import admin
 
 from .models import (
+    Attachment,
     DocumentSequence,
     Expense,
+    ExportJob,
     PartyLedgerEntry,
     Payment,
     PaymentAllocation,
     Purchase,
     PurchaseLine,
+    Reminder,
     Sale,
     SaleLine,
     StockBalance,
@@ -31,5 +34,8 @@ admin.site.register(
         PartyLedgerEntry,
         StockTransfer,
         StockTransferLine,
+        Reminder,
+        ExportJob,
+        Attachment,
     ]
 )

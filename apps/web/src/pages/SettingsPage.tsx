@@ -7,11 +7,13 @@ import {
   changePassword,
   createGstRegistration,
   getBusiness,
+  getNotificationPrefs,
   listGstRegistrations,
   logoutAll,
   updateBusiness,
   updateGstRegistration,
   updateMe,
+  updateNotificationPrefs,
 } from "../data/repository";
 import { clearTokens } from "../lib/supabase";
 
@@ -37,6 +39,17 @@ export function SettingsPage() {
   const business = useQuery({
     queryKey: ["business", bootstrap.business.id],
     queryFn: () => getBusiness(bootstrap.business.id),
+  });
+  const prefs = useQuery({
+    queryKey: ["notification-prefs", bootstrap.business.id],
+    queryFn: () => getNotificationPrefs(bootstrap.business.id),
+  });
+  const togglePref = useMutation({
+    mutationFn: (patch: Parameters<typeof updateNotificationPrefs>[1]) =>
+      updateNotificationPrefs(bootstrap.business.id, patch),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["notification-prefs"] });
+    },
   });
 
   useEffect(() => {
@@ -118,7 +131,7 @@ export function SettingsPage() {
           <section className="panel settings-section" id="business"><div className="section-icon"><Building2 /></div><div className="settings-heading"><h2>Business profile</h2><p>Shown on invoices and reports.</p></div><div className="form-grid"><label>Display name<input value={name} onChange={(e) => setName(e.target.value)} /></label><label>Legal name<input value={legalName} onChange={(e) => setLegalName(e.target.value)} /></label><label>Your display name<input value={displayName} onChange={(e) => setDisplayName(e.target.value)} /></label><label>Currency<select defaultValue="INR"><option value="INR">INR — Indian Rupee</option></select></label><label>Timezone<select defaultValue="Asia/Kolkata"><option value="Asia/Kolkata">Asia/Kolkata</option></select></label></div></section>
           <section className="panel settings-section" id="invoices"><div className="section-icon"><FileText /></div><div className="settings-heading"><h2>GST & invoices</h2><p>One GST registration is shared across locations in the MVP.</p></div><div className="form-grid"><label>GSTIN<input value={gstin} onChange={(e) => setGstin(e.target.value)} maxLength={15} /></label><label>Price entry<select value={priceMode} onChange={(e) => setPriceMode(e.target.value as "RETAIL" | "WHOLESALE")}><option value="RETAIL">Retail prices by default</option><option value="WHOLESALE">Wholesale prices by default</option></select></label><label>Invoice prefix<input value={invoicePrefix} onChange={(e) => setInvoicePrefix(e.target.value)} placeholder={gst.data?.[0]?.invoicePrefix ?? "INV"} maxLength={8} /></label><label>Financial year<input value="April to March" readOnly /></label></div><p className="field-note">Final invoice numbers are allocated by the server only when an entry is posted online.</p></section>
           <section className="panel settings-section" id="language"><div className="section-icon"><Languages /></div><div className="settings-heading"><h2>Language</h2><p>Assistant input can mix Hindi, Hinglish and English regardless of this choice.</p></div><div className="choice-row"><label><input type="radio" name="language" defaultChecked />English</label><label><input type="radio" name="language" />हिन्दी</label></div></section>
-          <section className="panel settings-section" id="notifications"><div className="section-icon"><Bell /></div><div className="settings-heading"><h2>Notifications</h2><p>Sensitive balances are hidden from lock-screen text by default.</p></div><div className="toggle-list"><label><span><strong>Daily business summary</strong><small>At 8:30 PM for your active locations</small></span><input type="checkbox" defaultChecked /></label><label><span><strong>Low-stock alerts</strong><small>When stock reaches its product threshold</small></span><input type="checkbox" defaultChecked /></label><label><span><strong>Due reminders</strong><small>Prompt you to review before sharing</small></span><input type="checkbox" defaultChecked /></label></div></section>
+          <section className="panel settings-section" id="notifications"><div className="section-icon"><Bell /></div><div className="settings-heading"><h2>Notifications</h2><p>Sensitive balances are hidden from lock-screen text by default.</p></div><div className="toggle-list"><label><span><strong>Daily business summary</strong><small>At 8:30 PM for your active locations</small></span><input type="checkbox" checked={prefs.data?.dailySummary ?? true} onChange={(e) => togglePref.mutate({ dailySummary: e.target.checked })} /></label><label><span><strong>Low-stock alerts</strong><small>When stock reaches its product threshold</small></span><input type="checkbox" checked={prefs.data?.lowStockAlerts ?? true} onChange={(e) => togglePref.mutate({ lowStockAlerts: e.target.checked })} /></label><label><span><strong>Due reminders</strong><small>Prompt you to review before sharing</small></span><input type="checkbox" checked={prefs.data?.dueReminders ?? true} onChange={(e) => togglePref.mutate({ dueReminders: e.target.checked })} /></label></div></section>
           <section className="panel settings-section" id="security"><div className="section-icon"><LockKeyhole /></div><div className="settings-heading"><h2>Security</h2><p>Change your password. Forgot it? Use OTP sign-in instead.</p></div>
             <div className="form-grid">
               <label>Current password<input type="password" value={oldPassword} onChange={(e) => setOldPassword(e.target.value)} /></label>

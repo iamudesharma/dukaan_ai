@@ -1,5 +1,6 @@
 import 'package:dukaan_ai_mobile/ui/app_shell.dart';
 import 'package:dukaan_ai_mobile/ui/auth_gate.dart';
+import 'package:dukaan_ai_mobile/ui/pages/activity_page.dart';
 import 'package:dukaan_ai_mobile/ui/pages/assistant_page.dart';
 import 'package:dukaan_ai_mobile/ui/pages/entries_page.dart';
 import 'package:dukaan_ai_mobile/ui/pages/manual_sale_page.dart';
@@ -31,6 +32,7 @@ final routerProvider = Provider<GoRouter>((ref) {
           GoRoute(path: '/stock', builder: (context, state) => const StockPage()),
           GoRoute(path: '/parties', builder: (context, state) => const PartiesPage()),
           GoRoute(path: '/reports', builder: (context, state) => const ReportsPage()),
+          GoRoute(path: '/activity', builder: (context, state) => const ActivityPage()),
           GoRoute(path: '/team', builder: (context, state) => const TeamPage()),
           GoRoute(path: '/settings', builder: (context, state) => const SettingsPage()),
           GoRoute(

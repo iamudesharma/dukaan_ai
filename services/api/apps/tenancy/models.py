@@ -175,3 +175,33 @@ class OutboxEvent(UUIDModel):
 
     class Meta:
         indexes = [models.Index(fields=["status", "available_at"])]
+
+
+class NotificationPreference(UUIDModel):
+    """Per-member notification toggles for one business.
+
+    The row is owned by (user, business) and carries business_id so the
+    standard tenant policy applies. Members manage only their own row;
+    every read/write is additionally gated by membership.
+    """
+
+    business = models.ForeignKey(
+        Business, on_delete=models.PROTECT, related_name="notification_preferences"
+    )
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="notification_prefs"
+    )
+    push_enabled = models.BooleanField(default=True)
+    sms_enabled = models.BooleanField(default=True)
+    whatsapp_enabled = models.BooleanField(default=False)
+    daily_summary = models.BooleanField(default=True)
+    low_stock_alerts = models.BooleanField(default=True)
+    due_reminders = models.BooleanField(default=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=["business", "user"], name="uniq_notification_pref")
+        ]
+
+    def __str__(self) -> str:
+        return f"Notification prefs for {self.user_id} at {self.business_id}"

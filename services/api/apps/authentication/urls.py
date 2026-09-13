@@ -1,6 +1,8 @@
 from django.urls import path
 
 from .views import (
+    DeviceTokenDetailView,
+    DeviceTokenView,
     LoginView,
     LogoutAllView,
     LogoutView,
@@ -28,4 +30,6 @@ urlpatterns = [
         PasswordResetConfirmView.as_view(),
         name="auth-password-reset-confirm",
     ),
+    path("devices/", DeviceTokenView.as_view(), name="devices"),
+    path("devices/<int:pk>/", DeviceTokenDetailView.as_view(), name="device-detail"),
 ]

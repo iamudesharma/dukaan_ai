@@ -44,6 +44,7 @@ htmlcov/
 .venv/
 *.egg-info/
 services/api/staticfiles/
+services/api/mediafiles/
 
 # Flutter / Dart
 .dart_tool/

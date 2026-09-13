@@ -6,7 +6,14 @@ import { EmptyState } from "../components/EmptyState";
 import { LoadingBlock } from "../components/LoadingBlock";
 import { PageHeader } from "../components/PageHeader";
 import { StatusBadge } from "../components/StatusBadge";
-import { getDocument, getEntries, reverseDocument } from "../data/repository";
+import {
+  createSaleInvoice,
+  downloadAttachmentFile,
+  getDocument,
+  getEntries,
+  reverseDocument,
+  waitForAttachment,
+} from "../data/repository";
 import { formatDateTime, formatKind, formatMoney } from "../lib/format";
 import type { Entry, EntryKind } from "../types";
 import { QuickEntryDialog } from "../features/entries/QuickEntryDialog";
@@ -39,6 +46,7 @@ export function EntriesPage() {
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
   const [selected, setSelected] = useState<Entry | null>(null);
+  const [invoiceState, setInvoiceState] = useState<"idle" | "working" | "error">("idle");
   const [quickKind, setQuickKind] = useState<"purchase" | "payment" | "expense" | null>(null);
   const query = useQuery({
     queryKey: ["entries", bootstrap.business.id, locationId, from, to],
@@ -146,6 +154,30 @@ export function EntriesPage() {
                   ))}
                 </tbody>
               </table>
+            </div>
+          ) : null}
+          {selected.kind === "SALE" ? (
+            <div className="review-actions">
+              <button
+                type="button"
+                className="secondary-button"
+                disabled={invoiceState === "working"}
+                onClick={async () => {
+                  setInvoiceState("working");
+                  try {
+                    const attachment = await createSaleInvoice(selected.id);
+                    const ready = await waitForAttachment(attachment.id);
+                    if (ready.status !== "READY") throw new Error("Invoice is not ready yet.");
+                    await downloadAttachmentFile(ready);
+                    setInvoiceState("idle");
+                  } catch {
+                    setInvoiceState("error");
+                  }
+                }}
+              >
+                {invoiceState === "working" ? "Preparing invoice…" : "Download invoice (PDF)"}
+              </button>
+              {invoiceState === "error" ? <span className="form-error" role="alert">Invoice could not be prepared.</span> : null}
             </div>
           ) : null}
         </section>

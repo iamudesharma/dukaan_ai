@@ -8,6 +8,13 @@ final _meProvider = FutureProvider<Map<String, dynamic>>(
   (ref) => ref.watch(repositoryProvider).fetchMe(),
 );
 
+final _prefsProvider = FutureProvider<Map<String, dynamic>>((ref) async {
+  final location = await ref.watch(activeLocationProvider.future);
+  return ref.watch(repositoryProvider).fetchNotificationPrefs(
+        businessId: location.businessId,
+      );
+});
+
 class SettingsPage extends ConsumerStatefulWidget {
   const SettingsPage({super.key});
 
@@ -165,6 +172,8 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
           },
         ),
         const SizedBox(height: 16),
+        _PrefsCard(),
+        const SizedBox(height: 16),
         Card(
           child: Padding(
             padding: const EdgeInsets.all(16),
@@ -217,6 +226,64 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
           label: Text(strings.t('signOutEverywhere')),
         ),
       ],
+    );
+  }
+}
+
+class _PrefsCard extends ConsumerWidget {
+  const _PrefsCard();
+
+  Future<void> _toggle(WidgetRef ref, String field, bool value) async {
+    final location = await ref.read(activeLocationProvider.future);
+    await ref.read(repositoryProvider).updateNotificationPrefs({
+      'business_id': location.businessId,
+      field: value,
+    });
+    ref.invalidate(_prefsProvider);
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final strings = context.strings;
+    final prefs = ref.watch(_prefsProvider);
+    return prefs.when(
+      loading: () => const LoadingContent(),
+      error: (_, __) => const SizedBox.shrink(),
+      data: (values) => Card(
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                strings.t('notifications'),
+                style: const TextStyle(fontWeight: FontWeight.w800),
+              ),
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                title: Text(strings.t('prefDailySummary')),
+                subtitle: Text(strings.t('prefDailySummaryDetail')),
+                value: values['daily_summary'] != false,
+                onChanged: (value) => _toggle(ref, 'daily_summary', value),
+              ),
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                title: Text(strings.t('lowStockAlerts')),
+                subtitle: Text(strings.t('lowStockAlertsDetail')),
+                value: values['low_stock_alerts'] != false,
+                onChanged: (value) => _toggle(ref, 'low_stock_alerts', value),
+              ),
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                title: Text(strings.t('dueRemindersPref')),
+                subtitle: Text(strings.t('dueRemindersDetail')),
+                value: values['due_reminders'] != false,
+                onChanged: (value) => _toggle(ref, 'due_reminders', value),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

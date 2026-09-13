@@ -347,3 +347,118 @@ class StockTransferLine(UUIDModel):
     quantity = models.DecimalField(max_digits=18, decimal_places=3)
     conversion_factor = models.DecimalField(max_digits=18, decimal_places=6)
     base_quantity = models.DecimalField(max_digits=18, decimal_places=3)
+
+
+def _phase3_upload_to(instance, filename: str) -> str:
+    return f"business-{instance.business_id}/{filename}"
+
+
+class Reminder(UUIDModel):
+    """A payment reminder queued for a party.
+
+    Created PENDING with an outbox event (``reminder.send``) in the same
+    transaction, so a worker restart never loses it. The worker delivers
+    via the messaging adapter and flips the row to SENT/FAILED; redelivery
+    is idempotent on the outbox dedupe key.
+    """
+
+    class Channel(models.TextChoices):
+        SMS = "SMS", "SMS"
+        WHATSAPP = "WHATSAPP", "WhatsApp"
+        SHARE = "SHARE", "Manual share"
+
+    class Status(models.TextChoices):
+        PENDING = "PENDING", "Pending"
+        SENT = "SENT", "Sent"
+        FAILED = "FAILED", "Failed"
+
+    business = models.ForeignKey(Business, on_delete=models.PROTECT, related_name="reminders")
+    location = models.ForeignKey(
+        Location, null=True, blank=True, on_delete=models.PROTECT, related_name="reminders"
+    )
+    party = models.ForeignKey(Party, on_delete=models.PROTECT, related_name="reminders")
+    channel = models.CharField(max_length=10, choices=Channel.choices, default=Channel.SHARE)
+    message = models.TextField()
+    amount_minor = models.BigIntegerField(default=0)
+    status = models.CharField(max_length=10, choices=Status.choices, default=Status.PENDING)
+    requested_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="reminders"
+    )
+    provider_message_id = models.CharField(max_length=160, blank=True)
+    last_error = models.TextField(blank=True)
+    sent_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        indexes = [models.Index(fields=["business", "status", "created_at"])]
+
+
+class ExportJob(UUIDModel):
+    """An async report export run by the worker.
+
+    Created PENDING with an outbox event (``export.run``) in the same
+    transaction. The worker renders the file into private storage and flips
+    the row to READY/FAILED; the file is only served to members of the
+    owning business.
+    """
+
+    class Format(models.TextChoices):
+        CSV = "CSV", "CSV"
+        PDF = "PDF", "PDF"
+
+    class Status(models.TextChoices):
+        PENDING = "PENDING", "Pending"
+        PROCESSING = "PROCESSING", "Processing"
+        READY = "READY", "Ready"
+        FAILED = "FAILED", "Failed"
+
+    business = models.ForeignKey(Business, on_delete=models.PROTECT, related_name="export_jobs")
+    requested_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="export_jobs"
+    )
+    report = models.CharField(max_length=32)
+    format = models.CharField(max_length=8, choices=Format.choices, default=Format.CSV)
+    params = models.JSONField(default=dict, blank=True)
+    status = models.CharField(max_length=12, choices=Status.choices, default=Status.PENDING)
+    file = models.FileField(upload_to=_phase3_upload_to, null=True, blank=True)
+    error = models.TextField(blank=True)
+
+    class Meta:
+        indexes = [models.Index(fields=["business", "status", "created_at"])]
+
+
+class Attachment(UUIDModel):
+    """A tenant-owned file, e.g. a generated sale invoice PDF.
+
+    Created PENDING with an outbox event (``invoice.generate``) in the same
+    transaction; the worker renders the PDF into private storage. Only
+    members of the owning business can fetch the row or its bytes.
+    """
+
+    class Status(models.TextChoices):
+        PENDING = "PENDING", "Pending"
+        READY = "READY", "Ready"
+        FAILED = "FAILED", "Failed"
+
+    business = models.ForeignKey(Business, on_delete=models.PROTECT, related_name="attachments")
+    kind = models.CharField(max_length=32, default="sale-invoice")
+    sale = models.ForeignKey(
+        "operations.Sale",
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="attachments",
+    )
+    file = models.FileField(upload_to=_phase3_upload_to, null=True, blank=True)
+    mime_type = models.CharField(max_length=80, default="application/pdf")
+    size_bytes = models.PositiveBigIntegerField(default=0)
+    status = models.CharField(max_length=10, choices=Status.choices, default=Status.PENDING)
+    error = models.TextField(blank=True)
+
+    class Meta:
+        indexes = [models.Index(fields=["business", "status", "created_at"])]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["business", "kind", "sale"],
+                name="uniq_attachment_sale_kind",
+            )
+        ]

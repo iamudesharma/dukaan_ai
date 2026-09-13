@@ -6,12 +6,20 @@ from rest_framework import mixins, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import NotFound, PermissionDenied, ValidationError
 from rest_framework.response import Response
+from rest_framework.views import APIView
 
 from apps.authentication.models import SessionRevocation
 from apps.tenancy import rls
 
 from .access import accessible_location_ids, require_membership
-from .models import Business, GSTRegistration, Invitation, Location, Membership
+from .models import (
+    Business,
+    GSTRegistration,
+    Invitation,
+    Location,
+    Membership,
+    NotificationPreference,
+)
 from .serializers import (
     AcceptInvitationSerializer,
     BusinessSerializer,
@@ -256,3 +264,52 @@ class InvitationViewSet(
         invitation.status = Invitation.Status.REVOKED
         invitation.save(update_fields=["status", "updated_at"])
         return Response(InvitationSerializer(invitation).data)
+
+
+class NotificationPreferenceView(APIView):
+    """Get or update the caller's notification toggles for one business."""
+
+    def _preference(self, request, business_id):
+        require_membership(request.user, business_id)
+        preference, _ = NotificationPreference.objects.get_or_create(
+            business_id=business_id, user=request.user
+        )
+        return preference
+
+    def get(self, request):
+        business_id = request.query_params.get("business_id")
+        if not business_id:
+            raise ValidationError("business_id is required")
+        preference = self._preference(request, business_id)
+        return Response(_preference_data(preference))
+
+    def patch(self, request):
+        business_id = request.data.get("business_id") or request.query_params.get("business_id")
+        if not business_id:
+            raise ValidationError("business_id is required")
+        preference = self._preference(request, business_id)
+        for field in (
+            "push_enabled",
+            "sms_enabled",
+            "whatsapp_enabled",
+            "daily_summary",
+            "low_stock_alerts",
+            "due_reminders",
+        ):
+            if field in request.data:
+                setattr(preference, field, bool(request.data[field]))
+        preference.save()
+        return Response(_preference_data(preference))
+
+
+def _preference_data(preference):
+    return {
+        "business": str(preference.business_id),
+        "push_enabled": preference.push_enabled,
+        "sms_enabled": preference.sms_enabled,
+        "whatsapp_enabled": preference.whatsapp_enabled,
+        "daily_summary": preference.daily_summary,
+        "low_stock_alerts": preference.low_stock_alerts,
+        "due_reminders": preference.due_reminders,
+        "updated_at": preference.updated_at,
+    }

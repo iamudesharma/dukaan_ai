@@ -46,6 +46,23 @@ abstract interface class DukaanRepository {
   Future<void> revokeInvitation(String id);
   Future<Membership> acceptInvitation({required String id, required String token});
   Future<Map<String, dynamic>> updateProfile(Map<String, dynamic> payload);
+  Future<Map<String, dynamic>> fetchNotificationPrefs({String? businessId});
+  Future<Map<String, dynamic>> updateNotificationPrefs(Map<String, dynamic> payload);
+
+  // Phase 3: activity, reminders, async exports, invoice PDFs.
+  Future<Map<String, dynamic>> fetchActivity({
+    String? businessId,
+    String kind = 'all',
+    int limit = 50,
+    int offset = 0,
+  });
+  Future<Map<String, dynamic>> createReminder(Map<String, dynamic> payload);
+  Future<List<Map<String, dynamic>>> fetchReminderSuggestions({String? businessId});
+  Future<Map<String, dynamic>> createExport(Map<String, dynamic> payload);
+  Future<Map<String, dynamic>> fetchExport(String id);
+  Future<Map<String, dynamic>> createSaleInvoice(String saleId);
+  Future<Map<String, dynamic>> fetchAttachment(String id);
+  Future<List<int>> downloadBytes(String path);
 
   // Catalog detail + write.
   Future<Product> fetchProduct(String id);
@@ -430,6 +447,108 @@ class ApiDukaanRepository implements DukaanRepository {
   Future<Map<String, dynamic>> updateProfile(Map<String, dynamic> payload) async {
     final response = await _dio.patch<Object>('me/', data: payload);
     return _object(response.data);
+  }
+
+  @override
+  Future<Map<String, dynamic>> fetchNotificationPrefs({String? businessId}) async {
+    final resolved = businessId ?? await _resolveBusinessId();
+    final response = await _dio.get<Object>(
+      'notification-preferences/',
+      queryParameters: {'business_id': resolved},
+    );
+    return _object(response.data);
+  }
+
+  @override
+  Future<Map<String, dynamic>> updateNotificationPrefs(Map<String, dynamic> payload) async {
+    final data = Map<String, dynamic>.from(payload);
+    data['business_id'] ??= await _resolveBusinessId();
+    final response = await _dio.patch<Object>('notification-preferences/', data: data);
+    return _object(response.data);
+  }
+
+  @override
+  Future<Map<String, dynamic>> fetchActivity({
+    String? businessId,
+    String kind = 'all',
+    int limit = 50,
+    int offset = 0,
+  }) async {
+    final resolved = businessId ?? await _resolveBusinessId();
+    final response = await _dio.get<Object>(
+      'activity/',
+      queryParameters: {
+        'business_id': resolved,
+        'kind': kind,
+        'limit': limit,
+        'offset': offset,
+      },
+    );
+    return _object(response.data);
+  }
+
+  @override
+  Future<Map<String, dynamic>> createReminder(Map<String, dynamic> payload) async {
+    final data = Map<String, dynamic>.from(payload);
+    data['business_id'] ??= await _resolveBusinessId();
+    final response = await _dio.post<Object>(
+      'reminders/',
+      data: _withIdempotency(data),
+    );
+    return _object(response.data);
+  }
+
+  @override
+  Future<List<Map<String, dynamic>>> fetchReminderSuggestions({String? businessId}) async {
+    final resolved = businessId ?? await _resolveBusinessId();
+    final response = await _dio.get<Object>(
+      'reminders/suggestions/',
+      queryParameters: {'business_id': resolved},
+    );
+    final rows = _object(response.data)['results'];
+    if (rows is List) {
+      return rows.whereType<Map>().map((row) => Map<String, dynamic>.from(row)).toList();
+    }
+    return const [];
+  }
+
+  @override
+  Future<Map<String, dynamic>> createExport(Map<String, dynamic> payload) async {
+    final data = Map<String, dynamic>.from(payload);
+    data['business_id'] ??= await _resolveBusinessId();
+    final response = await _dio.post<Object>(
+      'exports/',
+      data: _withIdempotency(data),
+    );
+    return _object(response.data);
+  }
+
+  @override
+  Future<Map<String, dynamic>> fetchExport(String id) async {
+    final response = await _dio.get<Object>('exports/$id/');
+    return _object(response.data);
+  }
+
+  @override
+  Future<Map<String, dynamic>> createSaleInvoice(String saleId) async {
+    final response = await _dio.post<Object>('sales/$saleId/invoice/');
+    return _object(response.data);
+  }
+
+  @override
+  Future<Map<String, dynamic>> fetchAttachment(String id) async {
+    final response = await _dio.get<Object>('attachments/$id/');
+    return _object(response.data);
+  }
+
+  @override
+  Future<List<int>> downloadBytes(String path) async {
+    final response = await _dio.get<List<int>>(
+      path,
+      queryParameters: {'download': '1'},
+      options: Options(responseType: ResponseType.bytes),
+    );
+    return response.data ?? const [];
   }
 
   @override
@@ -1228,6 +1347,64 @@ class DemoDukaanRepository implements DukaanRepository {
   Future<Map<String, dynamic>> updateProfile(Map<String, dynamic> payload) => _pause(
         {'id': 'user-demo'},
       );
+
+  @override
+  Future<Map<String, dynamic>> fetchNotificationPrefs({String? businessId}) => _pause(
+        {
+          'push_enabled': true,
+          'sms_enabled': true,
+          'whatsapp_enabled': false,
+          'daily_summary': true,
+          'low_stock_alerts': true,
+          'due_reminders': true,
+        },
+      );
+
+  @override
+  Future<Map<String, dynamic>> updateNotificationPrefs(Map<String, dynamic> payload) => _pause(
+        {'business': 'business-demo'},
+      );
+
+  @override
+  Future<Map<String, dynamic>> fetchActivity({
+    String? businessId,
+    String kind = 'all',
+    int limit = 50,
+    int offset = 0,
+  }) =>
+      _pause({'results': [], 'count': 0});
+
+  @override
+  Future<Map<String, dynamic>> createReminder(Map<String, dynamic> payload) => _pause(
+        {'id': 'reminder-demo', 'status': 'SENT', 'message': 'demo'},
+      );
+
+  @override
+  Future<List<Map<String, dynamic>>> fetchReminderSuggestions({String? businessId}) =>
+      _pause(const []);
+
+  @override
+  Future<Map<String, dynamic>> createExport(Map<String, dynamic> payload) => _pause(
+        {'id': 'export-demo', 'status': 'READY'},
+      );
+
+  @override
+  Future<Map<String, dynamic>> fetchExport(String id) => _pause(
+        {'id': id, 'status': 'READY'},
+      );
+
+  @override
+  Future<Map<String, dynamic>> createSaleInvoice(String saleId) => _pause(
+        {'id': 'attachment-demo', 'status': 'READY'},
+      );
+
+  @override
+  Future<Map<String, dynamic>> fetchAttachment(String id) => _pause(
+        {'id': id, 'status': 'READY'},
+      );
+
+  @override
+  Future<List<int>> downloadBytes(String path) => _pause(const []);
 
   @override
   Future<Product> fetchProduct(String id) =>

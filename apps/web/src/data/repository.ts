@@ -1,13 +1,16 @@
 import { apiRequest, apiUrl, newIdempotencyKey } from "../lib/api";
 import { accessToken, demoMode, getRefreshToken } from "../lib/supabase";
 import type {
+  ActivityEvent,
   AssistantProposal,
+  Attachment,
   Bootstrap,
   Business,
   DashboardSummary,
   DayBookReport,
   DocumentReport,
   Entry,
+  ExportJob,
   GstReport,
   GstRegistration,
   Invitation,
@@ -17,6 +20,7 @@ import type {
   ManualSaleInput,
   Membership,
   MeProfile,
+  NotificationPrefs,
   Party,
   PartyBalancesReport,
   PartyInput,
@@ -25,6 +29,8 @@ import type {
   ProposalRevision,
   ProposalSummary,
   PurchaseLineInput,
+  Reminder,
+  ReminderSuggestion,
   ReportGroupRow,
   ReportKind,
   Role,
@@ -1715,4 +1721,276 @@ export async function downloadReportCsv(
     throw new Error("The export could not be generated.");
   }
   triggerDownload(await response.blob(), `${query.report}.csv`);
+}
+
+export async function listActivity(
+  businessId: string,
+  options: { kind?: string; locationId?: string; limit?: number; offset?: number } = {},
+): Promise<{ results: ActivityEvent[]; count: number }> {
+  if (demoMode) {
+    await delay();
+    return { results: [], count: 0 };
+  }
+  const params = new URLSearchParams({ business_id: businessId });
+  if (options.kind && options.kind !== "all") params.set("kind", options.kind);
+  if (options.locationId) params.set("location_id", options.locationId);
+  params.set("limit", String(options.limit ?? 50));
+  params.set("offset", String(options.offset ?? 0));
+  const res = await apiRequest<{ results: Record<string, unknown>[]; count: number }>(
+    `/api/v1/activity/?${params}`,
+  );
+  return {
+    count: Number(res.count ?? 0),
+    results: res.results.map((row) => ({
+      id: String(row.id),
+      eventType: String(row.eventType ?? ""),
+      aggregateType: String(row.aggregateType ?? ""),
+      actorName: row.actorName ? String(row.actorName) : null,
+      source: String(row.source ?? ""),
+      metadata: (row.metadata ?? {}) as Record<string, unknown>,
+      createdAt: String(row.createdAt ?? ""),
+    })),
+  };
+}
+
+export async function getNotificationPrefs(businessId: string): Promise<NotificationPrefs> {
+  if (demoMode) {
+    await delay();
+    return {
+      pushEnabled: true,
+      smsEnabled: true,
+      whatsappEnabled: false,
+      dailySummary: true,
+      lowStockAlerts: true,
+      dueReminders: true,
+    };
+  }
+  const row = await apiRequest<Record<string, unknown>>(
+    `/api/v1/notification-preferences/?business_id=${businessId}`,
+  );
+  return {
+    pushEnabled: Boolean(row.pushEnabled),
+    smsEnabled: Boolean(row.smsEnabled),
+    whatsappEnabled: Boolean(row.whatsappEnabled),
+    dailySummary: Boolean(row.dailySummary),
+    lowStockAlerts: Boolean(row.lowStockAlerts),
+    dueReminders: Boolean(row.dueReminders),
+  };
+}
+
+export async function updateNotificationPrefs(
+  businessId: string,
+  patch: Partial<NotificationPrefs>,
+): Promise<NotificationPrefs> {
+  if (demoMode) {
+    await delay();
+    return getNotificationPrefs(businessId);
+  }
+  const body: Record<string, unknown> = { business_id: businessId };
+  if (patch.pushEnabled !== undefined) body.push_enabled = patch.pushEnabled;
+  if (patch.smsEnabled !== undefined) body.sms_enabled = patch.smsEnabled;
+  if (patch.whatsappEnabled !== undefined) body.whatsapp_enabled = patch.whatsappEnabled;
+  if (patch.dailySummary !== undefined) body.daily_summary = patch.dailySummary;
+  if (patch.lowStockAlerts !== undefined) body.low_stock_alerts = patch.lowStockAlerts;
+  if (patch.dueReminders !== undefined) body.due_reminders = patch.dueReminders;
+  const row = await apiRequest<Record<string, unknown>>("/api/v1/notification-preferences/", {
+    method: "PATCH",
+    body,
+  });
+  return {
+    pushEnabled: Boolean(row.pushEnabled),
+    smsEnabled: Boolean(row.smsEnabled),
+    whatsappEnabled: Boolean(row.whatsappEnabled),
+    dailySummary: Boolean(row.dailySummary),
+    lowStockAlerts: Boolean(row.lowStockAlerts),
+    dueReminders: Boolean(row.dueReminders),
+  };
+}
+
+export async function listReminderSuggestions(businessId: string): Promise<ReminderSuggestion[]> {
+  if (demoMode) {
+    await delay();
+    return [];
+  }
+  const res = await apiRequest<{ results: Record<string, unknown>[] }>(
+    `/api/v1/reminders/suggestions/?business_id=${businessId}`,
+  );
+  return res.results.map((row) => ({
+    type: String(row.type ?? "OVERDUE"),
+    partyId: String(row.partyId ?? ""),
+    partyName: String(row.partyName ?? ""),
+    amountMinor: Number(row.amountMinor ?? 0),
+    message: String(row.message ?? ""),
+  }));
+}
+
+export async function createReminder(input: {
+  businessId: string;
+  partyId: string;
+  channel?: string;
+  locationId?: string;
+}): Promise<Reminder> {
+  if (demoMode) {
+    await delay();
+    return {
+      id: crypto.randomUUID(),
+      partyId: input.partyId,
+      channel: input.channel ?? "SHARE",
+      message: "Reminder prepared.",
+      amountMinor: 0,
+      status: "SENT",
+      createdAt: new Date().toISOString(),
+    };
+  }
+  const row = await apiRequest<Record<string, unknown>>("/api/v1/reminders/", {
+    method: "POST",
+    body: {
+      business_id: input.businessId,
+      party_id: input.partyId,
+      channel: input.channel ?? "SHARE",
+      ...(input.locationId ? { location_id: input.locationId } : {}),
+    },
+  });
+  return {
+    id: String(row.id),
+    partyId: row.party ? String(row.party) : undefined,
+    partyName: row.partyName ? String(row.partyName) : undefined,
+    channel: String(row.channel ?? "SHARE"),
+    message: String(row.message ?? ""),
+    amountMinor: Number(row.amountMinor ?? 0),
+    status: String(row.status ?? "PENDING") as Reminder["status"],
+    sentAt: row.sentAt ? String(row.sentAt) : undefined,
+    createdAt: String(row.createdAt ?? ""),
+  };
+}
+
+export async function createExportJob(input: {
+  businessId: string;
+  report: string;
+  format: "CSV" | "PDF";
+  locationId?: string;
+  from?: string;
+  to?: string;
+  groupBy?: string;
+}): Promise<ExportJob> {
+  if (demoMode) {
+    await delay();
+    return {
+      id: crypto.randomUUID(),
+      report: input.report,
+      format: input.format,
+      status: "READY",
+      downloadUrl: null,
+      createdAt: new Date().toISOString(),
+    };
+  }
+  const row = await apiRequest<Record<string, unknown>>("/api/v1/exports/", {
+    method: "POST",
+    body: {
+      business_id: input.businessId,
+      report: input.report,
+      format: input.format,
+      ...(input.locationId ? { location_id: input.locationId } : {}),
+      ...(input.from ? { from_date: input.from } : {}),
+      ...(input.to ? { to_date: input.to } : {}),
+      ...(input.groupBy ? { group_by: input.groupBy } : {}),
+    },
+  });
+  return toExportJob(row);
+}
+
+export async function getExportJob(id: string): Promise<ExportJob> {
+  if (demoMode) {
+    await delay();
+    return {
+      id,
+      report: "sales",
+      format: "CSV",
+      status: "READY",
+      downloadUrl: null,
+      createdAt: new Date().toISOString(),
+    };
+  }
+  return toExportJob(await apiRequest<Record<string, unknown>>(`/api/v1/exports/${id}/`));
+}
+
+function toExportJob(row: Record<string, unknown>): ExportJob {
+  return {
+    id: String(row.id),
+    report: String(row.report ?? ""),
+    format: String(row.format ?? "CSV"),
+    status: String(row.status ?? "PENDING") as ExportJob["status"],
+    error: row.error ? String(row.error) : undefined,
+    downloadUrl: row.downloadUrl ? String(row.downloadUrl) : null,
+    createdAt: String(row.createdAt ?? ""),
+  };
+}
+
+async function downloadAuthenticated(path: string, filename: string): Promise<void> {
+  const token = await accessToken();
+  const response = await fetch(`${apiUrl}${path}`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
+  if (!response.ok) throw new Error("The file could not be downloaded.");
+  triggerDownload(await response.blob(), filename);
+}
+
+export async function downloadExportJob(job: ExportJob): Promise<void> {
+  if (demoMode || !job.downloadUrl) return;
+  const suffix = job.format === "PDF" ? "pdf" : "csv";
+  await downloadAuthenticated(job.downloadUrl, `${job.report}.${suffix}`);
+}
+
+export async function waitForExportJob(id: string, attempts = 20): Promise<ExportJob> {
+  for (let i = 0; i < attempts; i++) {
+    const job = await getExportJob(id);
+    if (job.status === "READY" || job.status === "FAILED") return job;
+    await delay(1000);
+  }
+  return getExportJob(id);
+}
+
+export async function createSaleInvoice(saleId: string): Promise<Attachment> {
+  if (demoMode) {
+    await delay();
+    return { id: crypto.randomUUID(), kind: "sale-invoice", status: "READY", downloadUrl: null, createdAt: new Date().toISOString() };
+  }
+  return toAttachment(
+    await apiRequest<Record<string, unknown>>(`/api/v1/sales/${saleId}/invoice/`, {
+      method: "POST",
+    }),
+  );
+}
+
+export async function getAttachment(id: string): Promise<Attachment> {
+  if (demoMode) {
+    await delay();
+    return { id, kind: "sale-invoice", status: "READY", downloadUrl: null, createdAt: new Date().toISOString() };
+  }
+  return toAttachment(await apiRequest<Record<string, unknown>>(`/api/v1/attachments/${id}/`));
+}
+
+function toAttachment(row: Record<string, unknown>): Attachment {
+  return {
+    id: String(row.id),
+    kind: String(row.kind ?? ""),
+    sale: row.sale ? String(row.sale) : undefined,
+    status: String(row.status ?? "PENDING") as Attachment["status"],
+    downloadUrl: row.downloadUrl ? String(row.downloadUrl) : null,
+    createdAt: String(row.createdAt ?? ""),
+  };
+}
+
+export async function waitForAttachment(id: string, attempts = 20): Promise<Attachment> {
+  for (let i = 0; i < attempts; i++) {
+    const attachment = await getAttachment(id);
+    if (attachment.status === "READY" || attachment.status === "FAILED") return attachment;
+    await delay(1000);
+  }
+  return getAttachment(id);
+}
+
+export async function downloadAttachmentFile(attachment: Attachment): Promise<void> {
+  if (demoMode || !attachment.downloadUrl) return;
+  await downloadAuthenticated(attachment.downloadUrl, `invoice-${attachment.sale ?? attachment.id}.pdf`);
 }

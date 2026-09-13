@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:dukaan_ai_mobile/core/formatters.dart';
 import 'package:dukaan_ai_mobile/domain/models.dart';
 import 'package:dukaan_ai_mobile/l10n/app_strings.dart';
@@ -7,6 +9,8 @@ import 'package:dukaan_ai_mobile/ui/common/ledger_sheet.dart';
 import 'package:dukaan_ai_mobile/ui/common/stock_movements_sheet.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:share_plus/share_plus.dart';
 
 class ReportsPage extends ConsumerStatefulWidget {
   const ReportsPage({super.key});
@@ -34,6 +38,8 @@ class _ReportsPageState extends ConsumerState<ReportsPage> {
   int _period = 2;
   String _groupBy = 'day';
   Future<_ReportsData>? _future;
+  bool _exporting = false;
+  String? _exportError;
 
   @override
   void initState() {
@@ -82,6 +88,52 @@ class _ReportsPageState extends ConsumerState<ReportsPage> {
       stock: results[2] as List<StockRow>,
       parties: results[3] as List<Party>,
     );
+  }
+
+  Future<void> _exportPdf() async {
+    setState(() {
+      _exporting = true;
+      _exportError = null;
+    });
+    try {
+      final location = await ref.read(activeLocationProvider.future);
+      final repository = ref.read(repositoryProvider);
+      final range = _range();
+      String iso(DateTime value) =>
+          '${value.year.toString().padLeft(4, '0')}-${value.month.toString().padLeft(2, '0')}-${value.day.toString().padLeft(2, '0')}';
+      final created = await repository.createExport({
+        'business_id': location.businessId,
+        'location_id': location.id,
+        'report': 'sales',
+        'format': 'PDF',
+        'group_by': _groupBy,
+        if (range.from != null) 'from_date': iso(range.from!),
+        if (range.to != null) 'to_date': iso(range.to!),
+      });
+      final jobId = (created['id'] ?? '').toString();
+      Map<String, dynamic> job = created;
+      for (var i = 0; i < 20; i++) {
+        final status = (job['status'] ?? '').toString();
+        if (status == 'READY' || status == 'FAILED') break;
+        await Future<void>.delayed(const Duration(seconds: 1));
+        job = await repository.fetchExport(jobId);
+      }
+      if ((job['status'] ?? '').toString() != 'READY') throw StateError('not ready');
+      final downloadUrl = (job['download_url'] ?? '').toString();
+      final bytes = await repository.downloadBytes(
+        downloadUrl.isEmpty ? 'exports/$jobId/' : downloadUrl,
+      );
+      final directory = await getTemporaryDirectory();
+      final file = File('${directory.path}/sales-report.pdf');
+      await file.writeAsBytes(bytes, flush: true);
+      await SharePlus.instance.share(
+        ShareParams(files: [XFile(file.path, mimeType: 'application/pdf')]),
+      );
+    } on Object catch (_) {
+      if (mounted) setState(() => _exportError = context.strings.t('exportFailed'));
+    } finally {
+      if (mounted) setState(() => _exporting = false);
+    }
   }
 
   void _reload() {
@@ -160,6 +212,24 @@ class _ReportsPageState extends ConsumerState<ReportsPage> {
                     ),
                 ],
               ),
+              const SizedBox(height: 8),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: OutlinedButton.icon(
+                  onPressed: _exporting ? null : _exportPdf,
+                  icon: const Icon(Icons.picture_as_pdf_outlined),
+                  label: Text(
+                    _exporting ? strings.t('exportPreparing') : strings.t('exportPdf'),
+                  ),
+                ),
+              ),
+              if (_exportError != null) ...[
+                const SizedBox(height: 4),
+                Text(
+                  _exportError!,
+                  style: TextStyle(color: Theme.of(context).colorScheme.error),
+                ),
+              ],
               const SizedBox(height: 18),
               _ReportSection(
                 title: strings.t('sales'),
