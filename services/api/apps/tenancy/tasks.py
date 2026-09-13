@@ -107,6 +107,198 @@ def _handle_domain_reversed(event: OutboxEvent) -> None:
     _handle_domain_posted(event)
 
 
+def _handle_reminder_send(event: OutboxEvent) -> None:
+    """Deliver one reminder via the messaging adapter.
+
+    Idempotent on the outbox dedupe key: an already-SENT reminder is a
+    no-op so redelivery after a crash never double-sends. Transient
+    provider errors propagate so Celery retries with backoff; the
+    financial records were committed long ago, so nothing rolls back.
+    """
+    from apps.operations.messaging import TransientDeliveryError, send_reminder
+    from apps.operations.models import Reminder
+
+    reminder_id = (event.payload or {}).get("reminder_id")
+    try:
+        reminder = Reminder.objects.select_for_update().get(pk=reminder_id)
+    except Exception as exc:
+        raise _PermanentFailure(f"Reminder {reminder_id} not found") from exc
+    if reminder.status == Reminder.Status.SENT:
+        return
+    message_id = None
+    try:
+        message_id = send_reminder(
+            channel=reminder.channel,
+            phone=(getattr(reminder.party, "phone_e164", "") or ""),
+            message=reminder.message,
+        )
+    except TransientDeliveryError as exc:
+        # Missing phone will never resolve by retrying: fail permanently.
+        if "No phone number" in str(exc):
+            from django.utils import timezone as _tz
+
+            reminder.status = Reminder.Status.FAILED
+            reminder.last_error = str(exc)[:2000]
+            reminder.save(update_fields=["status", "last_error", "updated_at"])
+            raise _PermanentFailure(str(exc)) from exc
+        raise
+    reminder.status = Reminder.Status.SENT
+    reminder.provider_message_id = message_id
+    from django.utils import timezone as _tz
+
+    reminder.sent_at = _tz.now()
+    reminder.last_error = ""
+    reminder.save(
+        update_fields=[
+            "status",
+            "provider_message_id",
+            "sent_at",
+            "last_error",
+            "updated_at",
+        ]
+    )
+
+
+def _export_stub_request(params: dict):
+    from types import SimpleNamespace
+
+    query = {}
+    for key in ("from", "to", "group_by", "location_id"):
+        if params.get(key) is not None:
+            query[key] = str(params[key])
+    return SimpleNamespace(query_params=query)
+
+
+def _handle_export_run(event: OutboxEvent) -> None:
+    """Render an export job file into private storage.
+
+    Idempotent: an already-READY job is a no-op. Unknown reports are
+    permanent failures (bad request, retrying will not fix it).
+    """
+    import csv
+    import io
+
+    from django.core.files.base import ContentFile
+
+    from apps.operations.models import ExportJob
+    from apps.operations.pdf import render_simple_pdf
+    from apps.operations.reports import REPORT_BUILDERS, build_report, report_csv
+
+    export_id = (event.payload or {}).get("export_id")
+    try:
+        job = ExportJob.objects.select_for_update().get(pk=export_id)
+    except Exception as exc:
+        raise _PermanentFailure(f"Export {export_id} not found") from exc
+    if job.status == ExportJob.Status.READY:
+        return
+    if job.report not in REPORT_BUILDERS:
+        job.status = ExportJob.Status.FAILED
+        job.error = f"Unknown report {job.report!r}"
+        job.save(update_fields=["status", "error", "updated_at"])
+        raise _PermanentFailure(job.error)
+    job.status = ExportJob.Status.PROCESSING
+    job.save(update_fields=["status", "updated_at"])
+    try:
+        params = dict(job.params or {})
+        location_ids = params.get("location_ids") or []
+        stub = _export_stub_request(params)
+        data = build_report(
+            job.report,
+            request=stub,
+            business_id=str(job.business_id),
+            location_ids=location_ids,
+        )
+        headers, rows = report_csv(name=job.report, data=data)
+        if job.format == ExportJob.Format.PDF:
+            lines = [" | ".join(headers)]
+            for row in rows:
+                lines.append(" | ".join(str(cell) for cell in row))
+            pdf_bytes = render_simple_pdf(title=f"{job.report} export", lines=lines)
+            filename = f"exports/{job.pk}.pdf"
+            job.file.save(filename, ContentFile(pdf_bytes), save=False)
+        else:
+            buffer = io.StringIO()
+            writer = csv.writer(buffer)
+            writer.writerow(headers)
+            writer.writerows(rows)
+            filename = f"exports/{job.pk}.csv"
+            job.file.save(filename, ContentFile(buffer.getvalue().encode("utf-8")), save=False)
+    except _PermanentFailure:
+        raise
+    except Exception as exc:
+        job.status = ExportJob.Status.FAILED
+        job.error = str(exc)[:2000]
+        job.save(update_fields=["status", "error", "updated_at"])
+        raise _PermanentFailure(job.error) from exc
+    job.status = ExportJob.Status.READY
+    job.error = ""
+    job.save(update_fields=["status", "file", "error", "updated_at"])
+
+
+def _handle_invoice_generate(event: OutboxEvent) -> None:
+    """Render a sale invoice PDF into private storage.
+
+    Idempotent: an already-READY attachment is a no-op. The attachment row
+    is the idempotency record (unique per business+kind+sale), so a retry
+    never creates a second invoice file.
+    """
+    from django.core.files.base import ContentFile
+
+    from apps.operations.models import Attachment, Sale
+    from apps.operations.pdf import invoice_lines, render_simple_pdf
+
+    attachment_id = (event.payload or {}).get("attachment_id")
+    try:
+        attachment = Attachment.objects.select_for_update().get(pk=attachment_id)
+    except Exception as exc:
+        raise _PermanentFailure(f"Attachment {attachment_id} not found") from exc
+    if attachment.status == Attachment.Status.READY and attachment.file:
+        return
+    try:
+        sale = (
+            Sale.objects.filter(pk=attachment.sale_id)
+            .select_related("business")
+            .prefetch_related("lines__product")
+            .get()
+        )
+    except Exception as exc:
+        attachment.status = Attachment.Status.FAILED
+        attachment.error = "Sale not found"
+        attachment.save(update_fields=["status", "error", "updated_at"])
+        raise _PermanentFailure(attachment.error) from exc
+    try:
+        items = [
+            f"{line.quantity} x {(getattr(line.product, 'name', None) or 'Item')} - "
+            f"Rs {line.line_total_minor / 100:,.2f}"
+            for line in sale.lines.all()
+        ]
+        party = sale.buyer_name or "Walk-in"
+        pdf_bytes = render_simple_pdf(
+            title=f"Invoice {sale.number}",
+            lines=invoice_lines(
+                number=sale.number,
+                business=sale.business.name,
+                party=party,
+                total_minor=sale.grand_total_minor,
+                items=items,
+            ),
+        )
+        filename = f"invoices/{attachment.pk}.pdf"
+        attachment.file.save(filename, ContentFile(pdf_bytes), save=False)
+        attachment.mime_type = "application/pdf"
+        attachment.size_bytes = len(pdf_bytes)
+    except Exception as exc:
+        attachment.status = Attachment.Status.FAILED
+        attachment.error = str(exc)[:2000]
+        attachment.save(update_fields=["status", "error", "updated_at"])
+        raise _PermanentFailure(attachment.error) from exc
+    attachment.status = Attachment.Status.READY
+    attachment.error = ""
+    attachment.save(
+        update_fields=["status", "file", "mime_type", "size_bytes", "error", "updated_at"]
+    )
+
+
 _HANDLERS = {
     "sale.posted": _handle_domain_posted,
     "purchase.posted": _handle_domain_posted,
@@ -118,4 +310,7 @@ _HANDLERS = {
     "payment.reversed": _handle_domain_reversed,
     "expense.reversed": _handle_domain_reversed,
     "transfer.reversed": _handle_domain_reversed,
+    "reminder.send": _handle_reminder_send,
+    "export.run": _handle_export_run,
+    "invoice.generate": _handle_invoice_generate,
 }

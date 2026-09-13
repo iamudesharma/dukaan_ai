@@ -123,6 +123,57 @@ class FakeDukaanRepository implements DukaanRepository {
       {'id': 'user-test'};
 
   @override
+  Future<Map<String, dynamic>> fetchNotificationPrefs({String? businessId}) async =>
+      {
+        'push_enabled': true,
+        'sms_enabled': true,
+        'whatsapp_enabled': false,
+        'daily_summary': true,
+        'low_stock_alerts': true,
+        'due_reminders': true,
+      };
+
+  @override
+  Future<Map<String, dynamic>> updateNotificationPrefs(Map<String, dynamic> payload) async =>
+      {'business': 'business-test'};
+
+  @override
+  Future<Map<String, dynamic>> fetchActivity({
+    String? businessId,
+    String kind = 'all',
+    int limit = 50,
+    int offset = 0,
+  }) async =>
+      {'results': [], 'count': 0};
+
+  @override
+  Future<Map<String, dynamic>> createReminder(Map<String, dynamic> payload) async =>
+      {'id': 'reminder-test', 'status': 'SENT', 'message': 'test'};
+
+  @override
+  Future<List<Map<String, dynamic>>> fetchReminderSuggestions({String? businessId}) async =>
+      const [];
+
+  @override
+  Future<Map<String, dynamic>> createExport(Map<String, dynamic> payload) async =>
+      {'id': 'export-test', 'status': 'READY'};
+
+  @override
+  Future<Map<String, dynamic>> fetchExport(String id) async =>
+      {'id': id, 'status': 'READY'};
+
+  @override
+  Future<Map<String, dynamic>> createSaleInvoice(String saleId) async =>
+      {'id': 'attachment-test', 'status': 'READY'};
+
+  @override
+  Future<Map<String, dynamic>> fetchAttachment(String id) async =>
+      {'id': id, 'status': 'READY'};
+
+  @override
+  Future<List<int>> downloadBytes(String path) async => const [];
+
+  @override
   Future<Product> fetchProduct(String id) async => product;
 
   @override

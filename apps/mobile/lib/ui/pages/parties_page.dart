@@ -207,7 +207,7 @@ class _PartyCard extends ConsumerWidget {
                 SizedBox(
                   width: double.infinity,
                   child: OutlinedButton.icon(
-                    onPressed: () => _shareReminder(context),
+                    onPressed: () => _shareReminder(context, ref),
                     icon: const Icon(Icons.share_outlined),
                     label: Text(context.strings.t('shareReminder')),
                   ),
@@ -228,11 +228,25 @@ class _PartyCard extends ConsumerWidget {
     );
   }
 
-  Future<void> _shareReminder(BuildContext context) async {
+  Future<void> _shareReminder(BuildContext context, WidgetRef ref) async {
     final locale = Localizations.localeOf(context).languageCode;
-    final message = locale == 'hi'
-        ? 'नमस्ते ${party.name}, आपकी ${formatMoney(party.toReceiveMinor, locale)} की राशि बाकी है। कृपया सुविधा अनुसार भुगतान करें। — DukaanAI से साझा किया गया'
-        : 'Hello ${party.name}, this is a reminder that ${formatMoney(party.toReceiveMinor, locale)} is pending. Please pay when convenient. — Shared from DukaanAI';
+    String message;
+    try {
+      final location = await ref.read(activeLocationProvider.future);
+      final reminder = await ref.read(repositoryProvider).createReminder({
+        'business_id': location.businessId,
+        'location_id': location.id,
+        'party_id': party.id,
+      });
+      message = (reminder['message'] ?? '').toString();
+      if (message.isEmpty) throw StateError('empty reminder');
+    } on Object catch (_) {
+      // Offline or server unreachable: fall back to a local message so the
+      // shopkeeper can still share from the ledger.
+      message = locale == 'hi'
+          ? 'नमस्ते ${party.name}, आपकी ${formatMoney(party.toReceiveMinor, locale)} की राशि बाकी है। कृपया सुविधा अनुसार भुगतान करें। — DukaanAI से साझा किया गया'
+          : 'Hello ${party.name}, this is a reminder that ${formatMoney(party.toReceiveMinor, locale)} is pending. Please pay when convenient. — Shared from DukaanAI';
+    }
     await SharePlus.instance.share(ShareParams(text: message));
   }
 }

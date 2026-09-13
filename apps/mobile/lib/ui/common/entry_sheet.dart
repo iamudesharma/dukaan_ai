@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:dio/dio.dart';
 import 'package:dukaan_ai_mobile/core/formatters.dart';
 import 'package:dukaan_ai_mobile/domain/models.dart';
@@ -5,6 +7,8 @@ import 'package:dukaan_ai_mobile/l10n/app_strings.dart';
 import 'package:dukaan_ai_mobile/state/app_providers.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:share_plus/share_plus.dart';
 
 /// Entry detail bottom sheet: lines, totals, record-payment (when money is
 /// due) and reversal with a mandatory reason.
@@ -60,6 +64,7 @@ class _EntryDetailBody extends ConsumerStatefulWidget {
 class _EntryDetailBodyState extends ConsumerState<_EntryDetailBody> {
   final _reason = TextEditingController();
   bool _working = false;
+  bool _invoiceWorking = false;
   String? _error;
 
   @override
@@ -115,6 +120,44 @@ class _EntryDetailBodyState extends ConsumerState<_EntryDetailBody> {
       }
     } finally {
       if (mounted) setState(() => _working = false);
+    }
+  }
+
+  Future<void> _downloadInvoice() async {
+    setState(() {
+      _invoiceWorking = true;
+      _error = null;
+    });
+    try {
+      final repository = ref.read(repositoryProvider);
+      final created = await repository.createSaleInvoice(widget.entry.id);
+      final attachmentId = (created['id'] ?? '').toString();
+      Map<String, dynamic> attachment = created;
+      for (var i = 0; i < 20; i++) {
+        final status = (attachment['status'] ?? '').toString();
+        if (status == 'READY' || status == 'FAILED') break;
+        await Future<void>.delayed(const Duration(seconds: 1));
+        attachment = await repository.fetchAttachment(attachmentId);
+      }
+      if ((attachment['status'] ?? '').toString() != 'READY') {
+        throw StateError('not ready');
+      }
+      final downloadUrl = (attachment['download_url'] ?? '').toString();
+      final bytes = await repository.downloadBytes(
+        downloadUrl.isEmpty ? 'attachments/$attachmentId/' : downloadUrl,
+      );
+      final directory = await getTemporaryDirectory();
+      final file = File('${directory.path}/invoice-${widget.entry.reference}.pdf');
+      await file.writeAsBytes(bytes, flush: true);
+      await SharePlus.instance.share(
+        ShareParams(files: [XFile(file.path, mimeType: 'application/pdf')]),
+      );
+    } on Object catch (_) {
+      if (mounted) {
+        setState(() => _error = context.strings.t('invoiceFailed'));
+      }
+    } finally {
+      if (mounted) setState(() => _invoiceWorking = false);
     }
   }
 
@@ -190,6 +233,18 @@ class _EntryDetailBodyState extends ConsumerState<_EntryDetailBody> {
               icon: const Icon(Icons.payments_outlined),
               label: Text(strings.t('recordPayment')),
             ),
+          if (entry.type == EntryType.sale && !entry.reversed) ...[
+            const SizedBox(height: 8),
+            OutlinedButton.icon(
+              onPressed: _invoiceWorking ? null : _downloadInvoice,
+              icon: const Icon(Icons.picture_as_pdf_outlined),
+              label: Text(
+                _invoiceWorking
+                    ? strings.t('invoicePreparing')
+                    : strings.t('downloadInvoice'),
+              ),
+            ),
+          ],
           if (!entry.reversed) ...[
             const SizedBox(height: 12),
             TextField(

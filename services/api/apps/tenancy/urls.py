@@ -1,3 +1,4 @@
+from django.urls import path
 from rest_framework.routers import DefaultRouter
 
 from .views import (
@@ -6,6 +7,7 @@ from .views import (
     InvitationViewSet,
     LocationViewSet,
     MembershipViewSet,
+    NotificationPreferenceView,
 )
 
 router = DefaultRouter()
@@ -14,7 +16,13 @@ router.register("locations", LocationViewSet, basename="location")
 router.register("gst-registrations", GSTRegistrationViewSet, basename="gst-registration")
 router.register("memberships", MembershipViewSet, basename="membership")
 router.register("invitations", InvitationViewSet, basename="invitation")
-urlpatterns = router.urls
+urlpatterns = [
+    path(
+        "notification-preferences/",
+        NotificationPreferenceView.as_view(),
+        name="notification-preferences",
+    ),
+] + router.urls
 
 # Router-generated invitation routes (explicit for discoverability):
 #   GET/POST /api/v1/invitations/?business_id=

@@ -157,6 +157,65 @@ export interface Location {
   stateCode: string;
 }
 
+export interface ActivityEvent {
+  id: string;
+  eventType: string;
+  aggregateType: string;
+  actorName: string | null;
+  source: string;
+  metadata: Record<string, unknown>;
+  createdAt: string;
+}
+
+export interface ReminderSuggestion {
+  type: string;
+  partyId: string;
+  partyName: string;
+  amountMinor: number;
+  message: string;
+}
+
+export interface Reminder {
+  id: string;
+  partyId?: string;
+  partyName?: string;
+  channel: string;
+  message: string;
+  amountMinor: number;
+  status: "PENDING" | "SENT" | "FAILED";
+  providerMessageId?: string;
+  sentAt?: string;
+  createdAt: string;
+}
+
+export interface NotificationPrefs {
+  pushEnabled: boolean;
+  smsEnabled: boolean;
+  whatsappEnabled: boolean;
+  dailySummary: boolean;
+  lowStockAlerts: boolean;
+  dueReminders: boolean;
+}
+
+export interface ExportJob {
+  id: string;
+  report: string;
+  format: string;
+  status: "PENDING" | "PROCESSING" | "READY" | "FAILED";
+  error?: string;
+  downloadUrl: string | null;
+  createdAt: string;
+}
+
+export interface Attachment {
+  id: string;
+  kind: string;
+  sale?: string;
+  status: "PENDING" | "READY" | "FAILED";
+  downloadUrl: string | null;
+  createdAt: string;
+}
+
 export interface Bootstrap {
   user: UserProfile;
   business: Business;

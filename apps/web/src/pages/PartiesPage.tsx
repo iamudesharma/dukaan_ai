@@ -6,7 +6,13 @@ import { EmptyState } from "../components/EmptyState";
 import { LoadingBlock } from "../components/LoadingBlock";
 import { PageHeader } from "../components/PageHeader";
 import { StatusBadge } from "../components/StatusBadge";
-import { createParty, getParties, getPartyLedger, postOpeningBalance } from "../data/repository";
+import {
+  createParty,
+  createReminder,
+  getParties,
+  getPartyLedger,
+  postOpeningBalance,
+} from "../data/repository";
 import { formatMoney } from "../lib/format";
 
 export function PartiesPage() {
@@ -28,6 +34,25 @@ export function PartiesPage() {
     queryKey: ["ledger", bootstrap.business.id, ledgerPartyId],
     queryFn: () => getPartyLedger(bootstrap.business.id, ledgerPartyId as string, locationId),
     enabled: ledgerPartyId !== null,
+  });
+  const [reminderNotice, setReminderNotice] = useState<string | null>(null);
+  const remind = useMutation({
+    mutationFn: async (partyId: string) => {
+      const reminder = await createReminder({
+        businessId: bootstrap.business.id,
+        partyId,
+        locationId,
+      });
+      const text = reminder.message;
+      try {
+        if (navigator.share) await navigator.share({ text });
+        else await navigator.clipboard.writeText(text);
+        setReminderNotice(`Reminder ready to share: ${text}`);
+      } catch {
+        setReminderNotice(text);
+      }
+      return reminder;
+    },
   });
   const create = useMutation({
     mutationFn: async () => {
@@ -105,6 +130,7 @@ export function PartiesPage() {
         <div className="filter-row">
           <label className="inline-search wide"><Search /><span className="sr-only">Search parties</span><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search name or phone" /></label>
         </div>
+        {reminderNotice ? <p role="status" className="field-note">{reminderNotice}</p> : null}
         {query.isLoading ? <LoadingBlock /> : parties.length ? (
           <div className="party-grid">
             {parties.map((party) => (
@@ -114,7 +140,7 @@ export function PartiesPage() {
                   <div><span>You will receive</span><strong className="receive-text">{formatMoney(party.receivableMinor)}</strong></div>
                   <div><span>You will pay</span><strong className="pay-text">{formatMoney(party.payableMinor)}</strong></div>
                 </div>
-                <div className="party-actions"><button type="button" onClick={() => setLedgerPartyId(party.id)}>View ledger</button><button type="button"><MessageCircleMore />Share reminder</button></div>
+                <div className="party-actions"><button type="button" onClick={() => setLedgerPartyId(party.id)}>View ledger</button><button type="button" disabled={remind.isPending} onClick={() => remind.mutate(party.id)}><MessageCircleMore />{remind.isPending ? "Preparing…" : "Share reminder"}</button></div>
               </article>
             ))}
           </div>

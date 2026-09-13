@@ -1,6 +1,16 @@
 from django.urls import path
 from rest_framework.routers import DefaultRouter
 
+from .phase3_views import (
+    ActivityView,
+    AttachmentDetailView,
+    ExportDetailView,
+    ExportListCreateView,
+    ReminderDetailView,
+    ReminderListCreateView,
+    ReminderSuggestionsView,
+    SaleInvoiceView,
+)
 from .views import (
     DashboardView,
     DayBookView,
@@ -43,4 +53,12 @@ urlpatterns = [
     path("reports/stock-valuation/", StockValuationView.as_view(), name="stock-valuation"),
     path("reports/party-ledger/", PartyLedgerReportView.as_view(), name="party-ledger-report"),
     path("reports/export/", ReportExportView.as_view(), name="report-export"),
+    path("activity/", ActivityView.as_view(), name="activity"),
+    path("reminders/", ReminderListCreateView.as_view(), name="reminders"),
+    path("reminders/suggestions/", ReminderSuggestionsView.as_view(), name="reminder-suggestions"),
+    path("reminders/<uuid:pk>/", ReminderDetailView.as_view(), name="reminder-detail"),
+    path("exports/", ExportListCreateView.as_view(), name="exports"),
+    path("exports/<uuid:pk>/", ExportDetailView.as_view(), name="export-detail"),
+    path("sales/<uuid:pk>/invoice/", SaleInvoiceView.as_view(), name="sale-invoice"),
+    path("attachments/<uuid:pk>/", AttachmentDetailView.as_view(), name="attachment-detail"),
 ] + router.urls

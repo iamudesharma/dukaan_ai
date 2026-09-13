@@ -8,6 +8,7 @@ from .models import (
     Invitation,
     Location,
     Membership,
+    NotificationPreference,
     OutboxEvent,
 )
 
@@ -18,6 +19,7 @@ admin.site.register(
         Location,
         Membership,
         Invitation,
+        NotificationPreference,
         IdempotencyRecord,
         AuditEvent,
         OutboxEvent,

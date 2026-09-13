@@ -288,3 +288,61 @@ class PasswordResetConfirmView(APIView):
         user.set_password(serializer.validated_data["new_password"])
         user.save(update_fields=["password"])
         return Response({"detail": "Password has been reset."})
+
+
+class DeviceTokenView(APIView):
+    """Register/list the caller's own push device tokens."""
+
+    def get(self, request):
+        from .models import DeviceToken
+
+        tokens = DeviceToken.objects.filter(user=request.user, is_active=True).order_by(
+            "-created_at"
+        )
+        return Response(
+            [
+                {
+                    "id": str(token.pk),
+                    "platform": token.platform,
+                    "is_active": token.is_active,
+                    "created_at": token.created_at,
+                }
+                for token in tokens
+            ]
+        )
+
+    def post(self, request):
+        from rest_framework.exceptions import ValidationError as _ValidationError
+
+        from .models import DeviceToken
+
+        token_value = str(request.data.get("token") or "").strip()
+        if not token_value:
+            raise _ValidationError("token is required")
+        platform = str(request.data.get("platform") or "ANDROID").upper()
+        if platform not in DeviceToken.Platform.values:
+            raise _ValidationError("Unknown platform")
+        token, _ = DeviceToken.objects.update_or_create(
+            token=token_value,
+            defaults={"user": request.user, "platform": platform, "is_active": True},
+        )
+        # A token belongs to exactly one user: re-registration steals it.
+        if token.user_id != request.user.pk:
+            token.user = request.user
+            token.save(update_fields=["user", "platform", "is_active", "updated_at"])
+        return Response(
+            {"id": str(token.pk), "platform": token.platform, "is_active": token.is_active},
+            status=status.HTTP_201_CREATED,
+        )
+
+
+class DeviceTokenDetailView(APIView):
+    def delete(self, request, pk):
+        from django.shortcuts import get_object_or_404
+
+        from .models import DeviceToken
+
+        token = get_object_or_404(DeviceToken, pk=pk, user=request.user)
+        token.is_active = False
+        token.save(update_fields=["is_active", "updated_at"])
+        return Response({"detail": "Device unregistered."})

@@ -15,6 +15,8 @@ import { EmptyState } from "../components/EmptyState";
 import { LoadingBlock } from "../components/LoadingBlock";
 import { PageHeader } from "../components/PageHeader";
 import {
+  createExportJob,
+  downloadExportJob,
   downloadReportCsv,
   getDashboard,
   getDayBook,
@@ -22,6 +24,7 @@ import {
   getGstReport,
   getPartyBalances,
   getStockValuation,
+  waitForExportJob,
 } from "../data/repository";
 import { formatMoney } from "../lib/format";
 import type { ReportKind } from "../types";
@@ -111,6 +114,24 @@ export function ReportsPage() {
         ...range,
       }),
   });
+  const pdfExport = useMutation({
+    mutationFn: async () => {
+      const job = await createExportJob({
+        businessId: bootstrap.business.id,
+        report: active,
+        format: "PDF",
+        locationId,
+        from: range.from,
+        to: range.to,
+        groupBy: active === "sales" || active === "purchases" ? groupBy : undefined,
+      });
+      const ready = await waitForExportJob(job.id);
+      if (ready.status !== "READY") {
+        throw new Error(ready.error || "The PDF export could not be generated.");
+      }
+      await downloadExportJob(ready);
+    },
+  });
 
   const isGrouped = active === "sales" || active === "purchases";
 
@@ -139,6 +160,14 @@ export function ReportsPage() {
             >
               <Download />
               {exportMutation.isPending ? "Exporting…" : "Export CSV"}
+            </button>
+            <button
+              className="secondary-button"
+              onClick={() => pdfExport.mutate()}
+              disabled={pdfExport.isPending}
+            >
+              <Download />
+              {pdfExport.isPending ? "Preparing PDF…" : "Export PDF"}
             </button>
           </>
         }
@@ -346,6 +375,9 @@ export function ReportsPage() {
         ) : null}
         {exportMutation.error ? (
           <p className="form-error" role="alert">{exportMutation.error.message}</p>
+        ) : null}
+        {pdfExport.error ? (
+          <p className="form-error" role="alert">{pdfExport.error.message}</p>
         ) : null}
       </section>
     </>

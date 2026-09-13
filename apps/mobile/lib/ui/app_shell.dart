@@ -80,6 +80,8 @@ class AppShell extends ConsumerWidget {
               switch (value) {
                 case 'team':
                   context.go('/team');
+                case 'activity':
+                  context.go('/activity');
                 case 'settings':
                   context.go('/settings');
                 case 'signout':
@@ -89,6 +91,7 @@ class AppShell extends ConsumerWidget {
             },
             itemBuilder: (context) => [
               PopupMenuItem(value: 'team', child: Text(strings.t('team'))),
+              PopupMenuItem(value: 'activity', child: Text(strings.t('activity'))),
               PopupMenuItem(value: 'settings', child: Text(strings.t('settings'))),
               PopupMenuItem(value: 'signout', child: Text(strings.t('signOut'))),
             ],
