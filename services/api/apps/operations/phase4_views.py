@@ -1,6 +1,9 @@
 """Phase 4 views: bill-media uploads and global search."""
 
 from django.db.models import Q
+from drf_spectacular.types import OpenApiTypes
+from drf_spectacular.utils import OpenApiParameter, extend_schema
+from rest_framework import serializers
 from rest_framework.exceptions import ValidationError
 from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.response import Response
@@ -30,6 +33,11 @@ MIME_TO_KIND = {
 }
 
 
+class AttachmentUploadSerializer(serializers.Serializer):
+    business_id = serializers.UUIDField()
+    file = serializers.FileField()
+
+
 class AttachmentListCreateView(APIView):
     parser_classes = [MultiPartParser, FormParser]
 
@@ -41,6 +49,9 @@ class AttachmentListCreateView(APIView):
         rows = Attachment.objects.filter(business_id=business_id).order_by("-created_at")[:100]
         return Response(AttachmentSerializer(rows, many=True).data)
 
+    @extend_schema(
+        request=AttachmentUploadSerializer, responses=AttachmentSerializer, tags=["attachments"]
+    )
     def post(self, request):
         business_id = request.data.get("business_id")
         if not business_id:
@@ -112,6 +123,14 @@ class SearchView(APIView):
     rows stay manager-visible, mirroring the report gating.
     """
 
+    @extend_schema(
+        parameters=[
+            OpenApiParameter("business_id", OpenApiTypes.UUID, required=True),
+            OpenApiParameter("q", OpenApiTypes.STR, required=True),
+            OpenApiParameter("types", OpenApiTypes.STR, required=False),
+        ],
+        tags=["search"],
+    )
     def get(self, request):
         business_id = request.query_params.get("business_id")
         query = (request.query_params.get("q") or "").strip()

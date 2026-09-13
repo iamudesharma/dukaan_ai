@@ -1,4 +1,5 @@
 import { apiRequest, apiUrl, newIdempotencyKey } from "../lib/api";
+import type { components } from "../lib/api-schema";
 import { accessToken, demoMode, getRefreshToken } from "../lib/supabase";
 import type {
   ActivityEvent,
@@ -211,19 +212,17 @@ export async function interpretCommand(
     await delay(550);
     return interpretDemoCommand(text, locationId);
   }
+  const body: components["schemas"]["Interpret"] = {
+    business_id: businessId,
+    input_type: (options.inputType ?? "TEXT") as components["schemas"]["Interpret"]["input_type"],
+    content: text,
+    location_id: locationId,
+    locale: "en-IN",
+    ...(options.attachmentIds?.length ? { attachment_ids: options.attachmentIds } : {}),
+  };
   const raw = await apiRequest<Record<string, unknown>>(
     "/api/v1/assistant/proposals/",
-    {
-      method: "POST",
-      body: {
-        business_id: businessId,
-        input_type: options.inputType ?? "TEXT",
-        content: text,
-        location_id: locationId,
-        locale: "en-IN",
-        ...(options.attachmentIds?.length ? { attachment_ids: options.attachmentIds } : {}),
-      },
-    },
+    { method: "POST", body },
   );
   return mapProposal(raw, businessId, locationId, text);
 }
@@ -534,6 +533,12 @@ export async function recordManualSale(input: ManualSaleInput): Promise<Entry> {
       }],
       paid_amount_minor: input.paidMinor,
       payment_method: input.paymentMode,
+      ...(input.negativeStockAcknowledged
+        ? {
+            negative_stock_acknowledged: true,
+            negative_stock_reason: input.negativeStockReason ?? "",
+          }
+        : {}),
     },
   });
   return {

@@ -96,19 +96,35 @@ def test_app_role_sees_only_scoped_business(two_tenants, app_connection):
         assert cursor.fetchone()[0] == 0
 
 
+def _smuggle_product(cursor, business_id, name: str, sku: str):
+    """INSERT a fully-valid product row into another business.
+
+    Copies an existing in-scope row so the statement stays valid as columns
+    are added; only the RLS policy may reject it.
+    """
+    cursor.execute("SELECT * FROM catalog_product LIMIT 1")
+    columns = [column[0] for column in cursor.description]
+    template = cursor.fetchone()
+    assert template is not None
+    values = dict(zip(columns, template, strict=True))
+    values["id"] = str(uuid.uuid4())
+    values["business_id"] = str(business_id)
+    values["name"] = name
+    values["sku"] = sku
+    placeholders = ", ".join(["%s"] * len(columns))
+    cursor.execute(
+        f"INSERT INTO catalog_product ({', '.join(columns)}) VALUES ({placeholders})",
+        [values[column] for column in columns],
+    )
+
+
 @requires_postgres
 def test_cross_tenant_write_is_rejected(two_tenants, app_connection):
     users, businesses = two_tenants
     rls.set_tenant_scope(app_connection, user_id=users[0].pk, business_ids=[str(businesses[0].pk)])
     with app_connection.cursor() as cursor:
         with pytest.raises(DatabaseError, match="row-level security policy"):
-            cursor.execute(
-                "INSERT INTO catalog_product "
-                "(id, created_at, updated_at, business_id, name, base_unit, "
-                "track_inventory, tax_rate_bps, low_stock_threshold, is_active) "
-                "VALUES (%s, now(), now(), %s, 'smuggled', 'PIECE', true, 0, 0, true)",
-                [str(uuid.uuid4()), str(businesses[1].pk)],
-            )
+            _smuggle_product(cursor, businesses[1].pk, "smuggled", "SMUGGLED")
 
 
 @requires_postgres
@@ -119,16 +135,14 @@ def test_owner_writes_outside_scope_are_rejected(two_tenants):
     params = dict(connection.settings_dict)
     wrapper = load_backend(params["ENGINE"]).DatabaseWrapper(params, "rls_owner_probe")
     try:
+        with wrapper.cursor() as cursor:
+            cursor.execute("SELECT rolbypassrls FROM pg_roles WHERE rolname = CURRENT_USER")
+            if cursor.fetchone()[0]:
+                pytest.skip("Migration role bypasses RLS; FORCE RLS is proven in CI as owner")
         rls.set_tenant_scope(wrapper, business_ids=[str(businesses[0].pk)])
         with wrapper.cursor() as cursor:
             with pytest.raises(DatabaseError, match="row-level security policy"):
-                cursor.execute(
-                    "INSERT INTO catalog_product "
-                    "(id, created_at, updated_at, business_id, name, base_unit, "
-                    "track_inventory, tax_rate_bps, low_stock_threshold, is_active) "
-                    "VALUES (%s, now(), now(), %s, 'owner-smuggled', 'PIECE', true, 0, 0, true)",
-                    [str(uuid.uuid4()), str(businesses[1].pk)],
-                )
+                _smuggle_product(cursor, businesses[1].pk, "owner-smuggled", "OWNER-SMUGGLED")
     finally:
         wrapper.close()
 
@@ -202,3 +216,119 @@ def test_sale_lines_are_scoped_with_their_sale(shop, app_connection):
         cursor.execute("SELECT count(*) FROM operations_saleline")
         assert cursor.fetchone()[0] == 0
     assert Sale.objects.filter(pk=sale.pk).exists()
+
+
+PHASE_TABLES = (
+    "tenancy_invitation",
+    "tenancy_notificationpreference",
+    "operations_reminder",
+    "operations_exportjob",
+    "operations_attachment",
+)
+
+
+@pytest.fixture
+def phase_rows(two_tenants):
+    """One row per Phase 2-4 table in each tenant."""
+    from datetime import timedelta
+
+    from django.utils import timezone
+
+    from apps.catalog.models import Party
+    from apps.operations.models import Attachment, ExportJob, Reminder
+    from apps.tenancy.models import Invitation, NotificationPreference
+
+    users, businesses = two_tenants
+    parties = {}
+    for user, business in zip(users, businesses, strict=True):
+        location = business.locations.get()
+        party = Party.objects.create(business=business, name="RLS party", kind="CUSTOMER")
+        parties[business.pk] = party
+        Invitation.objects.create(
+            business=business,
+            phone_e164="+910000000000",
+            role="CASHIER",
+            invited_by=user,
+            expires_at=timezone.now() + timedelta(days=7),
+        )
+        NotificationPreference.objects.create(business=business, user=user)
+        Reminder.objects.create(
+            business=business,
+            location=location,
+            party=party,
+            channel="SHARE",
+            message="RLS reminder",
+            requested_by=user,
+        )
+        ExportJob.objects.create(
+            business=business, requested_by=user, report="sales", format="CSV", params={}
+        )
+        Attachment.objects.create(
+            business=business, kind="upload-photo", uploaded_by=user, status="READY"
+        )
+    return users, businesses, parties
+
+
+@requires_postgres
+def test_phase_tables_are_fail_closed_without_scope(phase_rows, app_connection):
+    with app_connection.cursor() as cursor:
+        for table in PHASE_TABLES:
+            cursor.execute(f"SELECT count(*) FROM {table}")
+            assert cursor.fetchone()[0] == 0, table
+
+
+@requires_postgres
+def test_phase_tables_show_only_scoped_business(phase_rows, app_connection):
+    users, businesses, _ = phase_rows
+    rls.set_tenant_scope(app_connection, user_id=users[0].pk, business_ids=[str(businesses[0].pk)])
+    with app_connection.cursor() as cursor:
+        for table in PHASE_TABLES:
+            cursor.execute(f"SELECT count(*) FROM {table}")
+            assert cursor.fetchone()[0] == 1, table
+            cursor.execute(
+                f"SELECT count(*) FROM {table} WHERE business_id = %s",
+                [str(businesses[1].pk)],
+            )
+            assert cursor.fetchone()[0] == 0, table
+
+
+@requires_postgres
+def test_phase_table_cross_tenant_write_is_rejected(phase_rows, app_connection):
+    """Copy a valid in-scope reminder row; retargeting it must fail at the DB."""
+    users, businesses, parties = phase_rows
+    rls.set_tenant_scope(app_connection, user_id=users[0].pk, business_ids=[str(businesses[0].pk)])
+    with app_connection.cursor() as cursor:
+        cursor.execute("SELECT * FROM operations_reminder LIMIT 1")
+        columns = [column[0] for column in cursor.description]
+        template = cursor.fetchone()
+        assert template is not None
+        values = dict(zip(columns, template, strict=True))
+        values["id"] = str(uuid.uuid4())
+        values["business_id"] = str(businesses[1].pk)
+        values["party_id"] = str(parties[businesses[1].pk].pk)
+        placeholders = ", ".join(["%s"] * len(columns))
+        with pytest.raises(DatabaseError, match="row-level security policy"):
+            cursor.execute(
+                f"INSERT INTO operations_reminder ({', '.join(columns)}) VALUES ({placeholders})",
+                [values[column] for column in columns],
+            )
+
+
+@requires_postgres
+def test_phase_table_scoped_write_succeeds(phase_rows, app_connection):
+    """The app role keeps its grants on new tables: in-scope writes work."""
+    users, businesses, parties = phase_rows
+    rls.set_tenant_scope(app_connection, user_id=users[0].pk, business_ids=[str(businesses[0].pk)])
+    with app_connection.cursor() as cursor:
+        cursor.execute("SELECT * FROM operations_reminder LIMIT 1")
+        columns = [column[0] for column in cursor.description]
+        template = cursor.fetchone()
+        values = dict(zip(columns, template, strict=True))
+        values["id"] = str(uuid.uuid4())
+        placeholders = ", ".join(["%s"] * len(columns))
+        cursor.execute(
+            f"INSERT INTO operations_reminder ({', '.join(columns)}) VALUES ({placeholders})",
+            [values[column] for column in columns],
+        )
+        cursor.execute("SELECT count(*) FROM operations_reminder")
+        assert cursor.fetchone()[0] == 2

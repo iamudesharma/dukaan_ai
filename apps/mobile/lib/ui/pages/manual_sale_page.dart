@@ -1,4 +1,5 @@
 import 'package:decimal/decimal.dart';
+import 'package:dio/dio.dart';
 import 'package:dukaan_ai_mobile/core/config.dart';
 import 'package:dukaan_ai_mobile/core/formatters.dart';
 import 'package:dukaan_ai_mobile/domain/models.dart';
@@ -33,6 +34,9 @@ class _ManualSalePageState extends ConsumerState<ManualSalePage> {
   bool _draftSaved = false;
   String? _error;
   String? _resumedDraftId;
+  bool _needsStockAck = false;
+  bool _stockAck = false;
+  final _stockReason = TextEditingController();
 
   @override
   void initState() {
@@ -57,6 +61,7 @@ class _ManualSalePageState extends ConsumerState<ManualSalePage> {
     _quantity.dispose();
     _price.dispose();
     _paid.dispose();
+    _stockReason.dispose();
     super.dispose();
   }
 
@@ -308,6 +313,34 @@ class _ManualSalePageState extends ConsumerState<ManualSalePage> {
             style: TextStyle(color: Theme.of(context).colorScheme.error),
           ),
         ],
+        if (_needsStockAck) ...[
+          const SizedBox(height: 10),
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  CheckboxListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: Text(context.strings.t('confirmNegativeStock')),
+                    value: _stockAck,
+                    onChanged: (value) => setState(() => _stockAck = value ?? false),
+                  ),
+                  TextField(
+                    controller: _stockReason,
+                    decoration: InputDecoration(
+                      labelText: context.strings.t('reversalReason'),
+                      hintText: context.strings.t('stockReasonHint'),
+                    ),
+                    minLines: 1,
+                    maxLines: 3,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
         const SizedBox(height: 18),
         FilledButton.icon(
           key: const Key('confirm-sale-button'),
@@ -448,7 +481,22 @@ class _ManualSalePageState extends ConsumerState<ManualSalePage> {
         ref.invalidate(localDraftsProvider);
         if (mounted) setState(() => _draftSaved = true);
       } else {
-        final result = await ref.read(repositoryProvider).createSale(draft);
+        final acknowledged = SaleDraft(
+          id: draft.id,
+          businessId: draft.businessId,
+          locationId: draft.locationId,
+          customerId: draft.customerId,
+          customerName: draft.customerName,
+          lines: draft.lines,
+          paidAmountMinor: draft.paidAmountMinor,
+          priceMode: draft.priceMode,
+          paymentMethod: draft.paymentMethod,
+          paymentReference: draft.paymentReference,
+          createdAt: draft.createdAt,
+          negativeStockAcknowledged: _stockAck,
+          negativeStockReason: _stockReason.text.trim(),
+        );
+        final result = await ref.read(repositoryProvider).createSale(acknowledged);
         if (_resumedDraftId != null) {
           await ref.read(draftStoreProvider).deleteDraft(_resumedDraftId!);
           ref.invalidate(localDraftsProvider);
@@ -458,13 +506,46 @@ class _ManualSalePageState extends ConsumerState<ManualSalePage> {
           ..invalidate(entriesProvider)
           ..invalidate(productsProvider)
           ..invalidate(partiesProvider);
-        if (mounted) setState(() => _result = result);
+        if (mounted) {
+          setState(() {
+            _result = result;
+            _needsStockAck = false;
+          });
+        }
       }
     } on Object catch (error) {
-      if (mounted) setState(() => _error = error.toString());
+      if (mounted) {
+        setState(() {
+          _error = _friendlySaleError(error);
+          _needsStockAck = _isStockConfirmation(error);
+        });
+      }
     } finally {
       if (mounted) setState(() => _saving = false);
     }
+  }
+
+  bool _isStockConfirmation(Object error) {
+    if (error is! DioException) return false;
+    final data = error.response?.data;
+    if (data is! Map) return false;
+    final detail = (data['error'] is Map) ? data['error']['detail'] : data['detail'];
+    if (detail is Map) return detail['code'] == 'negative_stock_confirmation_required';
+    return false;
+  }
+
+  String _friendlySaleError(Object error) {
+    if (error is DioException) {
+      final data = error.response?.data;
+      if (data is Map) {
+        final detail = (data['error'] is Map) ? data['error']['detail'] : data['detail'];
+        if (detail is Map && detail['message'] is String) {
+          return (detail['message'] as String).toString();
+        }
+        if (detail is String && detail.isNotEmpty) return detail;
+      }
+    }
+    return error.toString();
   }
 
   Product? _selectedProduct(List<Product> products) {

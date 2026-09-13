@@ -7,6 +7,8 @@ analyzer:
     - windows/**
     - macos/**
     - linux/**
+    # Generated OpenAPI client: owned by `make mobile-gen`, not hand-edited.
+    - packages/dukaan_api_client/**
 include: package:flutter_lints/flutter.yaml
 
 linter:

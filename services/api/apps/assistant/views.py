@@ -1,5 +1,6 @@
 from django.db import transaction
 from django.db.models import Q
+from drf_spectacular.utils import extend_schema
 from rest_framework import mixins, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import PermissionDenied
@@ -67,6 +68,9 @@ class ProposalViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, viewsets
         proposal = self.get_object()
         return Response(list(proposal.revisions.values("version", "snapshot", "created_at")))
 
+    @extend_schema(
+        request=InterpretSerializer, responses=AssistantProposalSerializer, tags=["assistant"]
+    )
     def create(self, request):
         serializer = InterpretSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)

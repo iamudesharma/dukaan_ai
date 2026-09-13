@@ -276,6 +276,8 @@ export interface ManualSaleInput {
   paidMinor: number;
   paymentMode: "CASH" | "UPI" | "CARD" | "BANK" | "OTHER";
   priceMode: "RETAIL" | "WHOLESALE";
+  negativeStockAcknowledged?: boolean;
+  negativeStockReason?: string;
 }
 
 export interface Party {

@@ -8,7 +8,7 @@ MOBILE_DIR := apps/mobile
 
 .DEFAULT_GOAL := help
 
-.PHONY: help infra-up infra-down infra-reset infra-logs api-install api-migrate api-migrations-check api-run api-worker api-dispatch api-lint api-test api-check web-install web-dev web-check mobile-install mobile-run mobile-check mobile-release-smoke check config-check
+.PHONY: help infra-up infra-down infra-reset infra-logs api-install api-migrate api-migrations-check api-run api-worker api-dispatch api-lint api-test api-check api-schema web-install web-dev web-check web-e2e mobile-install mobile-run mobile-check mobile-gen mobile-release-smoke check config-check
 
 help: ## Show the available commands.
 	@awk 'BEGIN {FS = ":.*## "; printf "DukaanAI development commands\n\n"} /^[a-zA-Z0-9_-]+:.*## / {printf "  %-24s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -50,6 +50,9 @@ api-lint: ## Lint and check formatting for the API.
 api-test: ## Run API tests.
 	cd $(API_DIR) && $(UV) run --locked pytest
 
+api-schema: ## Regenerate the committed OpenAPI contract from the code.
+	cd $(API_DIR) && $(UV) run --locked python manage.py spectacular --file ../../docs/api/openapi.yml
+
 api-check: api-migrations-check api-lint api-test ## Run all API checks.
 
 web-install: ## Install the stable-host web client dependencies reproducibly.
@@ -63,8 +66,14 @@ web-check: ## Type-check, test, and build the stable-host web client.
 	npm run test:web
 	npm run build:web
 
+web-e2e: ## Golden-path browser test (needs the API on DUKAAN_API_URL).
+	cd apps/web && DUKAAN_API_URL=$${DUKAAN_API_URL:-http://127.0.0.1:8000} npx playwright test
+
 mobile-install: ## Install Flutter dependencies.
 	cd $(MOBILE_DIR) && flutter pub get
+
+mobile-gen: ## Regenerate the Dart OpenAPI client from docs/api/openapi.yml.
+	openapi-generator generate -g dart -i docs/api/openapi.yml -o $(MOBILE_DIR)/packages/dukaan_api_client
 
 mobile-run: ## Run the Flutter app on a connected target.
 	cd $(MOBILE_DIR) && flutter run
