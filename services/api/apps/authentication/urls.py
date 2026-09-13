@@ -2,6 +2,7 @@ from django.urls import path
 
 from .views import (
     LoginView,
+    LogoutAllView,
     LogoutView,
     OtpSendView,
     OtpVerifyView,
@@ -19,6 +20,7 @@ urlpatterns = [
     path("auth/otp/verify/", OtpVerifyView.as_view(), name="auth-otp-verify"),
     path("auth/refresh/", RefreshView.as_view(), name="auth-refresh"),
     path("auth/logout/", LogoutView.as_view(), name="auth-logout"),
+    path("auth/logout-all/", LogoutAllView.as_view(), name="auth-logout-all"),
     path("auth/password/change/", PasswordChangeView.as_view(), name="auth-password-change"),
     path("auth/password/reset/", PasswordResetRequestView.as_view(), name="auth-password-reset"),
     path(

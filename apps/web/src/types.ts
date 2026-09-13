@@ -14,6 +14,7 @@ export interface Business {
   gstin?: string;
   currency: "INR";
   timezone: "Asia/Kolkata";
+  defaultPriceMode?: "RETAIL" | "WHOLESALE";
 }
 
 export interface BusinessDetail extends Business {
@@ -46,10 +47,23 @@ export interface GstRegistration {
 export interface Membership {
   id: string;
   user: string;
+  userName?: string;
+  userPhone?: string;
   business: string;
   role: Role;
   locations: string[];
   isActive?: boolean;
+}
+
+export interface Invitation {
+  id: string;
+  business: string;
+  phoneE164: string;
+  role: Role;
+  locations: string[];
+  status: "PENDING" | "ACCEPTED" | "REVOKED" | "EXPIRED";
+  expiresAt: string;
+  createdAt: string;
 }
 
 export interface MeProfile {

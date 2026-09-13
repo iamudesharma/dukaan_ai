@@ -17,6 +17,10 @@ Respond ONLY with valid JSON in this exact format:
 {
   "command_type": "SALE|PURCHASE|PAYMENT|EXPENSE",
   "customer_name": "string or null",
+  "supplier_name": "string or null",
+  "direction": "RECEIPT|PAYMENT or null",
+  "category": "string or null (for expenses: Rent, Electricity, Transport)",
+  "payee": "string or null (for expenses)",
   "items": [{"product": "string", "quantity": number, "unit_price_minor": number}],
   "total_minor": number,
   "paid_minor": number,
@@ -26,6 +30,11 @@ Respond ONLY with valid JSON in this exact format:
 
 Rules:
 - All amounts are in paise (1 rupee = 100 paise). Convert ₹2,400 to 240000.
+- SALE: a customer bought goods. Set customer_name.
+- PURCHASE: the shop bought goods from a supplier. Set supplier_name; unit_price_minor is cost.
+- PAYMENT: money changed hands against an earlier bill. Set direction and the party name
+  in customer_name (RECEIPT) or supplier_name (PAYMENT); total_minor is the amount.
+- EXPENSE: shop spending with no goods for resale. Set category and total_minor.
 - If information is missing, use blocking_questions to ask for it.
 - If the input is unclear, set command_type to "UNKNOWN" and explain in blocking_questions.
 - quantity should be a number (can be decimal for weights like 2.5).
@@ -36,6 +45,10 @@ Rules:
 class Interpretation:
     command_type: str = "UNKNOWN"
     customer_name: str | None = None
+    supplier_name: str | None = None
+    direction: str | None = None
+    category: str | None = None
+    payee: str | None = None
     items: list[dict] = field(default_factory=list)
     total_minor: int = 0
     paid_minor: int = 0
@@ -97,6 +110,10 @@ class ChatGPTService:
         return Interpretation(
             command_type=data.get("command_type", "UNKNOWN"),
             customer_name=data.get("customer_name"),
+            supplier_name=data.get("supplier_name"),
+            direction=data.get("direction"),
+            category=data.get("category"),
+            payee=data.get("payee"),
             items=data.get("items", []),
             total_minor=int(data.get("total_minor", 0)),
             paid_minor=int(data.get("paid_minor", 0)),

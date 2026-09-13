@@ -101,6 +101,28 @@ class FakeDukaanRepository implements DukaanRepository {
   Future<void> deleteMembership(String id) async {}
 
   @override
+  Future<Membership> revokeMembership(String id) async =>
+      const Membership(id: 'membership-test', businessId: 'business-test', role: 'OWNER');
+
+  @override
+  Future<List<Invitation>> listInvitations({String? businessId}) async => const [];
+
+  @override
+  Future<Map<String, dynamic>> createInvitation(Map<String, dynamic> payload) async =>
+      {'id': 'invitation-test', 'token': 'token-test'};
+
+  @override
+  Future<void> revokeInvitation(String id) async {}
+
+  @override
+  Future<Membership> acceptInvitation({required String id, required String token}) async =>
+      const Membership(id: 'membership-test', businessId: 'business-test', role: 'OWNER');
+
+  @override
+  Future<Map<String, dynamic>> updateProfile(Map<String, dynamic> payload) async =>
+      {'id': 'user-test'};
+
+  @override
   Future<Product> fetchProduct(String id) async => product;
 
   @override

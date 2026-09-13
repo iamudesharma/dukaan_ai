@@ -22,8 +22,21 @@ import { StatusBadge } from "../../components/StatusBadge";
 
 const example = "Ramesh bought 3 shirts for ₹2,400, paid ₹1,500, ₹900 pending.";
 
+function intentLabel(intent: AssistantProposal["intent"]): string {
+  switch (intent) {
+    case "RECORD_PURCHASE":
+      return "Purchase";
+    case "RECORD_PAYMENT":
+      return "Payment";
+    case "RECORD_EXPENSE":
+      return "Expense";
+    default:
+      return "Sale";
+  }
+}
+
 export function AssistantPanel() {
-  const { assistantOpen, closeAssistant, bootstrap, locationId } = useWorkspace();
+  const { assistantOpen, closeAssistant, bootstrap, locationId, openManualSale } = useWorkspace();
   const [text, setText] = useState("");
   const [proposal, setProposal] = useState<AssistantProposal | null>(null);
   const [editing, setEditing] = useState(false);
@@ -169,7 +182,7 @@ export function AssistantPanel() {
               <div className="capture-options" aria-label="Other ways to add an entry">
                 <button type="button"><Mic />Speak<span>Voice command</span></button>
                 <button type="button"><ReceiptIndianRupee />Scan bill<span>Photo or PDF</span></button>
-                <button type="button"><ChevronRight />Manual<span>Use a form</span></button>
+                <button type="button" onClick={() => { closeAssistant(); openManualSale(); }}><ChevronRight />Manual<span>Use a form</span></button>
               </div>
               <button type="button" className="text-button" onClick={() => void loadHistory()}>View past proposals</button>
               {historyOpen ? (
@@ -188,7 +201,7 @@ export function AssistantPanel() {
               <div className="review-heading">
                 <div>
                   <p className="eyebrow">Review version {proposal.version}</p>
-                  <h3>{proposal.intent === "RECORD_SALE" ? "Sale" : proposal.intent.replaceAll("_", " ").toLowerCase()}</h3>
+                  <h3>{intentLabel(proposal.intent)}</h3>
                 </div>
                 <StatusBadge tone={proposal.status === "READY" ? "positive" : "warning"}>
                   {proposal.status === "READY" ? "Ready" : "Needs details"}
@@ -244,7 +257,7 @@ export function AssistantPanel() {
                   onClick={() => confirm.mutate(proposal)}
                 >
                   {confirm.isPending ? <LoaderCircle className="spin" aria-hidden="true" /> : <Check aria-hidden="true" />}
-                  {confirm.isPending ? "Recording…" : `Record sale ${formatMoney(proposal.totalMinor)}`}
+                  {confirm.isPending ? "Recording…" : `Record ${intentLabel(proposal.intent).toLowerCase()} ${formatMoney(proposal.totalMinor)}`}
                 </button>
               </div>
               <button type="button" className="secondary-button" disabled={refresh.isPending || confirm.isPending}

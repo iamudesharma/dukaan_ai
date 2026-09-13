@@ -40,6 +40,12 @@ abstract interface class DukaanRepository {
   Future<Membership> createMembership(Map<String, dynamic> payload);
   Future<Membership> updateMembership(String id, Map<String, dynamic> payload);
   Future<void> deleteMembership(String id);
+  Future<Membership> revokeMembership(String id);
+  Future<List<Invitation>> listInvitations({String? businessId});
+  Future<Map<String, dynamic>> createInvitation(Map<String, dynamic> payload);
+  Future<void> revokeInvitation(String id);
+  Future<Membership> acceptInvitation({required String id, required String token});
+  Future<Map<String, dynamic>> updateProfile(Map<String, dynamic> payload);
 
   // Catalog detail + write.
   Future<Product> fetchProduct(String id);
@@ -383,6 +389,50 @@ class ApiDukaanRepository implements DukaanRepository {
   }
 
   @override
+  Future<Membership> revokeMembership(String id) async {
+    final response = await _dio.post<Object>('memberships/$id/revoke/');
+    return Membership.fromJson(_object(response.data));
+  }
+
+  @override
+  Future<List<Invitation>> listInvitations({String? businessId}) async {
+    final resolved = businessId ?? await _resolveBusinessId();
+    final response = await _dio.get<Object>(
+      'invitations/',
+      queryParameters: {'business_id': resolved, 'status': 'PENDING'},
+    );
+    return _rows(response.data).map(Invitation.fromJson).toList(growable: false);
+  }
+
+  @override
+  Future<Map<String, dynamic>> createInvitation(Map<String, dynamic> payload) async {
+    final data = Map<String, dynamic>.from(payload);
+    data['business'] ??= await _resolveBusinessId();
+    final response = await _dio.post<Object>('invitations/', data: data);
+    return _object(response.data);
+  }
+
+  @override
+  Future<void> revokeInvitation(String id) async {
+    await _dio.post<Object>('invitations/$id/revoke/');
+  }
+
+  @override
+  Future<Membership> acceptInvitation({required String id, required String token}) async {
+    final response = await _dio.post<Object>(
+      'invitations/$id/accept/',
+      data: {'token': token},
+    );
+    return Membership.fromJson(_object(response.data));
+  }
+
+  @override
+  Future<Map<String, dynamic>> updateProfile(Map<String, dynamic> payload) async {
+    final response = await _dio.patch<Object>('me/', data: payload);
+    return _object(response.data);
+  }
+
+  @override
   Future<Product> fetchProduct(String id) async {
     final response = await _dio.get<Object>('products/$id/');
     return Product.fromJson(_object(response.data));
@@ -711,6 +761,11 @@ class ApiDukaanRepository implements DukaanRepository {
     final partyName = party is Map
         ? party['name']
         : json['customer_name'] ?? json['supplier_name'] ?? json['party_name'];
+    final partyId = party is String && party.isNotEmpty
+        ? party
+        : party is Map && party['id'] != null
+            ? party['id'].toString()
+            : null;
     final reference = [json['invoice_number'], json['reference'], json['number']]
         .map((value) => value?.toString() ?? '')
         .firstWhere(
@@ -722,6 +777,7 @@ class ApiDukaanRepository implements DukaanRepository {
       type: type,
       reference: reference,
       partyName: (partyName ?? 'Walk-in').toString(),
+      partyId: partyId,
       totalMinor: minorFromRecord(
         json,
         type == EntryType.expense
@@ -1146,6 +1202,32 @@ class DemoDukaanRepository implements DukaanRepository {
 
   @override
   Future<void> deleteMembership(String id) => _pause(null);
+
+  @override
+  Future<Membership> revokeMembership(String id) => _pause(
+        const Membership(id: 'membership-demo', businessId: 'business-demo', role: 'OWNER'),
+      );
+
+  @override
+  Future<List<Invitation>> listInvitations({String? businessId}) => _pause(const []);
+
+  @override
+  Future<Map<String, dynamic>> createInvitation(Map<String, dynamic> payload) => _pause(
+        {'id': 'invitation-demo', 'token': 'demo-token'},
+      );
+
+  @override
+  Future<void> revokeInvitation(String id) => _pause(null);
+
+  @override
+  Future<Membership> acceptInvitation({required String id, required String token}) => _pause(
+        const Membership(id: 'membership-demo', businessId: 'business-demo', role: 'CASHIER'),
+      );
+
+  @override
+  Future<Map<String, dynamic>> updateProfile(Map<String, dynamic> payload) => _pause(
+        {'id': 'user-demo'},
+      );
 
   @override
   Future<Product> fetchProduct(String id) =>

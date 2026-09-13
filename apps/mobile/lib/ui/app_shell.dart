@@ -14,7 +14,7 @@ class AppShell extends ConsumerWidget {
   static const _paths = ['/today', '/entries', '/ask', '/stock', '/parties'];
 
   int get _selectedIndex {
-    if (currentPath.startsWith('/sale/')) return 1;
+    if (currentPath.startsWith('/sale/') || currentPath.startsWith('/quick/')) return 1;
     final index = _paths.indexWhere(currentPath.startsWith);
     return index < 0 ? 0 : index;
   }
@@ -72,6 +72,26 @@ class AppShell extends ConsumerWidget {
             tooltip: strings.t('reports'),
             onPressed: () => context.go('/reports'),
             icon: const Icon(Icons.bar_chart_rounded),
+          ),
+          PopupMenuButton<String>(
+            tooltip: strings.t('more'),
+            icon: const Icon(Icons.more_vert_rounded),
+            onSelected: (value) async {
+              switch (value) {
+                case 'team':
+                  context.go('/team');
+                case 'settings':
+                  context.go('/settings');
+                case 'signout':
+                  await ref.read(authApiProvider).logout();
+                  bumpSession(ref);
+              }
+            },
+            itemBuilder: (context) => [
+              PopupMenuItem(value: 'team', child: Text(strings.t('team'))),
+              PopupMenuItem(value: 'settings', child: Text(strings.t('settings'))),
+              PopupMenuItem(value: 'signout', child: Text(strings.t('signOut'))),
+            ],
           ),
           IconButton(
             tooltip: strings.t('changeLanguage'),

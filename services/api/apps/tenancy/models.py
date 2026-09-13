@@ -1,3 +1,5 @@
+import uuid
+
 from django.conf import settings
 from django.core.validators import RegexValidator
 from django.db import models
@@ -17,6 +19,7 @@ class Business(UUIDModel):
     timezone = models.CharField(max_length=64, default="Asia/Kolkata")
     gst_enabled = models.BooleanField(default=False)
     negative_stock_allowed = models.BooleanField(default=True)
+    default_price_mode = models.CharField(max_length=10, default="RETAIL")
     is_active = models.BooleanField(default=True)
 
     class Meta:
@@ -85,6 +88,37 @@ class Membership(UUIDModel):
         constraints = [
             models.UniqueConstraint(fields=["user", "business"], name="uniq_user_business")
         ]
+
+
+class Invitation(UUIDModel):
+    """Invite a phone number to join a business.
+
+    The invitee accepts with an unguessable token after signing in with the
+    matching phone number; acceptance creates the membership. Tokens never
+    grant access on their own."""
+
+    class Status(models.TextChoices):
+        PENDING = "PENDING", "Pending"
+        ACCEPTED = "ACCEPTED", "Accepted"
+        REVOKED = "REVOKED", "Revoked"
+        EXPIRED = "EXPIRED", "Expired"
+
+    business = models.ForeignKey(Business, on_delete=models.PROTECT, related_name="invitations")
+    phone_e164 = models.CharField(max_length=20, db_index=True)
+    role = models.CharField(max_length=10, choices=Membership.Role.choices)
+    locations = models.ManyToManyField(Location, blank=True, related_name="invitations")
+    token = models.UUIDField(default=uuid.uuid4, editable=False)
+    status = models.CharField(max_length=10, choices=Status.choices, default=Status.PENDING)
+    invited_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="sent_invitations"
+    )
+    expires_at = models.DateTimeField()
+
+    class Meta:
+        indexes = [models.Index(fields=["business", "status", "created_at"])]
+
+    def __str__(self) -> str:
+        return f"Invite {self.phone_e164} to {self.business_id} as {self.role}"
 
 
 class IdempotencyRecord(UUIDModel):

@@ -40,3 +40,22 @@ class BlacklistedToken(models.Model):
 
     def __str__(self) -> str:
         return f"Blacklisted token {self.token_jti}"
+
+
+class SessionRevocation(models.Model):
+    """Forces every session of a user to re-authenticate.
+
+    JWTs are stateless, so individual refresh tokens cannot be enumerated.
+    Instead this records the moment before which no token is honored: any
+    access or refresh token with ``iat`` at or before ``revoked_at`` is
+    rejected. Set by "sign out everywhere" and by membership revocation."""
+
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="session_revocation"
+    )
+    revoked_at = models.DateTimeField()
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self) -> str:
+        return f"Session revocation for {self.user_id}"

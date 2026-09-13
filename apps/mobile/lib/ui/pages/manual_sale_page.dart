@@ -32,6 +32,25 @@ class _ManualSalePageState extends ConsumerState<ManualSalePage> {
   bool _saving = false;
   bool _draftSaved = false;
   String? _error;
+  String? _resumedDraftId;
+
+  @override
+  void initState() {
+    super.initState();
+    final resume = ref.read(saleDraftResumeProvider);
+    if (resume != null && resume.lines.isNotEmpty) {
+      final line = resume.lines.first;
+      _productId = line.productId;
+      _customerId = resume.customerId;
+      _quantity.text = line.quantity.toString();
+      _price.text = minorToInput(line.unitPriceMinor);
+      _paid.text = minorToInput(resume.paidAmountMinor);
+      _priceMode = resume.priceMode;
+      _paymentMethod = resume.paymentMethod;
+      _resumedDraftId = resume.id;
+      ref.read(saleDraftResumeProvider.notifier).state = null;
+    }
+  }
 
   @override
   void dispose() {
@@ -430,6 +449,10 @@ class _ManualSalePageState extends ConsumerState<ManualSalePage> {
         if (mounted) setState(() => _draftSaved = true);
       } else {
         final result = await ref.read(repositoryProvider).createSale(draft);
+        if (_resumedDraftId != null) {
+          await ref.read(draftStoreProvider).deleteDraft(_resumedDraftId!);
+          ref.invalidate(localDraftsProvider);
+        }
         ref
           ..invalidate(dashboardProvider)
           ..invalidate(entriesProvider)

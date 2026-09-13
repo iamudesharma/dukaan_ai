@@ -130,6 +130,7 @@ class BusinessEntry {
     required this.type,
     required this.reference,
     required this.partyName,
+    this.partyId,
     required this.totalMinor,
     required this.pendingMinor,
     required this.occurredAt,
@@ -140,6 +141,8 @@ class BusinessEntry {
   final EntryType type;
   final String reference;
   final String partyName;
+  /// Server party UUID when the document names one; null for walk-in/cash.
+  final String? partyId;
   final int totalMinor;
   final int pendingMinor;
   final DateTime occurredAt;
@@ -525,6 +528,8 @@ class Membership {
     required this.id,
     required this.businessId,
     this.userId = '',
+    this.userName = '',
+    this.userPhone = '',
     required this.role,
     this.isActive = true,
   });
@@ -532,6 +537,8 @@ class Membership {
   final String id;
   final String businessId;
   final String userId;
+  final String userName;
+  final String userPhone;
   final String role;
   final bool isActive;
 
@@ -539,8 +546,35 @@ class Membership {
         id: json['id'].toString(),
         businessId: (json['business'] ?? json['business_id'] ?? '').toString(),
         userId: (json['user'] ?? json['user_id'] ?? '').toString(),
+        userName: (json['user_name'] ?? '').toString(),
+        userPhone: (json['user_phone'] ?? '').toString(),
         role: (json['role'] ?? '').toString(),
         isActive: json['is_active'] is bool ? json['is_active'] as bool : true,
+      );
+}
+
+@immutable
+class Invitation {
+  const Invitation({
+    required this.id,
+    required this.phone,
+    required this.role,
+    required this.status,
+    this.expiresAt,
+  });
+
+  final String id;
+  final String phone;
+  final String role;
+  final String status;
+  final String? expiresAt;
+
+  factory Invitation.fromJson(Map<String, dynamic> json) => Invitation(
+        id: json['id'].toString(),
+        phone: (json['phone_e164'] ?? json['phone'] ?? '').toString(),
+        role: (json['role'] ?? '').toString(),
+        status: (json['status'] ?? '').toString(),
+        expiresAt: (json['expires_at'] ?? json['expiresAt'])?.toString(),
       );
 }
 
