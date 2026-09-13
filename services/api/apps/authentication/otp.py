@@ -17,7 +17,9 @@ class OTPService:
         return str(random.randint(10 ** (self.CODE_LENGTH - 1), 10**self.CODE_LENGTH - 1))
 
     def create(self, phone: str) -> tuple[str, PhoneOTP]:
-        last = PhoneOTP.objects.filter(phone_e164=phone, is_used=False).order_by("-created_at").first()
+        last = (
+            PhoneOTP.objects.filter(phone_e164=phone, is_used=False).order_by("-created_at").first()
+        )
         if last and timezone.now() - last.created_at < timedelta(seconds=self.RESEND_SECONDS):
             wait = self.RESEND_SECONDS - int((timezone.now() - last.created_at).total_seconds())
             raise TooManyRequests(f"Wait {wait}s before requesting a new code.", wait)

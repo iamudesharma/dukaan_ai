@@ -68,4 +68,58 @@ void main() {
     expect(minorFromRecord({'unit_price_minor': 80000, 'unit_price': '800.00'}, 'unit_price_minor', 'unit_price'), 80000);
     expect(minorFromRecord({'unit_price': '800.00'}, 'unit_price_minor', 'unit_price'), 80000);
   });
+
+  test('dashboard parses the nested today and books contract', () {
+    final summary = DashboardSummary.fromJson({
+      'as_of': '2026-09-12',
+      'today': {'sales': 240000, 'expenses': 1500},
+      'books': {'receivable': 90000, 'payable': 42000},
+      'low_stock_count': 2,
+      'summary': 'Today: ₹2,400.00 sales',
+    });
+
+    expect(summary.salesMinor, 240000);
+    expect(summary.expensesMinor, 1500);
+    expect(summary.toReceiveMinor, 90000);
+    expect(summary.toPayMinor, 42000);
+    expect(summary.lowStockCount, 2);
+    expect(summary.summary, contains('2,400'));
+  });
+
+  test('product reads server stock quantity and default pack', () {
+    final product = Product.fromJson({
+      'id': 'p1',
+      'name': 'Shirt',
+      'base_unit': 'PIECE',
+      'default_pack_id': 'pack-9',
+      'stock_quantity': '7.000',
+      'low_stock_threshold': '2',
+      'packs': [
+        {
+          'id': 'pack-9',
+          'retail_price_minor': 80000,
+          'wholesale_price_minor': 75000,
+        },
+      ],
+    });
+
+    expect(product.packId, 'pack-9');
+    expect(product.stock, Decimal.parse('7'));
+    expect(product.isLowStock, isFalse);
+  });
+
+  test('party reads receivable and payable minor balances', () {
+    final party = Party.fromJson({
+      'id': 'party-1',
+      'name': 'Ramesh',
+      'kind': 'CUSTOMER',
+      'phone': '+919876543210',
+      'receivable_minor': 90000,
+      'payable_minor': 0,
+    });
+
+    expect(party.toReceiveMinor, 90000);
+    expect(party.toPayMinor, 0);
+    expect(party.phone, '+919876543210');
+  });
 }

@@ -33,6 +33,7 @@ class AssistantProposal(UUIDModel):
     command_type = models.CharField(max_length=32, default="UNSUPPORTED")
     payload = models.JSONField(default=dict)
     preview = models.TextField(blank=True)
+    preview_data = models.JSONField(default=dict, blank=True)
     warnings = models.JSONField(default=list)
     blocking_questions = models.JSONField(default=list)
     status = models.CharField(max_length=10, choices=Status.choices, default=Status.DRAFT)

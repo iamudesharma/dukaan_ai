@@ -653,13 +653,19 @@ class ApiDukaanRepository implements DukaanRepository {
 
   static BusinessEntry _entryFromJson(Map<String, dynamic> json, EntryType type) {
     final party = json['customer'] ?? json['supplier'] ?? json['party'];
-    final partyName = party is Map ? party['name'] : json['party_name'];
+    final partyName = party is Map
+        ? party['name']
+        : json['customer_name'] ?? json['supplier_name'] ?? json['party_name'];
+    final reference = [json['invoice_number'], json['reference'], json['number']]
+        .map((value) => value?.toString() ?? '')
+        .firstWhere(
+          (value) => value.isNotEmpty,
+          orElse: () => '#${json['id'].toString().substring(0, 8)}',
+        );
     return BusinessEntry(
       id: json['id'].toString(),
       type: type,
-      reference: (json['invoice_number'] ?? json['reference'] ?? json['number'] ??
-              '#${json['id'].toString().substring(0, 8)}')
-          .toString(),
+      reference: reference,
       partyName: (partyName ?? 'Walk-in').toString(),
       totalMinor: minorFromRecord(
         json,
@@ -681,9 +687,11 @@ class ApiDukaanRepository implements DukaanRepository {
   }
 
   static AssistantProposal _proposalFromJson(Map<String, dynamic> json) {
-    final preview = json['preview'] is Map
-        ? Map<String, dynamic>.from(json['preview'] as Map)
+    final previewSource = json['preview_data'] ?? json['preview'];
+    final preview = previewSource is Map
+        ? Map<String, dynamic>.from(previewSource)
         : <String, dynamic>{};
+    final previewText = json['preview'] is String ? json['preview'] as String : '';
     final facts = <ReviewFact>[];
     final rawFacts = preview['facts'] ?? preview['fields'];
     if (rawFacts is List) {
@@ -708,7 +716,10 @@ class ApiDukaanRepository implements DukaanRepository {
       id: json['id'].toString(),
       version: (json['version'] as num?)?.toInt() ?? 1,
       commandType: (json['command_type'] ?? 'ENTRY').toString(),
-      title: (preview['title'] ?? preview['summary'] ?? 'Proposed entry').toString(),
+      title: (preview['title'] ??
+              preview['summary'] ??
+              (previewText.isNotEmpty ? previewText : 'Proposed entry'))
+          .toString(),
       facts: facts,
       warnings: _strings(json['warnings']),
       blockingQuestions: _strings(json['blocking_questions']),
@@ -735,7 +746,8 @@ class ApiDukaanRepository implements DukaanRepository {
     return PostedResult(
       id: (result['id'] ?? result['transaction_id'] ?? '').toString(),
       reference:
-          (result['invoice_number'] ?? result['reference'] ?? result['id'] ?? 'Saved')
+          (result['invoice_number'] ?? result['reference'] ?? result['number'] ?? result['id'] ??
+                  'Saved')
               .toString(),
       message: (json['message'] ?? 'Entry recorded').toString(),
     );

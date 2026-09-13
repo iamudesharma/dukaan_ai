@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta, timezone as dt_timezone
+from datetime import UTC, datetime, timedelta
 
 from django.contrib.auth import get_user_model
 from django.utils import timezone
@@ -7,7 +7,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.tokens import RefreshToken
 
-from .models import BlacklistedToken, PhoneOTP
+from .models import BlacklistedToken
 from .otp import OTPService, TooManyRequests
 from .serializers import (
     LoginSerializer,
@@ -39,8 +39,14 @@ class SignupView(APIView):
         serializer.is_valid(raise_exception=True)
         user = serializer.save()
         return Response(
-            {"user": {"id": str(user.id), "phone": user.phone_e164, "display_name": user.display_name},
-             **_tokens_for(user)},
+            {
+                "user": {
+                    "id": str(user.id),
+                    "phone": user.phone_e164,
+                    "display_name": user.display_name,
+                },
+                **_tokens_for(user),
+            },
             status=status.HTTP_201_CREATED,
         )
 
@@ -53,7 +59,9 @@ class LoginView(APIView):
         serializer = LoginSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         user = serializer.validated_data["user"]
-        return Response({"user": {"id": str(user.id), "phone": user.phone_e164}, **_tokens_for(user)})
+        return Response(
+            {"user": {"id": str(user.id), "phone": user.phone_e164}, **_tokens_for(user)}
+        )
 
 
 class OtpSendView(APIView):
@@ -94,16 +102,22 @@ class OtpVerifyView(APIView):
 
         service = OTPService()
         if not service.verify(phone, otp):
-            return Response({"detail": "Invalid or expired code."}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {"detail": "Invalid or expired code."}, status=status.HTTP_400_BAD_REQUEST
+            )
 
         user, _ = User.objects.get_or_create(
             phone_e164=phone,
             defaults={"username": f"phone_{phone}", "display_name": ""},
         )
         if not user.is_active:
-            return Response({"detail": "This account has been disabled."}, status=status.HTTP_403_FORBIDDEN)
+            return Response(
+                {"detail": "This account has been disabled."}, status=status.HTTP_403_FORBIDDEN
+            )
 
-        return Response({"user": {"id": str(user.id), "phone": user.phone_e164}, **_tokens_for(user)})
+        return Response(
+            {"user": {"id": str(user.id), "phone": user.phone_e164}, **_tokens_for(user)}
+        )
 
 
 class RefreshView(APIView):
@@ -113,15 +127,21 @@ class RefreshView(APIView):
     def post(self, request):
         refresh_token = request.data.get("refresh")
         if not refresh_token:
-            return Response({"detail": "Refresh token is required."}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {"detail": "Refresh token is required."}, status=status.HTTP_400_BAD_REQUEST
+            )
         try:
             token = RefreshToken(refresh_token)
             jti = token["jti"]
             if BlacklistedToken.objects.filter(token_jti=jti).exists():
-                return Response({"detail": "Token has been revoked."}, status=status.HTTP_401_UNAUTHORIZED)
+                return Response(
+                    {"detail": "Token has been revoked."}, status=status.HTTP_401_UNAUTHORIZED
+                )
             return Response({"access": str(token.access_token)})
         except Exception:
-            return Response({"detail": "Invalid or expired token."}, status=status.HTTP_401_UNAUTHORIZED)
+            return Response(
+                {"detail": "Invalid or expired token."}, status=status.HTTP_401_UNAUTHORIZED
+            )
 
 
 class LogoutView(APIView):
@@ -133,8 +153,8 @@ class LogoutView(APIView):
             try:
                 token = RefreshToken(refresh_token)
                 exp_timestamp = token["exp"]
-                if isinstance(exp_timestamp, (int, float)):
-                    exp_datetime = datetime.fromtimestamp(exp_timestamp, tz=dt_timezone.utc)
+                if isinstance(exp_timestamp, int | float):
+                    exp_datetime = datetime.fromtimestamp(exp_timestamp, tz=UTC)
                 else:
                     exp_datetime = exp_timestamp
                 BlacklistedToken.objects.create(
@@ -148,7 +168,10 @@ class LogoutView(APIView):
         if access_jti:
             BlacklistedToken.objects.get_or_create(
                 token_jti=access_jti,
-                defaults={"user": request.user, "expires_at": timezone.now() + timedelta(minutes=30)},
+                defaults={
+                    "user": request.user,
+                    "expires_at": timezone.now() + timedelta(minutes=30),
+                },
             )
         return Response({"detail": "Signed out."})
 
@@ -188,7 +211,9 @@ class PasswordResetRequestView(APIView):
                 response["dev_otp"] = otp
             return Response(response)
 
-        return Response({"detail": "If this phone is registered, a code will be sent.", "phone": phone})
+        return Response(
+            {"detail": "If this phone is registered, a code will be sent.", "phone": phone}
+        )
 
 
 class PasswordResetConfirmView(APIView):
@@ -203,12 +228,16 @@ class PasswordResetConfirmView(APIView):
 
         service = OTPService()
         if not service.verify(phone, otp):
-            return Response({"detail": "Invalid or expired code."}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {"detail": "Invalid or expired code."}, status=status.HTTP_400_BAD_REQUEST
+            )
 
         try:
             user = User.objects.get(phone_e164=phone, is_active=True)
         except User.DoesNotExist:
-            return Response({"detail": "Invalid or expired code."}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {"detail": "Invalid or expired code."}, status=status.HTTP_400_BAD_REQUEST
+            )
 
         user.set_password(serializer.validated_data["new_password"])
         user.save(update_fields=["password"])

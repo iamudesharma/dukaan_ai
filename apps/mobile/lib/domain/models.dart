@@ -79,14 +79,44 @@ class DashboardSummary {
   final String summary;
 
   factory DashboardSummary.fromJson(Map<String, dynamic> json) {
+    final today = json['today'] is Map
+        ? Map<String, dynamic>.from(json['today'] as Map)
+        : <String, dynamic>{};
+    final books = json['books'] is Map
+        ? Map<String, dynamic>.from(json['books'] as Map)
+        : <String, dynamic>{};
     return DashboardSummary(
-      salesMinor: minorFrom(json['sales_today'] ?? json['sales'] ?? json['salesMinor'] ?? json['sales_minor']),
-      expensesMinor: minorFrom(json['expenses_today'] ?? json['expenses'] ?? json['expensesMinor'] ?? json['expenses_minor']),
-      toReceiveMinor: minorFrom(json['receivables'] ?? json['to_receive'] ?? json['receivable'] ?? json['receivableMinor']),
-      toPayMinor: minorFrom(json['payables'] ?? json['to_pay'] ?? json['payable'] ?? json['payableMinor']),
+      salesMinor: minorFrom(
+        today['sales'] ??
+            json['sales_today'] ??
+            json['sales'] ??
+            json['salesMinor'] ??
+            json['sales_minor'],
+      ),
+      expensesMinor: minorFrom(
+        today['expenses'] ??
+            json['expenses_today'] ??
+            json['expenses'] ??
+            json['expensesMinor'] ??
+            json['expenses_minor'],
+      ),
+      toReceiveMinor: minorFrom(
+        books['receivable'] ??
+            json['receivables'] ??
+            json['to_receive'] ??
+            json['receivable'] ??
+            json['receivableMinor'],
+      ),
+      toPayMinor: minorFrom(
+        books['payable'] ??
+            json['payables'] ??
+            json['to_pay'] ??
+            json['payable'] ??
+            json['payableMinor'],
+      ),
       lowStockCount: (json['low_stock_count'] as num?)?.toInt() ?? 0,
       asOf: DateTime.tryParse((json['as_of'] ?? '').toString()) ?? DateTime.now(),
-      summary: (json['ai_summary'] ?? json['summary'] ?? '').toString(),
+      summary: (json['summary'] ?? json['ai_summary'] ?? '').toString(),
     );
   }
 }
@@ -154,7 +184,9 @@ class Product {
       name: (json['name'] ?? 'Product').toString(),
       sku: (json['sku'] ?? '').toString(),
       unit: (json['unit'] ?? firstPack['unit_name'] ?? 'pcs').toString(),
-      stock: decimalFrom(json['stock'] ?? json['quantity_on_hand']),
+      stock: decimalFrom(
+        json['stock_quantity'] ?? json['stock'] ?? json['quantity_on_hand'],
+      ),
       lowStockAt: decimalFrom(json['low_stock_threshold'] ?? json['reorder_level']),
       retailPriceMinor: minorFromRecord(
         firstPack.isNotEmpty ? firstPack : json,
@@ -197,14 +229,18 @@ class Party {
     return Party(
       id: json['id'].toString(),
       name: (json['name'] ?? 'Party').toString(),
-      phone: (json['phone'] ?? '').toString(),
+      phone: (json['phone'] ?? json['phone_e164'] ?? '').toString(),
       kind: switch (rawKind) {
         'SUPPLIER' => PartyKind.supplier,
         'BOTH' => PartyKind.both,
         _ => PartyKind.customer,
       },
-      toReceiveMinor: minorFromRecord(json, 'to_receive_minor', 'receivable_balance'),
-      toPayMinor: minorFromRecord(json, 'to_pay_minor', 'payable_balance'),
+      toReceiveMinor: json['receivable_minor'] != null
+          ? minorFrom(json['receivable_minor'])
+          : minorFromRecord(json, 'to_receive_minor', 'receivable_balance'),
+      toPayMinor: json['payable_minor'] != null
+          ? minorFrom(json['payable_minor'])
+          : minorFromRecord(json, 'to_pay_minor', 'payable_balance'),
     );
   }
 }

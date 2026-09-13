@@ -85,6 +85,9 @@ class SaleLineSerializer(serializers.ModelSerializer):
 
 class SaleSerializer(serializers.ModelSerializer):
     lines = SaleLineSerializer(many=True, read_only=True)
+    customer_name = serializers.SerializerMethodField()
+    invoice_number = serializers.CharField(source="number", read_only=True)
+    occurred_at = serializers.DateTimeField(source="posted_at", read_only=True)
 
     class Meta:
         model = Sale
@@ -93,8 +96,11 @@ class SaleSerializer(serializers.ModelSerializer):
             "business",
             "location",
             "customer",
+            "customer_name",
             "status",
             "number",
+            "invoice_number",
+            "occurred_at",
             "financial_year",
             "document_date",
             "price_mode",
@@ -119,6 +125,11 @@ class SaleSerializer(serializers.ModelSerializer):
             "reversed_at",
             "lines",
         ]
+
+    def get_customer_name(self, obj):
+        if obj.customer_id:
+            return obj.customer.name
+        return obj.buyer_name
 
 
 class PurchaseLineInputSerializer(serializers.Serializer):
@@ -178,6 +189,9 @@ class PurchaseLineSerializer(serializers.ModelSerializer):
 
 class PurchaseSerializer(serializers.ModelSerializer):
     lines = PurchaseLineSerializer(many=True, read_only=True)
+    supplier_name = serializers.SerializerMethodField()
+    invoice_number = serializers.CharField(source="number", read_only=True)
+    occurred_at = serializers.DateTimeField(source="posted_at", read_only=True)
 
     class Meta:
         model = Purchase
@@ -186,8 +200,11 @@ class PurchaseSerializer(serializers.ModelSerializer):
             "business",
             "location",
             "supplier",
+            "supplier_name",
             "status",
             "number",
+            "invoice_number",
+            "occurred_at",
             "financial_year",
             "document_date",
             "supplier_bill_number",
@@ -210,6 +227,9 @@ class PurchaseSerializer(serializers.ModelSerializer):
             "reversed_at",
             "lines",
         ]
+
+    def get_supplier_name(self, obj):
+        return obj.supplier.name if obj.supplier_id else ""
 
 
 class PaymentCreateSerializer(serializers.Serializer):
@@ -245,6 +265,8 @@ class PaymentAllocationSerializer(serializers.ModelSerializer):
 
 class PaymentSerializer(serializers.ModelSerializer):
     allocations = PaymentAllocationSerializer(many=True, read_only=True)
+    party_name = serializers.SerializerMethodField()
+    occurred_at = serializers.DateTimeField(source="payment_date", read_only=True)
 
     class Meta:
         model = Payment
@@ -253,18 +275,23 @@ class PaymentSerializer(serializers.ModelSerializer):
             "business",
             "location",
             "party",
+            "party_name",
             "direction",
             "method",
             "amount_minor",
             "reference",
             "note",
             "payment_date",
+            "occurred_at",
             "status",
             "source",
             "reversal_reason",
             "reversed_at",
             "allocations",
         ]
+
+    def get_party_name(self, obj):
+        return obj.party.name if obj.party_id else ""
 
 
 class ExpenseCreateSerializer(serializers.Serializer):
@@ -285,6 +312,8 @@ class ExpenseCreateSerializer(serializers.Serializer):
 
 
 class ExpenseSerializer(serializers.ModelSerializer):
+    occurred_at = serializers.DateTimeField(source="posted_at", read_only=True)
+
     class Meta:
         model = Expense
         fields = [
@@ -294,6 +323,7 @@ class ExpenseSerializer(serializers.ModelSerializer):
             "status",
             "number",
             "document_date",
+            "occurred_at",
             "category",
             "payee",
             "note",
