@@ -12,7 +12,7 @@ dependencies:
   flutter_localizations:
     sdk: flutter
   connectivity_plus: ^6.1.5
-  decimal: ^3.2.4
+  decimal: ^3.2.6
   dio: ^5.9.0
   drift: ^2.28.1
   file_picker: ^10.3.10
