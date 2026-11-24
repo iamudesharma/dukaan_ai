@@ -55,19 +55,23 @@ async function refreshAccessToken(): Promise<string | null> {
   return null;
 }
 
-export async function apiRequest<T>(path: string, options: RequestOptions = {}): Promise<T> {
+async function sendRequest(path: string, options: RequestOptions): Promise<Response> {
   let token = await accessToken();
   const headers = new Headers(options.headers);
-  headers.set("Accept", "application/json");
+  const isFormData = typeof FormData !== "undefined" && options.body instanceof FormData;
+  if (!headers.has("Accept")) headers.set("Accept", "application/json");
   headers.set("X-Client", "dukaanai-web/0.1.0");
-  if (options.body !== undefined) headers.set("Content-Type", "application/json");
+  if (options.body !== undefined && !isFormData) headers.set("Content-Type", "application/json");
   if (token) headers.set("Authorization", `Bearer ${token}`);
   if (options.idempotencyKey) headers.set("Idempotency-Key", options.idempotencyKey);
+  const requestBody = options.body === undefined
+    ? undefined
+    : isFormData ? options.body as FormData : JSON.stringify(options.body);
 
   let response = await fetch(`${apiUrl}${path}`, {
     ...options,
     headers,
-    body: options.body === undefined ? undefined : JSON.stringify(options.body),
+    body: requestBody,
   });
 
   if (response.status === 401 && token) {
@@ -77,36 +81,78 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
       response = await fetch(`${apiUrl}${path}`, {
         ...options,
         headers,
-        body: options.body === undefined ? undefined : JSON.stringify(options.body),
+        body: requestBody,
       });
     }
   }
+  return response;
+}
 
-  if (!response.ok) {
-    const fallback: ApiErrorShape = {
-      code: `http_${response.status}`,
-      message: "The request could not be completed.",
-      retryable: response.status >= 500,
-    };
-    let detail = fallback;
-    try {
-      const raw = await response.json();
-      const server = raw.error?.detail;
-      detail = {
-        ...fallback,
-        ...(raw.error ? {} : raw),
-        ...(server && typeof server === "object" && server.message
-          ? { message: String(server.message), code: String(server.code ?? raw.error.code) }
-          : typeof server === "string" ? { message: server, code: raw.error.code } : {}),
-      };
-    } catch {
-      // A safe normalized response is returned for non-JSON upstream failures.
-    }
-    throw new ApiError(response.status, detail);
+function messageFromDetail(value: unknown): string | null {
+  if (typeof value === "string" && value.trim()) return value;
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const record = value as Record<string, unknown>;
+  if (typeof record.message === "string" && record.message.trim()) return record.message;
+  for (const [field, messages] of Object.entries(record)) {
+    const text = Array.isArray(messages) ? messages.find((item) => typeof item === "string") : messages;
+    if (typeof text === "string" && text.trim()) return field === "detail" ? text : `${field}: ${text}`;
   }
+  return null;
+}
 
+async function normalizedError(response: Response): Promise<ApiErrorShape> {
+  const fallback: ApiErrorShape = {
+    code: `http_${response.status}`,
+    message: "The request could not be completed.",
+    retryable: response.status >= 500,
+  };
+  try {
+    const raw = await response.json();
+    const server = raw.error?.detail;
+    const message = messageFromDetail(server) ?? messageFromDetail(raw.detail) ?? messageFromDetail(raw);
+    const code = raw.error?.code ?? raw.code ?? (server && typeof server === "object" ? server.code : undefined);
+    const fields = (server && typeof server === "object" ? server : raw.fields) as Record<string, string[]> | undefined;
+    return {
+      ...fallback,
+      ...(raw.error ? {} : raw),
+      ...(message ? { message } : {}),
+      ...(code ? { code: String(code) } : {}),
+      ...(fields && !Array.isArray(fields) && typeof fields === "object" ? { fields } : {}),
+    };
+  } catch {
+    // A safe normalized response is returned for non-JSON upstream failures.
+    return fallback;
+  }
+}
+
+export async function apiRequest<T>(path: string, options: RequestOptions = {}): Promise<T> {
+  const response = await sendRequest(path, options);
+  if (!response.ok) throw new ApiError(response.status, await normalizedError(response));
   if (response.status === 204) return undefined as T;
   return response.json().then((value) => camelize(value) as T);
+}
+
+export interface DownloadedFile {
+  blob: Blob;
+  filename: string;
+}
+
+/** Binary counterpart to apiRequest, retaining auth refresh and normalized errors. */
+export async function apiRequestFile(
+  path: string,
+  options: RequestOptions = {},
+): Promise<DownloadedFile> {
+  const response = await sendRequest(path, options);
+  if (!response.ok) throw new ApiError(response.status, await normalizedError(response));
+  const disposition = response.headers.get("Content-Disposition") ?? "";
+  const encodedName = disposition.match(/filename\*=UTF-8''([^;]+)/i)?.[1];
+  const quotedName = disposition.match(/filename="([^"]+)"/i)?.[1];
+  let decodedName = quotedName ?? "download";
+  if (encodedName) {
+    try { decodedName = decodeURIComponent(encodedName); } catch { /* Keep the safe quoted fallback. */ }
+  }
+  const filename = decodedName.split(/[\\/]/).pop() || "download";
+  return { blob: await response.blob(), filename };
 }
 
 export function newIdempotencyKey(): string {

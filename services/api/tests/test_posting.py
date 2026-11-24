@@ -2,6 +2,7 @@ from decimal import Decimal
 from unittest.mock import patch
 
 import pytest
+from conftest import rls_is_enforced
 from django.db import connection
 from django.db.models import Sum
 from rest_framework.test import APIClient
@@ -102,11 +103,15 @@ def test_other_business_is_not_readable(shop):
     client = APIClient()
     client.force_authenticate(user)
     status_code = client.get("/api/v1/sales/", {"business_id": str(other.pk)}).status_code
-    if connection.vendor == "postgresql":
+    if rls_is_enforced(connection):
         # RLS hides the foreign business entirely, so the lookup 404s instead
         # of 403ing: the API does not even confirm the tenant exists.
         assert status_code == 404
     else:
+        # The test database is created by a superuser, which PostgreSQL exempts
+        # from row-level security, so the business is visible and the
+        # application-layer membership check answers first. test_rls.py proves
+        # the policy itself over a dedicated app-role connection.
         assert status_code == 403
 
 
@@ -124,3 +129,22 @@ def test_sale_reversal_endpoint(shop):
     )
     assert response.status_code == 200
     assert response.json()["status"] == "REVERSED"
+
+
+def test_brief_list_returns_slim_rows(shop):
+    user, business, location, _ = shop
+    confirm(proposal=proposal_for(shop), actor=user, version=1, idempotency_key="brief-sale")
+    client = APIClient()
+    client.force_authenticate(user)
+    query = {"business_id": str(business.pk), "location_id": str(location.pk)}
+    full = client.get("/api/v1/sales/", query).json()
+    assert full[0]["grand_total_minor"] == 240000
+    assert "lines" in full[0]
+    brief = client.get("/api/v1/sales/", {**query, "brief": "1"}).json()
+    assert len(brief) == 1
+    row = brief[0]
+    assert "lines" not in row
+    assert row["grand_total_minor"] == 240000
+    assert row["due_total_minor"] == 90000
+    assert row["customer"]["name"] == "Ramesh"
+    assert row["status"] == "POSTED"

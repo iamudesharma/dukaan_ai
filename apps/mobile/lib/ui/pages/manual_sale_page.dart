@@ -1,10 +1,11 @@
 import 'package:decimal/decimal.dart';
-import 'package:dukaan_ai_mobile/core/config.dart';
 import 'package:dukaan_ai_mobile/core/formatters.dart';
+import 'package:dukaan_ai_mobile/core/generated/dukaan_tokens.dart';
 import 'package:dukaan_ai_mobile/domain/models.dart';
 import 'package:dukaan_ai_mobile/l10n/app_strings.dart';
 import 'package:dukaan_ai_mobile/state/app_providers.dart';
 import 'package:dukaan_ai_mobile/ui/common/async_content.dart';
+import 'package:dukaan_ai_mobile/ui/components/dukaan_widgets.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -49,6 +50,8 @@ class _ManualSalePageState extends ConsumerState<ManualSalePage> {
     final products = ref.watch(productsProvider);
     final parties = ref.watch(partiesProvider);
     final location = ref.watch(activeLocationProvider);
+    final canUseWholesale =
+        ref.watch(currentBusinessRoleProvider).canUseWholesalePrices;
     if (products.isLoading || parties.isLoading || location.isLoading) {
       return const LoadingContent();
     }
@@ -69,47 +72,76 @@ class _ManualSalePageState extends ConsumerState<ManualSalePage> {
     return Form(
       key: _formKey,
       child: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 12, 16, 28),
+        padding: const EdgeInsets.fromLTRB(
+          DukaanTokens.space4,
+          DukaanTokens.space4,
+          DukaanTokens.space4,
+          DukaanTokens.space6,
+        ),
         children: [
           Row(
             children: [
               IconButton(
                 tooltip: MaterialLocalizations.of(context).backButtonTooltip,
                 onPressed: () => context.go('/entries'),
-                icon: const Icon(Icons.arrow_back_rounded),
+                icon: const Icon(Icons.arrow_back_rounded, size: 22),
               ),
-              const SizedBox(width: 4),
-              Text(
-                context.strings.t('manualSale'),
-                style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                      fontWeight: FontWeight.w900,
+              const SizedBox(width: DukaanTokens.space1),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    DukaanKicker('01 · ${context.strings.t('manualSale')}'),
+                    const SizedBox(height: DukaanTokens.space1),
+                    Text(
+                      context.strings.t('manualSale'),
+                      style: DukaanTokens.textTitle.copyWith(
+                        color: Theme.of(context).colorScheme.onSurface,
+                      ),
                     ),
+                  ],
+                ),
               ),
             ],
           ),
-          const SizedBox(height: 14),
-          SegmentedButton<PriceMode>(
-            segments: [
-              ButtonSegment(value: PriceMode.retail, label: Text(context.strings.t('retail'))),
-              ButtonSegment(
-                value: PriceMode.wholesale,
-                label: Text(context.strings.t('wholesale')),
-              ),
-            ],
-            selected: {_priceMode},
-            onSelectionChanged: (value) {
-              setState(() {
-                _priceMode = value.single;
-                final selected = _selectedProduct(productItems);
-                if (selected != null) _setProductPrice(selected);
-              });
-            },
+          const SizedBox(height: DukaanTokens.space2),
+          const Divider(
+            height: 1,
+            thickness: 2,
+            color: DukaanTokens.colorInk,
           ),
-          const SizedBox(height: 16),
+          if (canUseWholesale) ...[
+            const SizedBox(height: DukaanTokens.space4),
+            SegmentedButton<PriceMode>(
+              segments: [
+                ButtonSegment(
+                    value: PriceMode.retail,
+                    label: Text(context.strings.t('retail'))),
+                ButtonSegment(
+                  value: PriceMode.wholesale,
+                  label: Text(context.strings.t('wholesale')),
+                ),
+              ],
+              selected: {_priceMode},
+              onSelectionChanged: (value) {
+                setState(() {
+                  _priceMode = value.single;
+                  final selected = _selectedProduct(productItems);
+                  if (selected != null) _setProductPrice(selected);
+                });
+              },
+            ),
+          ] else
+            Align(
+              alignment: Alignment.centerLeft,
+              child: DukaanBadge(context.strings.t('retail')),
+            ),
+          const SizedBox(height: DukaanTokens.space4),
           DropdownButtonFormField<String>(
             key: const Key('sale-product'),
             initialValue: _productId,
-            decoration: InputDecoration(labelText: context.strings.t('product')),
+            decoration:
+                InputDecoration(labelText: context.strings.t('product')),
             items: productItems
                 .map(
                   (product) => DropdownMenuItem(
@@ -118,7 +150,8 @@ class _ManualSalePageState extends ConsumerState<ManualSalePage> {
                   ),
                 )
                 .toList(),
-            validator: (value) => value == null ? context.strings.t('selectProduct') : null,
+            validator: (value) =>
+                value == null ? context.strings.t('selectProduct') : null,
             onChanged: (value) {
               setState(() {
                 _productId = value;
@@ -127,12 +160,14 @@ class _ManualSalePageState extends ConsumerState<ManualSalePage> {
               });
             },
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: DukaanTokens.space3),
           DropdownButtonFormField<String?>(
             initialValue: _customerId,
-            decoration: InputDecoration(labelText: context.strings.t('customerOptional')),
+            decoration: InputDecoration(
+                labelText: context.strings.t('customerOptional')),
             items: [
-              const DropdownMenuItem<String?>(value: null, child: Text('Walk-in')),
+              const DropdownMenuItem<String?>(
+                  value: null, child: Text('Walk-in')),
               ...partyItems
                   .where((party) => party.kind != PartyKind.supplier)
                   .map(
@@ -144,7 +179,7 @@ class _ManualSalePageState extends ConsumerState<ManualSalePage> {
             ],
             onChanged: (value) => setState(() => _customerId = value),
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: DukaanTokens.space3),
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -152,19 +187,26 @@ class _ManualSalePageState extends ConsumerState<ManualSalePage> {
                 child: TextFormField(
                   key: const Key('sale-quantity'),
                   controller: _quantity,
-                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                  inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9.]'))],
-                  decoration: InputDecoration(labelText: context.strings.t('quantity')),
+                  keyboardType:
+                      const TextInputType.numberWithOptions(decimal: true),
+                  inputFormatters: [
+                    FilteringTextInputFormatter.allow(RegExp(r'[0-9.]'))
+                  ],
+                  decoration:
+                      InputDecoration(labelText: context.strings.t('quantity')),
                   validator: _positiveDecimalValidator,
                 ),
               ),
-              const SizedBox(width: 10),
+              const SizedBox(width: DukaanTokens.space2),
               Expanded(
                 child: TextFormField(
                   key: const Key('sale-price'),
                   controller: _price,
-                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                  inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9.]'))],
+                  keyboardType:
+                      const TextInputType.numberWithOptions(decimal: true),
+                  inputFormatters: [
+                    FilteringTextInputFormatter.allow(RegExp(r'[0-9.]'))
+                  ],
                   decoration: InputDecoration(
                     labelText: context.strings.t('unitPrice'),
                     prefixText: '₹ ',
@@ -174,12 +216,14 @@ class _ManualSalePageState extends ConsumerState<ManualSalePage> {
               ),
             ],
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: DukaanTokens.space3),
           TextFormField(
             key: const Key('sale-paid'),
             controller: _paid,
             keyboardType: const TextInputType.numberWithOptions(decimal: true),
-            inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9.]'))],
+            inputFormatters: [
+              FilteringTextInputFormatter.allow(RegExp(r'[0-9.]'))
+            ],
             decoration: InputDecoration(
               labelText: context.strings.t('paidNow'),
               prefixText: '₹ ',
@@ -188,10 +232,11 @@ class _ManualSalePageState extends ConsumerState<ManualSalePage> {
             ),
             validator: _nonNegativeDecimalValidator,
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: DukaanTokens.space3),
           DropdownButtonFormField<PaymentMethod>(
             initialValue: _paymentMethod,
-            decoration: InputDecoration(labelText: context.strings.t('paymentMethod')),
+            decoration:
+                InputDecoration(labelText: context.strings.t('paymentMethod')),
             items: PaymentMethod.values
                 .map(
                   (method) => DropdownMenuItem(
@@ -204,18 +249,35 @@ class _ManualSalePageState extends ConsumerState<ManualSalePage> {
               if (value != null) setState(() => _paymentMethod = value);
             },
           ),
-          const SizedBox(height: 16),
-          Card(
-            color: Theme.of(context).colorScheme.secondaryContainer,
-            child: ListTile(
-              leading: const Icon(Icons.receipt_long_outlined),
-              title: Text(context.strings.t('taxServer')),
+          const SizedBox(height: DukaanTokens.space4),
+          DukaanCard(
+            color: Theme.of(context).colorScheme.surfaceContainer,
+            padding: const EdgeInsets.symmetric(
+              horizontal: DukaanTokens.space4,
+              vertical: DukaanTokens.space1,
+            ),
+            child: Row(
+              children: [
+                Icon(
+                  Icons.receipt_long_outlined,
+                  size: 20,
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
+                const SizedBox(width: DukaanTokens.space3),
+                Expanded(
+                  child: Text(
+                    context.strings.t('taxServer'),
+                    style: DukaanTokens.textLabel,
+                  ),
+                ),
+              ],
             ),
           ),
-          const SizedBox(height: 18),
+          const SizedBox(height: DukaanTokens.space5),
           FilledButton.icon(
             key: const Key('review-sale-button'),
-            onPressed: () => _review(productItems, partyItems, location.requireValue),
+            onPressed: () =>
+                _review(productItems, partyItems, location.requireValue),
             icon: const Icon(Icons.fact_check_outlined),
             label: Text(context.strings.t('reviewSale')),
           ),
@@ -226,70 +288,108 @@ class _ManualSalePageState extends ConsumerState<ManualSalePage> {
 
   Widget _buildReview(BuildContext context, SaleDraft draft) {
     final locale = Localizations.localeOf(context).languageCode;
-    final online = ref.watch(networkStatusProvider).valueOrNull ?? AppConfig.demoMode;
+    final online = ref.watch(networkStatusProvider).valueOrNull ?? false;
     return ListView(
       key: const ValueKey('sale-review'),
-      padding: const EdgeInsets.fromLTRB(16, 18, 16, 28),
+      padding: const EdgeInsets.fromLTRB(
+        DukaanTokens.space4,
+        DukaanTokens.space4,
+        DukaanTokens.space4,
+        DukaanTokens.space6,
+      ),
       children: [
+        DukaanKicker('02 · ${context.strings.t('manualSale')}'),
+        const SizedBox(height: DukaanTokens.space1),
         Text(
           context.strings.t('reviewTitle'),
-          style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w900),
-        ),
-        const SizedBox(height: 5),
-        Text(context.strings.t('saleNotRecorded')),
-        const SizedBox(height: 16),
-        Card(
-          child: Padding(
-            padding: const EdgeInsets.all(18),
-            child: Column(
-              children: [
-                _ReviewRow(label: context.strings.t('customerOptional'), value: draft.customerName ?? 'Walk-in'),
-                _ReviewRow(
-                  label: context.strings.t('product'),
-                  value: '${draft.lines.first.quantity} × ${draft.lines.first.productName}',
-                ),
-                _ReviewRow(
-                  label: context.strings.t('total'),
-                  value: formatMoney(draft.totalMinor, locale),
-                  strong: true,
-                ),
-                _ReviewRow(
-                  label: context.strings.t('paidNow'),
-                  value: formatMoney(draft.paidAmountMinor, locale),
-                ),
-                _ReviewRow(
-                  label: context.strings.t('pending'),
-                  value: formatMoney(draft.pendingMinor, locale),
-                  warning: draft.pendingMinor > 0,
-                ),
-                _ReviewRow(
-                  label: context.strings.t('stockEffect'),
-                  value: '−${draft.lines.first.quantity}',
-                ),
-              ],
-            ),
+          style: DukaanTokens.textTitle.copyWith(
+            color: Theme.of(context).colorScheme.onSurface,
           ),
         ),
-        const SizedBox(height: 10),
-        Card(
+        const SizedBox(height: DukaanTokens.space1),
+        Text(
+          context.strings.t('saleNotRecorded'),
+          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+        ),
+        const SizedBox(height: DukaanTokens.space4),
+        DukaanCard(
+          child: Column(
+            children: [
+              _ReviewRow(
+                  label: context.strings.t('customerOptional'),
+                  value: draft.customerName ?? 'Walk-in'),
+              _ReviewRow(
+                label: context.strings.t('product'),
+                value:
+                    '${draft.lines.first.quantity} × ${draft.lines.first.productName}',
+              ),
+              _ReviewRow(
+                label: context.strings.t('total'),
+                value: formatMoney(draft.totalMinor, locale),
+                strong: true,
+              ),
+              _ReviewRow(
+                label: context.strings.t('paidNow'),
+                value: formatMoney(draft.paidAmountMinor, locale),
+              ),
+              _ReviewRow(
+                label: context.strings.t('pending'),
+                value: formatMoney(draft.pendingMinor, locale),
+                warning: draft.pendingMinor > 0,
+              ),
+              _ReviewRow(
+                label: context.strings.t('stockEffect'),
+                value: '−${draft.lines.first.quantity}',
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: DukaanTokens.space3),
+        // Being offline means the sale becomes a draft. That is attention,
+        // not failure, so it does not use the error tone.
+        DukaanCard(
           color: online
-              ? Theme.of(context).colorScheme.primaryContainer
-              : Theme.of(context).colorScheme.errorContainer,
-          child: ListTile(
-            leading: Icon(online ? Icons.cloud_done_outlined : Icons.cloud_off_rounded),
-            title: Text(
-              online ? context.strings.t('reviewDetail') : context.strings.t('offlineDetail'),
-            ),
+              ? Theme.of(context).colorScheme.surfaceContainer
+              : Theme.of(context).colorScheme.tertiaryContainer,
+          padding: const EdgeInsets.symmetric(
+            horizontal: DukaanTokens.space4,
+            vertical: DukaanTokens.space1,
+          ),
+          child: Row(
+            children: [
+              Icon(
+                online ? Icons.cloud_done_outlined : Icons.cloud_off_rounded,
+                size: 20,
+                color: online
+                    ? Theme.of(context).colorScheme.onSurfaceVariant
+                    : Theme.of(context).colorScheme.onTertiaryContainer,
+              ),
+              const SizedBox(width: DukaanTokens.space3),
+              Expanded(
+                child: Text(
+                  online
+                      ? context.strings.t('reviewDetail')
+                      : context.strings.t('offlineDetail'),
+                  style: DukaanTokens.textLabel.copyWith(
+                    color: online
+                        ? Theme.of(context).colorScheme.onSurface
+                        : Theme.of(context).colorScheme.onTertiaryContainer,
+                  ),
+                ),
+              ),
+            ],
           ),
         ),
         if (_error != null) ...[
-          const SizedBox(height: 10),
+          const SizedBox(height: DukaanTokens.space2),
           Text(
             _error!,
             style: TextStyle(color: Theme.of(context).colorScheme.error),
           ),
         ],
-        const SizedBox(height: 18),
+        const SizedBox(height: DukaanTokens.space5),
         FilledButton.icon(
           key: const Key('confirm-sale-button'),
           onPressed: _saving ? null : () => _confirmSale(draft, online),
@@ -298,7 +398,9 @@ class _ManualSalePageState extends ConsumerState<ManualSalePage> {
                   dimension: 20,
                   child: CircularProgressIndicator(strokeWidth: 2),
                 )
-              : Icon(online ? Icons.check_circle_outline_rounded : Icons.edit_note_rounded),
+              : Icon(online
+                  ? Icons.check_circle_outline_rounded
+                  : Icons.edit_note_rounded),
           label: Text(
             online
                 ? '${context.strings.t('recordSale')} ${formatMoney(draft.totalMinor, locale)}'
@@ -316,33 +418,44 @@ class _ManualSalePageState extends ConsumerState<ManualSalePage> {
   Widget _buildSuccess(BuildContext context) {
     return Center(
       child: SingleChildScrollView(
-        padding: const EdgeInsets.all(28),
+        padding: const EdgeInsets.all(DukaanTokens.space6),
         child: Semantics(
           liveRegion: true,
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(
-                _draftSaved ? Icons.edit_note_rounded : Icons.check_circle_rounded,
-                size: 64,
-                color: Theme.of(context).colorScheme.primary,
+              Container(
+                width: 58,
+                height: 58,
+                decoration: const BoxDecoration(
+                  color: DukaanTokens.colorPrimary,
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  _draftSaved ? Icons.edit_note_rounded : Icons.check_rounded,
+                  size: 28,
+                  color: DukaanTokens.colorOnPrimary,
+                ),
               ),
-              const SizedBox(height: 14),
+              const SizedBox(height: DukaanTokens.space4),
               Text(
-                _draftSaved ? context.strings.t('draftSaved') : context.strings.t('saved'),
+                _draftSaved
+                    ? context.strings.t('draftSaved')
+                    : context.strings.t('saved'),
                 textAlign: TextAlign.center,
-                style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                      fontWeight: FontWeight.w900,
-                    ),
+                style: Theme.of(context).textTheme.headlineSmall,
               ),
-              const SizedBox(height: 8),
+              const SizedBox(height: DukaanTokens.space2),
               Text(
                 _draftSaved
                     ? context.strings.t('draftSavedDetail')
                     : '${context.strings.t('savedDetail')}\n${_result!.reference}',
                 textAlign: TextAlign.center,
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
               ),
-              const SizedBox(height: 22),
+              const SizedBox(height: DukaanTokens.space6),
               SizedBox(
                 width: double.infinity,
                 child: FilledButton(
@@ -367,7 +480,8 @@ class _ManualSalePageState extends ConsumerState<ManualSalePage> {
     final quantity = decimalFrom(_quantity.text, '1');
     final unitPriceMinor = parseMinor(_price.text);
     final paidMinor = parseMinor(_paid.text);
-    final totalMinor = (quantity * Decimal.fromInt(unitPriceMinor)).round().toBigInt().toInt();
+    final totalMinor =
+        (quantity * Decimal.fromInt(unitPriceMinor)).round().toBigInt().toInt();
     if (paidMinor > totalMinor) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(context.strings.t('invalidAmount'))),
@@ -416,12 +530,23 @@ class _ManualSalePageState extends ConsumerState<ManualSalePage> {
     });
     try {
       if (!online) {
+        final label =
+            '${context.strings.t('manualSale')}: ${draft.lines.first.productName}';
+        final location = await ref.read(activeLocationProvider.future);
+        if (location.id != draft.locationId ||
+            location.businessId != draft.businessId) {
+          throw StateError(
+              'The active location changed. Review the sale again.');
+        }
+        final scope = await ref.read(currentDraftScopeProvider.future);
         await ref.read(draftStoreProvider).saveDraft(
               LocalDraft(
                 id: draft.id,
                 kind: DraftKind.sale,
-                locationId: draft.locationId,
-                label: '${context.strings.t('manualSale')}: ${draft.lines.first.productName}',
+                userId: scope.userId,
+                businessId: scope.businessId,
+                locationId: location.id,
+                label: label,
                 payload: draft.toLocalJson(),
                 createdAt: draft.createdAt ?? DateTime.now(),
               ),
@@ -453,19 +578,25 @@ class _ManualSalePageState extends ConsumerState<ManualSalePage> {
 
   void _setProductPrice(Product product) {
     _price.text = minorToInput(
-      _priceMode == PriceMode.retail ? product.retailPriceMinor : product.wholesalePriceMinor,
+      _priceMode == PriceMode.retail
+          ? product.retailPriceMinor
+          : product.wholesalePriceMinor,
     );
   }
 
   String? _positiveDecimalValidator(String? value) {
     final parsed = Decimal.tryParse(value ?? '');
-    if (parsed == null || parsed <= Decimal.zero) return context.strings.t('invalidAmount');
+    if (parsed == null || parsed <= Decimal.zero) {
+      return context.strings.t('invalidAmount');
+    }
     return null;
   }
 
   String? _nonNegativeDecimalValidator(String? value) {
     final parsed = Decimal.tryParse(value ?? '');
-    if (parsed == null || parsed < Decimal.zero) return context.strings.t('invalidAmount');
+    if (parsed == null || parsed < Decimal.zero) {
+      return context.strings.t('invalidAmount');
+    }
     return null;
   }
 }
@@ -484,24 +615,35 @@ class _ReviewRow extends StatelessWidget {
   final bool warning;
 
   @override
-  Widget build(BuildContext context) => Padding(
-        padding: const EdgeInsets.only(bottom: 12),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Expanded(child: Text(label)),
-            const SizedBox(width: 12),
-            Flexible(
-              child: Text(
-                value,
-                textAlign: TextAlign.end,
-                style: TextStyle(
-                  fontWeight: strong ? FontWeight.w900 : FontWeight.w700,
-                  color: warning ? Theme.of(context).colorScheme.error : null,
-                ),
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final valueStyle =
+        strong ? DukaanTokens.textAmountLarge : DukaanTokens.textAmount;
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: DukaanTokens.space3),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            child: Text(
+              label,
+              style: DukaanTokens.textLabel
+                  .copyWith(color: scheme.onSurfaceVariant),
+            ),
+          ),
+          const SizedBox(width: DukaanTokens.space3),
+          Flexible(
+            child: Text(
+              value,
+              textAlign: TextAlign.end,
+              style: valueStyle.copyWith(
+                color: warning ? scheme.onTertiaryContainer : scheme.onSurface,
               ),
             ),
-          ],
-        ),
-      );
+          ),
+        ],
+      ),
+    );
+  }
 }

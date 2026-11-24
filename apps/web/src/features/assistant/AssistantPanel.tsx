@@ -1,12 +1,14 @@
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type ChangeEvent, type FormEvent } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   AlertTriangle,
+  Camera,
   Check,
   ChevronRight,
   LoaderCircle,
   Mic,
   PackageMinus,
+  PackagePlus,
   Paperclip,
   ReceiptIndianRupee,
   Sparkles,
@@ -14,41 +16,171 @@ import {
   X,
 } from "lucide-react";
 import { useWorkspace } from "../../app/WorkspaceContext";
-import { cancelProposal, confirmCommand, getProposalRevisions, interpretCommand, listProposals, reviseCommand } from "../../data/repository";
+import { cancelProposal, confirmCommand, createProposalFromImage, getProposalRevisions, interpretCommand, listProposals, pollAssistantProposal, reviseCommand, uploadReceiptAttachment } from "../../data/repository";
 import { formatMoney } from "../../lib/format";
 import { saveOfflineDraft } from "../../lib/offlineDrafts";
-import type { AssistantProposal } from "../../types";
+import type { WorkspaceAccess } from "../../lib/permissions";
+import type { AssistantProposal, EntryKind } from "../../types";
 import { StatusBadge } from "../../components/StatusBadge";
 
-const example = "Ramesh bought 3 shirts for ₹2,400, paid ₹1,500, ₹900 pending.";
+const saleExample = "Ramesh bought 3 shirts for ₹2,400, paid ₹1,500, ₹900 pending.";
+const purchaseExample = "Bought 2.5 metres from Sharma Suppliers for ₹4,000 each.";
+
+function commandLabel(commandType: AssistantProposal["commandType"]): string {
+  switch (commandType) {
+    case "SALE": return "Sale";
+    case "PURCHASE": return "Purchase";
+    case "PAYMENT": return "Payment";
+    case "EXPENSE": return "Expense";
+    default: return "Entry";
+  }
+}
+
+function canUseAssistantProposal(proposal: AssistantProposal, access: WorkspaceAccess): boolean {
+  switch (proposal.commandType) {
+    case "SALE":
+      return true;
+    case "PURCHASE":
+      return access.canRecordPurchases;
+    case "EXPENSE":
+      return access.canRecordExpenses;
+    case "PAYMENT":
+      return proposal.paymentDirection === "PAYMENT"
+        ? access.canRecordSupplierPayments
+        : access.canRecordCustomerReceipts;
+    default:
+      return false;
+  }
+}
 
 export function AssistantPanel() {
-  const { assistantOpen, closeAssistant, bootstrap, locationId } = useWorkspace();
+  const { assistantOpen, closeAssistant, bootstrap, access, locationId } = useWorkspace();
   const [text, setText] = useState("");
   const [proposal, setProposal] = useState<AssistantProposal | null>(null);
   const [editing, setEditing] = useState(false);
   const [success, setSuccess] = useState<string | null>(null);
+  const [successKind, setSuccessKind] = useState<EntryKind | null>(null);
   const [offlineMessage, setOfflineMessage] = useState<string | null>(null);
+  const [accessError, setAccessError] = useState<string | null>(null);
+  const [ocrPhase, setOcrPhase] = useState<"uploading" | "reading" | null>(null);
+  const [ocrFileName, setOcrFileName] = useState<string | null>(null);
+  const [ocrError, setOcrError] = useState<string | null>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
+  const ocrAbortRef = useRef<AbortController | null>(null);
   const queryClient = useQueryClient();
+  const lookupOptions = {
+    customersOnly: access.isCashier,
+    includeWholesalePrices: access.canViewWholesalePrices,
+  };
+
+  function closePanel() {
+    ocrAbortRef.current?.abort();
+    closeAssistant();
+  }
+
+  const scanReceipt = useMutation({
+    mutationFn: async (file: File) => {
+      const controller = new AbortController();
+      ocrAbortRef.current = controller;
+      setOcrPhase("uploading");
+      setOcrFileName(file.name);
+      const attachment = await uploadReceiptAttachment({ businessId: bootstrap.business.id, file });
+      if (attachment.status !== "READY") throw new Error("The receipt upload was not accepted. Please try again.");
+      setOcrPhase("reading");
+      const pending = await createProposalFromImage({
+        attachmentId: attachment.id,
+        businessId: bootstrap.business.id,
+        locationId,
+        lookupOptions,
+      });
+      const ready = await pollAssistantProposal({
+        proposalId: pending.id,
+        businessId: bootstrap.business.id,
+        locationId,
+        lookupOptions,
+        signal: controller.signal,
+      });
+      if (ready.status === "CONFIRMED" || ready.status === "CANCELLED" || ready.status === "EXPIRED" || ready.status === "FAILED") {
+        throw new Error("This receipt proposal is no longer open. Please scan it again.");
+      }
+      if ((ready.commandType === "UNKNOWN" || ready.commandType === "UNSUPPORTED") && ready.questions.length) {
+        throw new Error(ready.questions[0]);
+      }
+      if (!canUseAssistantProposal(ready, access)) {
+        await cancelProposal(ready.id, ready.version).catch(() => undefined);
+        throw new Error(access.isCashier
+          ? "Cashiers can scan sale receipts only. This file was not opened for purchase or expense entry."
+          : "This receipt cannot be recorded with your current role.");
+      }
+      return ready;
+    },
+    onSuccess: (readyProposal) => {
+      setProposal(readyProposal);
+      setEditing(false);
+      setAccessError(null);
+      setOcrError(null);
+      confirm.reset();
+    },
+    onError: (error) => {
+      if (ocrAbortRef.current?.signal.aborted || (error instanceof Error && error.name === "AbortError")) return;
+      setOcrError(error instanceof Error ? error.message : "We couldn’t read this receipt. Please try again.");
+    },
+    onSettled: () => {
+      setOcrPhase(null);
+      setOcrFileName(null);
+      ocrAbortRef.current = null;
+    },
+  });
 
   const interpret = useMutation({
     mutationFn: (sourceText: string) => proposal
-      ? reviseCommand(bootstrap.business.id, proposal, sourceText)
-      : interpretCommand(bootstrap.business.id, locationId, sourceText),
-    onSuccess: (nextProposal) => { setProposal(nextProposal); setEditing(false); confirm.reset(); },
+      ? reviseCommand(bootstrap.business.id, proposal, sourceText, lookupOptions)
+      : interpretCommand(bootstrap.business.id, locationId, sourceText, lookupOptions),
+    onSuccess: (nextProposal) => {
+      if (!canUseAssistantProposal(nextProposal, access)) {
+        setProposal(null);
+        setText("");
+        setAccessError(access.isCashier
+          ? "Cashiers can only record sales and customer receipts with the assistant."
+          : "Your role cannot record this kind of entry.");
+        void cancelProposal(nextProposal.id, nextProposal.version).catch(() => undefined);
+        return;
+      }
+      setProposal(nextProposal);
+      setEditing(false);
+      setAccessError(null);
+      confirm.reset();
+    },
   });
   const confirm = useMutation({
-    mutationFn: (readyProposal: AssistantProposal) => confirmCommand(bootstrap.business.id, readyProposal),
+    mutationFn: (readyProposal: AssistantProposal) => {
+      if (!canUseAssistantProposal(readyProposal, access)) {
+        throw new Error("Your role cannot record this kind of entry.");
+      }
+      return confirmCommand(bootstrap.business.id, readyProposal);
+    },
     onSuccess: async (entry) => {
       setSuccess(`${entry.number} was recorded successfully.`);
+      setSuccessKind(entry.kind);
       await queryClient.invalidateQueries();
     },
   });
 
   const refresh = useMutation({
-    mutationFn: (current: AssistantProposal) => reviseCommand(bootstrap.business.id, current),
-    onSuccess: (next) => { setProposal(next); confirm.reset(); },
+    mutationFn: (current: AssistantProposal) => reviseCommand(bootstrap.business.id, current, undefined, lookupOptions),
+    onSuccess: (next) => {
+      if (!canUseAssistantProposal(next, access)) {
+        setProposal(null);
+        setAccessError("Your role cannot record this kind of entry.");
+        void cancelProposal(next.id, next.version).catch(() => undefined);
+        return;
+      }
+      setProposal(next);
+      setAccessError(null);
+      confirm.reset();
+    },
   });
 
   const [historyOpen, setHistoryOpen] = useState(false);
@@ -88,24 +220,53 @@ export function AssistantPanel() {
       setEditing(false);
       refresh.reset();
       setSuccess(null);
+      setSuccessKind(null);
       setOfflineMessage(null);
+      setAccessError(null);
+      setOcrError(null);
       interpret.reset();
       confirm.reset();
+      scanReceipt.reset();
     }
   }, [assistantOpen]);
+
+  useEffect(() => () => ocrAbortRef.current?.abort(), []);
+
+  useEffect(() => {
+    ocrAbortRef.current?.abort();
+    setProposal(null);
+    setEditing(false);
+    setSuccess(null);
+    setSuccessKind(null);
+    setOfflineMessage(null);
+    setAccessError(null);
+    setOcrError(null);
+    setOcrPhase(null);
+    setOcrFileName(null);
+    setText("");
+    interpret.reset();
+    confirm.reset();
+    refresh.reset();
+    scanReceipt.reset();
+  }, [access.isCashier, bootstrap.business.id, bootstrap.user.id]);
 
   if (!assistantOpen) return null;
 
   async function submit(event: FormEvent) {
     event.preventDefault();
-    if (!text.trim()) return;
+    if (!text.trim() || scanReceipt.isPending) return;
     setOfflineMessage(null);
+    setAccessError(null);
+    setOcrError(null);
     if (!navigator.onLine) {
-      await saveOfflineDraft({
-        kind: "assistant",
-        locationId,
-        content: { sourceText: text.trim() },
-      });
+      await saveOfflineDraft(
+        { userId: bootstrap.user.id, businessId: bootstrap.business.id },
+        {
+          kind: "assistant",
+          locationId,
+          content: { sourceText: text.trim() },
+        },
+      );
       setOfflineMessage("Saved on this device. Review and confirm it after you reconnect.");
       return;
     }
@@ -113,25 +274,45 @@ export function AssistantPanel() {
   }
 
   const location = bootstrap.locations.find((candidate) => candidate.id === locationId);
+  const example = access.isCashier ? saleExample : purchaseExample;
+  const proposalAllowed = proposal ? canUseAssistantProposal(proposal, access) : false;
+
+  function startReceiptScan(file: File) {
+    if (scanReceipt.isPending) return;
+    setAccessError(null);
+    setOcrError(null);
+    if (!navigator.onLine) {
+      setOcrError("Reconnect to the internet before scanning a receipt.");
+      return;
+    }
+    ocrAbortRef.current?.abort();
+    scanReceipt.mutate(file);
+  }
+
+  function selectReceipt(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.currentTarget.files?.[0];
+    event.currentTarget.value = "";
+    if (file) startReceiptScan(file);
+  }
 
   return (
     <div className="assistant-backdrop" role="presentation" onMouseDown={(event) => {
-      if (event.currentTarget === event.target) closeAssistant();
+      if (event.currentTarget === event.target) closePanel();
     }}>
       <section className="assistant-panel" role="dialog" aria-modal="true" aria-labelledby="assistant-title">
         <header className="assistant-header">
           <div className="assistant-title-wrap">
             <span className="assistant-glyph"><Sparkles aria-hidden="true" /></span>
             <div>
-              <p className="eyebrow">Ask / Add</p>
+              <p className="folio-kicker">Ask / Add</p>
               <h2 id="assistant-title">Tell DukaanAI what happened</h2>
             </div>
           </div>
-          <button className="icon-button" onClick={closeAssistant} aria-label="Close assistant"><X /></button>
+          <button className="icon-button" onClick={closePanel} aria-label="Close assistant"><X /></button>
         </header>
 
         <div className="assistant-body">
-          {(!proposal || editing) && !success ? (
+          {(!proposal || !proposalAllowed || editing) && !success ? (
             <>
               <div className="scope-strip">
                 <span>Recording at</span>
@@ -140,18 +321,37 @@ export function AssistantPanel() {
                 <span>Nothing changes before you confirm</span>
               </div>
               <form onSubmit={submit}>
-                <label htmlFor="assistant-command">Sale, purchase, payment or expense</label>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  hidden
+                  accept="image/jpeg,image/png,application/pdf"
+                  aria-label="Receipt file"
+                  onChange={selectReceipt}
+                />
+                <input
+                  ref={cameraInputRef}
+                  type="file"
+                  hidden
+                  accept="image/jpeg,image/png"
+                  capture="environment"
+                  aria-label="Receipt camera"
+                  onChange={selectReceipt}
+                />
+                <label htmlFor="assistant-command">{access.isCashier ? "Sale or customer receipt" : "Sale, purchase, payment or expense"}</label>
                 <div className="assistant-input-wrap">
                   <textarea
                     id="assistant-command"
                     ref={inputRef}
                     value={text}
                     onChange={(event) => setText(event.target.value)}
-                    placeholder="Type naturally in Hindi, Hinglish or English…"
+                    placeholder={access.isCashier ? "Record a sale or customer payment…" : "Type naturally in Hindi, Hinglish or English…"}
                     rows={5}
+                    disabled={scanReceipt.isPending}
                   />
                   <div className="assistant-input-actions">
-                    <button type="button" className="quiet-icon-button" aria-label="Attach a bill or receipt" title="Attach a bill or receipt"><Paperclip /></button>
+                    <button type="button" className="quiet-icon-button" aria-label={access.isCashier ? "Attach a sale receipt" : "Attach a bill or receipt"} title={access.isCashier ? "Attach a sale receipt" : "Attach a bill or receipt"} disabled={scanReceipt.isPending} onClick={() => fileInputRef.current?.click()}><Paperclip /></button>
+                    <button type="button" className="quiet-icon-button" aria-label={access.isCashier ? "Photograph a sale receipt" : "Photograph a bill or receipt"} title={access.isCashier ? "Photograph a sale receipt" : "Photograph a bill or receipt"} disabled={scanReceipt.isPending} onClick={() => cameraInputRef.current?.click()}><Camera /></button>
                     <button type="button" className="quiet-icon-button" aria-label="Speak a command" title="Speak a command"><Mic /></button>
                   </div>
                 </div>
@@ -159,19 +359,27 @@ export function AssistantPanel() {
                   <span>Try an example</span>
                   <q>{example}</q>
                 </button>
-                <button className="primary-button full" disabled={!text.trim() || interpret.isPending}>
+                <button className="primary-button full" disabled={!text.trim() || interpret.isPending || scanReceipt.isPending}>
                   {interpret.isPending ? <LoaderCircle className="spin" aria-hidden="true" /> : <Sparkles aria-hidden="true" />}
                   {interpret.isPending ? "Understanding…" : "Review what will be recorded"}
                 </button>
               </form>
               {interpret.error ? <p className="form-error" role="alert">{interpret.error.message}</p> : null}
+              {accessError ? <p className="form-error" role="alert">{accessError}</p> : null}
+              {ocrError ? <p className="form-error" role="alert">{ocrError}</p> : null}
+              {ocrPhase ? (
+                <div className="warning-card" role="status" aria-live="polite">
+                  <LoaderCircle className="spin" aria-hidden="true" />
+                  <span>{ocrPhase === "uploading" ? `Uploading ${ocrFileName}…` : `Reading ${ocrFileName}… This can take a few seconds.`}</span>
+                </div>
+              ) : null}
               {offlineMessage ? <p className="offline-success" role="status">{offlineMessage}</p> : null}
               <div className="capture-options" aria-label="Other ways to add an entry">
                 <button type="button"><Mic />Speak<span>Voice command</span></button>
-                <button type="button"><ReceiptIndianRupee />Scan bill<span>Photo or PDF</span></button>
+                <button type="button" disabled={scanReceipt.isPending} onClick={() => fileInputRef.current?.click()}><ReceiptIndianRupee />{access.isCashier ? "Scan sale receipt" : "Scan bill"}<span>Photo or PDF</span></button>
                 <button type="button"><ChevronRight />Manual<span>Use a form</span></button>
               </div>
-              <button type="button" className="text-button" onClick={() => void loadHistory()}>View past proposals</button>
+              {!access.isCashier ? <button type="button" className="text-button" onClick={() => void loadHistory()}>View past proposals</button> : null}
               {historyOpen ? (
                 <div>
                   {history.length ? (
@@ -183,12 +391,12 @@ export function AssistantPanel() {
             </>
           ) : null}
 
-          {proposal && !editing && !success ? (
+          {proposal && proposalAllowed && !editing && !success ? (
             <div className="review-content">
               <div className="review-heading">
                 <div>
-                  <p className="eyebrow">Review version {proposal.version}</p>
-                  <h3>{proposal.intent === "RECORD_SALE" ? "Sale" : proposal.intent.replaceAll("_", " ").toLowerCase()}</h3>
+                  <p className="folio-kicker">Review · version {proposal.version}</p>
+                  <h3>{commandLabel(proposal.commandType)}</h3>
                 </div>
                 <StatusBadge tone={proposal.status === "READY" ? "positive" : "warning"}>
                   {proposal.status === "READY" ? "Ready" : "Needs details"}
@@ -201,19 +409,21 @@ export function AssistantPanel() {
                 {proposal.partyProposedNew ? <StatusBadge tone="warning">New</StatusBadge> : <StatusBadge>Matched</StatusBadge>}
               </div>
 
-              <div className="review-lines">
-                <p className="section-label">Items</p>
-                {proposal.lines.length ? proposal.lines.map((line, index) => (
-                  <div className="review-line" key={`${line.productName}-${index}`}>
-                    <span className="line-icon"><PackageMinus aria-hidden="true" /></span>
-                    <div className="line-main">
-                      <strong>{line.productName}</strong>
-                      <span>{line.quantity} {line.unit} × {formatMoney(line.unitPriceMinor)}</span>
+              {proposal.commandType === "SALE" || proposal.commandType === "PURCHASE" ? (
+                <div className="review-lines">
+                  <p className="section-label">Items</p>
+                  {proposal.lines.length ? proposal.lines.map((line, index) => (
+                    <div className="review-line" key={`${line.productName}-${index}`}>
+                      <span className="line-icon">{proposal.commandType === "PURCHASE" ? <PackagePlus aria-hidden="true" /> : <PackageMinus aria-hidden="true" />}</span>
+                      <div className="line-main">
+                        <strong>{line.productName}</strong>
+                        <span>{line.quantity} {line.unit} × {formatMoney(line.unitPriceMinor)}</span>
+                      </div>
+                      <strong>{formatMoney(line.lineTotalMinor)}</strong>
                     </div>
-                    <strong>{formatMoney(line.lineTotalMinor)}</strong>
-                  </div>
-                )) : <p className="muted-copy">Add a product before confirming.</p>}
-              </div>
+                  )) : <p className="muted-copy">Add a product before confirming.</p>}
+                </div>
+              ) : null}
 
               <dl className="amount-breakdown">
                 <div><dt>Total</dt><dd>{formatMoney(proposal.totalMinor)}</dd></div>
@@ -224,7 +434,7 @@ export function AssistantPanel() {
 
               <div className="effects-card">
                 <p className="section-label">After confirmation</p>
-                {proposal.effects.stock.map((effect) => <p key={effect}><PackageMinus aria-hidden="true" />{effect}</p>)}
+                {proposal.effects.stock.map((effect) => <p key={effect}>{proposal.commandType === "PURCHASE" ? <PackagePlus aria-hidden="true" /> : <PackageMinus aria-hidden="true" />}{effect}</p>)}
                 <p><ReceiptIndianRupee aria-hidden="true" />{proposal.effects.ledger}</p>
               </div>
 
@@ -240,11 +450,11 @@ export function AssistantPanel() {
                 <button
                   type="button"
                   className="primary-button"
-                  disabled={proposal.status !== "READY" || confirm.isPending || refresh.isPending}
+                  disabled={!proposalAllowed || proposal.status !== "READY" || confirm.isPending || refresh.isPending}
                   onClick={() => confirm.mutate(proposal)}
                 >
                   {confirm.isPending ? <LoaderCircle className="spin" aria-hidden="true" /> : <Check aria-hidden="true" />}
-                  {confirm.isPending ? "Recording…" : `Record sale ${formatMoney(proposal.totalMinor)}`}
+                  {confirm.isPending ? "Recording…" : `Record ${commandLabel(proposal.commandType).toLowerCase()} ${formatMoney(proposal.totalMinor)}`}
                 </button>
               </div>
               <button type="button" className="secondary-button" disabled={refresh.isPending || confirm.isPending}
@@ -267,11 +477,11 @@ export function AssistantPanel() {
           {success ? (
             <div className="success-state" role="status">
               <span className="success-icon"><Check aria-hidden="true" /></span>
-              <p className="eyebrow">Saved</p>
+              <p className="folio-kicker">Saved</p>
               <h3>Everything is recorded</h3>
               <p>{success}</p>
-              <p className="success-detail">Stock, payment and outstanding balance were updated together.</p>
-              <button className="primary-button full" onClick={closeAssistant}>Done</button>
+              <p className="success-detail">{successKind === "EXPENSE" ? "The expense is now in your entries timeline." : successKind === "PAYMENT_IN" || successKind === "PAYMENT_OUT" ? "The payment and party balance were updated together." : "Stock, payment and outstanding balance were updated together."}</p>
+              <button className="primary-button full" onClick={closePanel}>Done</button>
             </div>
           ) : null}
         </div>

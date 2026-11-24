@@ -9,7 +9,13 @@ DJANGO_SECURE_HSTS_SECONDS=3600
 DJANGO_SECURE_HSTS_INCLUDE_SUBDOMAINS=false
 DJANGO_SECURE_HSTS_PRELOAD=false
 DJANGO_USE_X_FORWARDED_HOST=true
-DATABASE_URL=REQUIRED_supabase_session_pooler_url_with_sslmode_require
+# Use a direct Postgres URL or session-mode pooler. Neon transaction pooling
+# (-pooler hostname) is incompatible with connection-local RLS settings.
+DATABASE_URL=REQUIRED_direct_or_session_mode_postgres_url_with_sslmode_require
+# Runtime services use the separate least-privilege URL. Migrations must force
+# DUKAAN_USE_APP_DB_ROLE=false so they keep using the operator DATABASE_URL.
+DUKAAN_USE_APP_DB_ROLE=true
+DUKAAN_APP_DATABASE_URL=REQUIRED_direct_or_session_mode_app_role_url_with_sslmode_require
 # Least-privilege application role enforced by Row Level Security policies.
 # The migration/operator credential in DATABASE_URL must own the tables;
 # create this role once per database (see docs/runbooks/database-roles.md)
@@ -18,18 +24,79 @@ DUKAAN_APP_DB_ROLE=dukaan_app
 DUKAAN_APP_DB_PASSWORD=REQUIRED_SERVER_ONLY_SECRET_FOR_APP_ROLE
 REDIS_URL=INJECTED_BY_RENDER_KEY_VALUE
 CELERY_BROKER_URL=INJECTED_BY_RENDER_KEY_VALUE
+DUKAAN_THROTTLE_AUTH_RATE=10/min
+DUKAAN_THROTTLE_ASSISTANT_RATE=30/min
+DUKAAN_THROTTLE_UPLOADS_RATE=10/min
+DUKAAN_THROTTLE_WRITE_RATE=60/min
+DUKAAN_THROTTLE_READ_RATE=120/min
 DEV_AUTH_ENABLED=false
 CORS_ALLOWED_ORIGINS=https://app.example.com
+# Verification codes. Configure MSG91 with an approved DLT OTP template.
+# Keep OTP_EXPOSE_DEV_CODE=false in production.
+SMS_ENABLED=true
+OTP_EXPOSE_DEV_CODE=false
+SMS_PROVIDER=msg91
+MSG91_AUTH_KEY=REQUIRED_SERVER_ONLY_SECRET
+MSG91_OTP_TEMPLATE_ID=REQUIRED_APPROVED_DLT_TEMPLATE_ID
+MSG91_OTP_VARIABLE=OTP
+MSG91_API_BASE=https://control.msg91.com/api/v5
+SMS_TIMEOUT_SECONDS=15
 
-SUPABASE_URL=https://REQUIRED_PROJECT_REF.supabase.co
-SUPABASE_JWKS_URL=https://REQUIRED_PROJECT_REF.supabase.co/auth/v1/.well-known/jwks.json
-SUPABASE_JWT_ISSUER=https://REQUIRED_PROJECT_REF.supabase.co/auth/v1
-SUPABASE_JWT_AUDIENCE=authenticated
+# AI extraction adapter (all SERVER-ONLY; never use VITE_* names or mobile builds).
+USE_AI_INTERPRETER=false
+AI_PROVIDER=fake
+AI_MODEL=gpt-4o-mini
+AI_API_BASE=
+AI_API_KEY=REQUIRED_SERVER_ONLY_SECRET_WHEN_AI_ENABLED
+AI_TIMEOUT_SECONDS=20
+
+# Private object storage for voice/image uploads (all SERVER-ONLY).
+STORAGE_BACKEND=supabase
+ATTACHMENT_MAX_BYTES=8388608
+SIGNED_URL_TTL_SECONDS=900
+SUPABASE_URL=https://your-project.supabase.co
 SUPABASE_SERVICE_ROLE_KEY=REQUIRED_SERVER_ONLY_SECRET
-SUPABASE_STORAGE_BUCKET=receipts
+SUPABASE_STORAGE_BUCKET=business-documents
 
-# Only needed for projects that still validate legacy symmetric JWTs.
-SUPABASE_JWT_SECRET=
+# OCR is provided by the Rust doc-extractor service using OCRia-nano-1.
+# DukaanAI contains no OCR packages and downloads no models.
+OCR_ENABLED=true
+OCR_API_URL=https://ocr.example.com
+OCR_API_TOKEN=REQUIRED_SERVER_ONLY_SECRET_WHEN_PROTECTED
+OCR_PROVIDER=ocria
+OCR_LANGUAGES=eng+hin
+OCR_REQUEST_TIMEOUT_SECONDS=120
+OCR_POLL_TIMEOUT_SECONDS=300
+OCR_POLL_INTERVAL_SECONDS=1
+OCR_MAX_RESULT_BYTES=2097152
+
+# Push notifications, reminders, and attachment retention.
+FCM_ENABLED=false
+FCM_PROJECT_ID=REQUIRED_WHEN_FCM_ENABLED
+FCM_SERVICE_ACCOUNT_JSON=REQUIRED_SERVER_ONLY_SECRET_WHEN_FCM_ENABLED
+ATTACHMENT_QUARANTINE_REQUIRED=true
+ATTACHMENT_QUARANTINE_RETENTION_DAYS=7
+ATTACHMENT_RETENTION_DAYS=30
+# Required in production: dotted scanner implementation path, never a shell command.
+ATTACHMENT_SCANNER=REQUIRED_MALWARE_AND_FORMAT_SCANNER_IMPLEMENTATION
+
+# Server-side speech-to-text for voice proposals (all SERVER-ONLY).
+# The application never downloads model weights.
+STT_PROVIDER=whisper
+STT_MODEL=whisper-1
+STT_API_BASE=https://api.openai.com/v1
+STT_API_KEY=REQUIRED_SERVER_ONLY_SECRET_WHEN_STT_ENABLED
+STT_TIMEOUT_SECONDS=60
+
+# Gmail receipts integration. Use a Google OAuth Web client with read-only
+# Gmail scope. Tokens are encrypted at rest.
+GMAIL_ENABLED=false
+GMAIL_AI_EXTRACTION=true
+GMAIL_CLIENT_ID=REQUIRED_WHEN_GMAIL_ENABLED
+GMAIL_CLIENT_SECRET=REQUIRED_SERVER_ONLY_SECRET_WHEN_GMAIL_ENABLED
+GMAIL_REDIRECT_URI=https://api.example.com/api/v1/integrations/gmail/callback/
+GMAIL_WEB_REDIRECT_URL=https://app.example.com/settings
+GMAIL_TOKEN_ENCRYPTION_KEY=REQUIRED_RANDOM_FERNET_KEY_OR_DERIVE_FROM_DJANGO_SECRET
 
 # Optional. Configure alerting before adding the DSN.
 SENTRY_DSN=

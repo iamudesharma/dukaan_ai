@@ -4,9 +4,9 @@ export function PageHeader({ eyebrow, title, description, actions }: { eyebrow?:
   return (
     <header className="page-header">
       <div>
-        {eyebrow ? <p className="eyebrow">{eyebrow}</p> : null}
+        {eyebrow ? <p className="folio-kicker">{eyebrow}</p> : null}
         <h1>{title}</h1>
-        <p>{description}</p>
+        <p className="prose-measure">{description}</p>
       </div>
       {actions ? <div className="page-actions">{actions}</div> : null}
     </header>

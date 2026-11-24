@@ -3,6 +3,7 @@ from django.contrib import admin
 from .models import (
     DocumentSequence,
     Expense,
+    InventoryCostLayer,
     PartyLedgerEntry,
     Payment,
     PaymentAllocation,
@@ -27,6 +28,7 @@ admin.site.register(
         PaymentAllocation,
         Expense,
         StockBalance,
+        InventoryCostLayer,
         StockMovement,
         PartyLedgerEntry,
         StockTransfer,

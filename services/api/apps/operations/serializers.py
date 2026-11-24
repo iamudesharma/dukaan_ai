@@ -1,3 +1,4 @@
+from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
 from apps.catalog.models import Party, Product, ProductPack
@@ -80,11 +81,24 @@ class SaleLineSerializer(serializers.ModelSerializer):
             "sgst_amount_minor",
             "igst_amount_minor",
             "line_total_minor",
+            "unit_cost_minor",
+            "cogs_minor",
+            "costing_complete",
         ]
 
 
 class SaleSerializer(serializers.ModelSerializer):
     lines = SaleLineSerializer(many=True, read_only=True)
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        membership = self.context.get("membership")
+        if membership is not None and membership.role == "CASHIER":
+            for line in data["lines"]:
+                line.pop("unit_cost_minor", None)
+                line.pop("cogs_minor", None)
+                line.pop("costing_complete", None)
+        return data
 
     class Meta:
         model = Sale
@@ -238,13 +252,102 @@ class PaymentCreateSerializer(serializers.Serializer):
 
 
 class PaymentAllocationSerializer(serializers.ModelSerializer):
+    document_type = serializers.SerializerMethodField()
+    document_id = serializers.SerializerMethodField()
+    document_number = serializers.SerializerMethodField()
+    document_total_minor = serializers.SerializerMethodField()
+    document_paid_total_minor = serializers.SerializerMethodField()
+    document_due_total_minor = serializers.SerializerMethodField()
+
+    def _document(self, allocation):
+        return allocation.sale or allocation.purchase
+
+    @extend_schema_field({"type": "string", "enum": ["SALE", "PURCHASE"]})
+    def get_document_type(self, allocation) -> str:
+        return "SALE" if allocation.sale_id else "PURCHASE"
+
+    def get_document_id(self, allocation) -> str | None:
+        document = self._document(allocation)
+        return str(document.pk) if document else None
+
+    def get_document_number(self, allocation) -> str | None:
+        document = self._document(allocation)
+        return document.number if document else None
+
+    def get_document_total_minor(self, allocation) -> int | None:
+        document = self._document(allocation)
+        return document.grand_total_minor if document else None
+
+    def get_document_paid_total_minor(self, allocation) -> int | None:
+        document = self._document(allocation)
+        return document.paid_total_minor if document else None
+
+    def get_document_due_total_minor(self, allocation) -> int | None:
+        document = self._document(allocation)
+        return document.due_total_minor if document else None
+
     class Meta:
         model = PaymentAllocation
-        fields = ["id", "sale", "purchase", "amount_minor"]
+        fields = [
+            "id",
+            "sale",
+            "purchase",
+            "amount_minor",
+            "document_type",
+            "document_id",
+            "document_number",
+            "document_total_minor",
+            "document_paid_total_minor",
+            "document_due_total_minor",
+        ]
+
+
+class PaymentAllocationInputSerializer(serializers.Serializer):
+    amount_minor = serializers.IntegerField(min_value=1)
+    sale_id = serializers.UUIDField(required=False, allow_null=True)
+    purchase_id = serializers.UUIDField(required=False, allow_null=True)
+    document_type = serializers.ChoiceField(
+        choices=["SALE", "PURCHASE"], required=False, allow_null=True
+    )
+    document_id = serializers.UUIDField(required=False, allow_null=True)
+
+    def validate(self, attrs):
+        generic = attrs.get("document_type") is not None or attrs.get("document_id") is not None
+        direct = attrs.get("sale_id") is not None or attrs.get("purchase_id") is not None
+        if generic and direct:
+            raise serializers.ValidationError(
+                "Use either sale_id/purchase_id or document_type with document_id"
+            )
+        if generic:
+            if not attrs.get("document_type") or not attrs.get("document_id"):
+                raise serializers.ValidationError(
+                    "document_type and document_id must be supplied together"
+                )
+            attrs["sale_id" if attrs["document_type"] == "SALE" else "purchase_id"] = attrs.pop(
+                "document_id"
+            )
+            attrs.pop("document_type")
+        if bool(attrs.get("sale_id")) == bool(attrs.get("purchase_id")):
+            raise serializers.ValidationError("Exactly one sale or purchase document is required")
+        return attrs
+
+
+class PaymentReallocationSerializer(serializers.Serializer):
+    allocations = PaymentAllocationInputSerializer(many=True, allow_empty=False)
+    reason = serializers.CharField(max_length=240)
+    idempotency_key = serializers.CharField(max_length=128)
 
 
 class PaymentSerializer(serializers.ModelSerializer):
     allocations = PaymentAllocationSerializer(many=True, read_only=True)
+    allocated_total_minor = serializers.SerializerMethodField()
+    unallocated_total_minor = serializers.SerializerMethodField()
+
+    def get_allocated_total_minor(self, payment) -> int:
+        return sum(allocation.amount_minor for allocation in payment.allocations.all())
+
+    def get_unallocated_total_minor(self, payment) -> int:
+        return payment.amount_minor - self.get_allocated_total_minor(payment)
 
     class Meta:
         model = Payment
@@ -264,7 +367,36 @@ class PaymentSerializer(serializers.ModelSerializer):
             "reversal_reason",
             "reversed_at",
             "allocations",
+            "allocated_total_minor",
+            "unallocated_total_minor",
         ]
+
+
+class PaymentAllocationTotalsSerializer(serializers.Serializer):
+    payment_count = serializers.IntegerField()
+    payment_total_minor = serializers.IntegerField()
+    allocated_total_minor = serializers.IntegerField()
+    unallocated_total_minor = serializers.IntegerField()
+    outstanding_document_count = serializers.IntegerField()
+    outstanding_total_minor = serializers.IntegerField()
+
+
+class OutstandingDocumentSerializer(serializers.Serializer):
+    document_type = serializers.ChoiceField(choices=["SALE", "PURCHASE"])
+    document_id = serializers.UUIDField()
+    number = serializers.CharField()
+    document_date = serializers.DateField()
+    party_id = serializers.UUIDField(allow_null=True)
+    party_name = serializers.CharField(allow_null=True)
+    grand_total_minor = serializers.IntegerField()
+    paid_total_minor = serializers.IntegerField()
+    due_total_minor = serializers.IntegerField()
+
+
+class PaymentAllocationReviewSerializer(serializers.Serializer):
+    results = PaymentSerializer(many=True)
+    totals = PaymentAllocationTotalsSerializer()
+    outstanding_documents = OutstandingDocumentSerializer(many=True)
 
 
 class ExpenseCreateSerializer(serializers.Serializer):
@@ -437,3 +569,86 @@ class ReverseSerializer(serializers.Serializer):
     reason = serializers.CharField(max_length=240)
     idempotency_key = serializers.CharField(max_length=128)
     negative_stock_acknowledged = serializers.BooleanField(default=False)
+
+
+class DashboardTodaySerializer(serializers.Serializer):
+    sales_minor = serializers.IntegerField()
+    purchases_minor = serializers.IntegerField()
+    expenses_minor = serializers.IntegerField()
+
+
+class DashboardBooksSerializer(serializers.Serializer):
+    sales_minor = serializers.IntegerField()
+    purchases_minor = serializers.IntegerField()
+    expenses_minor = serializers.IntegerField()
+    receipts_minor = serializers.IntegerField()
+    supplier_payments_minor = serializers.IntegerField()
+    receivable_minor = serializers.IntegerField()
+    payable_minor = serializers.IntegerField()
+    cash_flow_minor = serializers.IntegerField()
+
+
+class DashboardSerializer(serializers.Serializer):
+    business_id = serializers.UUIDField()
+    as_of = serializers.DateField()
+    today = DashboardTodaySerializer()
+    books = DashboardBooksSerializer()
+    low_stock_count = serializers.IntegerField()
+    # Null means at least one posted line has missing or incomplete costing.
+    gross_profit_minor = serializers.IntegerField(allow_null=True)
+    summary = serializers.CharField()
+
+
+class StockReportRowSerializer(serializers.Serializer):
+    product_id = serializers.UUIDField()
+    name = serializers.CharField()
+    unit = serializers.CharField()
+    quantity = serializers.DecimalField(max_digits=18, decimal_places=3)
+    low_stock_threshold = serializers.DecimalField(max_digits=18, decimal_places=3)
+    is_low_stock = serializers.BooleanField()
+
+
+class StockReportSerializer(serializers.Serializer):
+    results = StockReportRowSerializer(many=True)
+
+
+class SalesMetricsSerializer(serializers.Serializer):
+    posted_sale_count = serializers.IntegerField()
+    line_count = serializers.IntegerField()
+    net_sales_minor = serializers.IntegerField()
+    cogs_minor = serializers.IntegerField()
+    gross_profit_minor = serializers.IntegerField(allow_null=True)
+    missing_cost_line_count = serializers.IntegerField()
+    costing_complete = serializers.BooleanField()
+
+
+class ValuationInventorySerializer(serializers.Serializer):
+    total_quantity = serializers.DecimalField(max_digits=18, decimal_places=3)
+    average_cost_minor = serializers.IntegerField(allow_null=True)
+    total_value_minor = serializers.IntegerField(allow_null=True)
+    known_value_minor = serializers.IntegerField()
+    costing_complete = serializers.BooleanField()
+
+
+class ValuationRowSerializer(serializers.Serializer):
+    product_id = serializers.UUIDField()
+    name = serializers.CharField()
+    unit = serializers.CharField()
+    quantity = serializers.DecimalField(max_digits=18, decimal_places=3)
+    average_cost_minor = serializers.IntegerField(allow_null=True)
+    total_value_minor = serializers.IntegerField(allow_null=True)
+    known_value_minor = serializers.IntegerField()
+    unknown_cost_quantity = serializers.DecimalField(max_digits=18, decimal_places=3)
+    costing_complete = serializers.BooleanField()
+
+
+class ValuationReportSerializer(serializers.Serializer):
+    inventory = ValuationInventorySerializer()
+    sales = SalesMetricsSerializer()
+    results = ValuationRowSerializer(many=True)
+
+
+class PartyLedgerReportSerializer(serializers.Serializer):
+    party_id = serializers.UUIDField()
+    balance = serializers.IntegerField()
+    entries = PartyLedgerEntrySerializer(many=True)

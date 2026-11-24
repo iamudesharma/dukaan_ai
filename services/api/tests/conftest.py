@@ -7,6 +7,48 @@ from apps.tenancy import rls
 from apps.tenancy.models import Business, Location, Membership
 
 
+def rls_is_enforced(connection) -> bool:
+    """Whether row-level security actually applies to the current connection.
+
+    PostgreSQL exempts superusers and roles with BYPASSRLS before consulting any
+    policy, so ``FORCE ROW LEVEL SECURITY`` does not bind them. The local and CI
+    test databases are created by a superuser (``POSTGRES_USER``), and therefore
+    run without RLS; assertions that depend on RLS must state that precondition
+    rather than fail. The dedicated app-role connection in ``test_rls.py`` is
+    not affected and always exercises the real policy.
+    """
+    if connection.vendor != "postgresql":
+        return False
+    with connection.cursor() as cursor:
+        cursor.execute("SELECT rolsuper OR rolbypassrls FROM pg_roles WHERE rolname = current_user")
+        row = cursor.fetchone()
+    return not bool(row and row[0])
+
+
+@pytest.fixture(autouse=True)
+def hermetic_attachment_policy(settings):
+    # Most worker/storage tests use the hermetic fake backend. Production
+    # defaults require scanning; security-specific tests opt back into that
+    # policy explicitly (see test_retention.py).
+    settings.ATTACHMENT_QUARANTINE_REQUIRED = False
+
+
+@pytest.fixture(autouse=True)
+def hermetic_cache(settings):
+    """Throttle counters stay in-process even when CI configures Redis."""
+    settings.CACHES = {
+        "default": {
+            "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
+            "LOCATION": "dukaan-api-tests",
+        }
+    }
+    from django.core.cache import cache
+
+    cache.clear()
+    yield
+    cache.clear()
+
+
 @pytest.fixture(autouse=True)
 def tenant_scope(db):
     """Mirror production: FORCE RLS hides everything until the verified

@@ -10,7 +10,7 @@ Development status: the MVP is in progress. See the [implementation checkpoint](
 
 - **Mobile:** Flutter, with Hindi/Hinglish/English-friendly flows and an API base URL supplied at build time.
 - **API:** Django + Django REST Framework in a modular monolith.
-- **Durable platform:** Supabase Postgres, Auth, and private Storage.
+- **Durable platform:** PostgreSQL (Supabase or Neon) and private object Storage; Django owns the custom phone/password JWT authentication flow.
 - **Async work:** Celery with private Render Key Value (Valkey-compatible) and a Postgres-backed outbox.
 - **Production runtime:** Render-hosted Django API, React static web, worker, and cron dispatcher in Singapore.
 - **Web:** React/Vite owner and manager console in `apps/web`, using the same Django authorization boundary as mobile.
@@ -57,14 +57,21 @@ For real Auth/Storage integration, a Flutter emulator, physical-device networkin
 make api-check
 make web-check
 make mobile-check
+make clients-check
+npm run test:e2e
 make config-check
 ```
+
+The canonical OpenAPI snapshot and generated TypeScript/Dart clients live in
+[`packages/api-contract`](packages/api-contract/README.md). Use
+`make schema-generate` and `make clients-generate` after API contract changes;
+`make clients-check` fails on drift.
 
 GitHub Actions detects backend, web, mobile, and operations paths and runs only the relevant jobs. A separate workflow performs CodeQL, dependency review/audits, and secret scanning; Dependabot covers GitHub Actions, npm, Python, and Dart dependencies.
 
 ## Production
 
-The checked-in [Render Blueprint](render.yaml) provisions the low-operational-overhead API topology. It intentionally does not provision a second database: use a dedicated paid Supabase production project with TLS, backups, point-in-time recovery, private receipt storage, and network restrictions.
+The checked-in [Render Blueprint](render.yaml) provisions the low-operational-overhead API topology. It intentionally does not provision a database: use a dedicated paid Neon or Supabase production project with TLS, backups, point-in-time recovery, private receipt storage, and network restrictions.
 
 Before accepting real customer data:
 

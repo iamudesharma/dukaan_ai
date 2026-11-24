@@ -4,7 +4,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter } from "react-router-dom";
 import App from "./App";
 import { initializeMonitoring, Sentry } from "./lib/monitoring";
-import "./styles.css";
+import "./styles/index.css";
 
 initializeMonitoring();
 

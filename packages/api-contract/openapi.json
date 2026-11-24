@@ -1,0 +1,6546 @@
+openapi: 3.0.3
+info:
+  title: DukaanAI API
+  version: 1.0.0
+  description: Tenant-safe operational API for DukaanAI
+paths:
+  /api/v1/assistant/attachments/presign/:
+    post:
+      operationId: api_v1_assistant_attachments_presign_create
+      description: |-
+        Mint a short-lived upload ticket for one voice/image file.
+
+        Bytes go straight from the device to private object storage; the
+        server only records identity and tenancy up front. Transcription
+        (Phase 1) verifies the object server-side before trusting it.
+      tags:
+      - api
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Attachment'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/Attachment'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Attachment'
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Attachment'
+          description: ''
+  /api/v1/assistant/attachments/upload/:
+    post:
+      operationId: api_v1_assistant_attachments_upload_create
+      description: |-
+        Upload a small voice file through Django for local/private storage.
+
+        Production clients can still use direct presigned uploads. This route
+        makes the project-local storage backend usable without a second public
+        file server.
+      tags:
+      - api
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Attachment'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/Attachment'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Attachment'
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Attachment'
+          description: ''
+  /api/v1/assistant/proposals/:
+    get:
+      operationId: api_v1_assistant_proposals_list
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      tags:
+      - api
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedAssistantProposalList'
+          description: ''
+    post:
+      operationId: api_v1_assistant_proposals_create
+      tags:
+      - api
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AssistantProposal'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/AssistantProposal'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/AssistantProposal'
+      security:
+      - bearerAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AssistantProposal'
+          description: ''
+  /api/v1/assistant/proposals/{id}/:
+    get:
+      operationId: api_v1_assistant_proposals_retrieve
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - api
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AssistantProposal'
+          description: ''
+  /api/v1/assistant/proposals/{id}/cancel/:
+    post:
+      operationId: api_v1_assistant_proposals_cancel_create
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - api
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AssistantProposal'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/AssistantProposal'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/AssistantProposal'
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AssistantProposal'
+          description: ''
+  /api/v1/assistant/proposals/{id}/confirm/:
+    post:
+      operationId: api_v1_assistant_proposals_confirm_create
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - api
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AssistantProposal'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/AssistantProposal'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/AssistantProposal'
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AssistantProposal'
+          description: ''
+  /api/v1/assistant/proposals/{id}/revise/:
+    post:
+      operationId: api_v1_assistant_proposals_revise_create
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - api
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AssistantProposal'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/AssistantProposal'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/AssistantProposal'
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AssistantProposal'
+          description: ''
+  /api/v1/assistant/proposals/{id}/revisions/:
+    get:
+      operationId: api_v1_assistant_proposals_revisions_retrieve
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - api
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AssistantProposal'
+          description: ''
+  /api/v1/assistant/proposals/from-audio/:
+    post:
+      operationId: api_v1_assistant_proposals_from_audio_create
+      description: |-
+        Create a voice proposal from an uploaded attachment and queue
+        transcription. Returns immediately (201 for a new proposal, 200 for
+        a reused open one); the client polls until the transcript lands.
+
+        Client retries are safe: re-POSTing the same attachment returns the
+        still-open proposal instead of minting duplicates, and the worker
+        ignores redelivery after a transcript is stored.
+      tags:
+      - api
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AssistantProposal'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/AssistantProposal'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/AssistantProposal'
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AssistantProposal'
+          description: ''
+  /api/v1/assistant/proposals/from-image/:
+    post:
+      operationId: api_v1_assistant_proposals_from_image_create
+      description: |-
+        Create/reuse an IMAGE proposal and queue local OCR.
+
+        The attachment must be the caller's own JPEG, PNG, or PDF upload in
+        the selected business. Location access and business/location linkage
+        are checked before anything is queued. Retrying with the same open
+        attachment reuses its proposal; the worker safely ignores redelivery
+        once recognized text has been applied.
+      tags:
+      - api
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AssistantProposal'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/AssistantProposal'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/AssistantProposal'
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AssistantProposal'
+          description: ''
+  /api/v1/audit-events/:
+    get:
+      operationId: api_v1_audit_events_list
+      description: Read-only audit trail for the Activity screen.
+      tags:
+      - api
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AuditEvent'
+          description: ''
+  /api/v1/auth/capabilities/:
+    get:
+      operationId: api_v1_auth_capabilities_retrieve
+      summary: Get available authentication methods
+      tags:
+      - api
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthCapabilities'
+          description: ''
+  /api/v1/auth/login/:
+    post:
+      operationId: api_v1_auth_login_create
+      summary: Sign in with phone and password
+      tags:
+      - api
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Login'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/Login'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Login'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthTokenResponse'
+          description: ''
+  /api/v1/auth/logout/:
+    post:
+      operationId: api_v1_auth_logout_create
+      summary: Revoke the current access token and optional refresh token
+      tags:
+      - api
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LogoutRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/LogoutRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/LogoutRequest'
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+          description: ''
+  /api/v1/auth/otp/send/:
+    post:
+      operationId: api_v1_auth_otp_send_create
+      summary: Send a login verification code
+      tags:
+      - api
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OtpSend'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/OtpSend'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/OtpSend'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OtpResponse'
+          description: ''
+  /api/v1/auth/otp/verify/:
+    post:
+      operationId: api_v1_auth_otp_verify_create
+      summary: Verify an OTP and issue tokens
+      tags:
+      - api
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OtpVerify'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/OtpVerify'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/OtpVerify'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthTokenResponse'
+          description: ''
+  /api/v1/auth/password/change/:
+    post:
+      operationId: api_v1_auth_password_change_create
+      summary: Change the current user's password
+      tags:
+      - api
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PasswordChange'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PasswordChange'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PasswordChange'
+        required: true
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+          description: ''
+  /api/v1/auth/password/reset/:
+    post:
+      operationId: api_v1_auth_password_reset_create
+      description: Always returns the same message shape to avoid revealing account
+        existence.
+      summary: Request a password-reset verification code
+      tags:
+      - api
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PasswordResetRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PasswordResetRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PasswordResetRequest'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OtpResponse'
+          description: ''
+  /api/v1/auth/password/reset/confirm/:
+    post:
+      operationId: api_v1_auth_password_reset_confirm_create
+      summary: Reset a password with a verification code
+      tags:
+      - api
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PasswordResetConfirm'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PasswordResetConfirm'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PasswordResetConfirm'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+          description: ''
+  /api/v1/auth/refresh/:
+    post:
+      operationId: api_v1_auth_refresh_create
+      summary: Refresh an access token
+      tags:
+      - api
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RefreshRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/RefreshRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/RefreshRequest'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RefreshResponse'
+          description: ''
+  /api/v1/auth/sessions/revoke-all/:
+    post:
+      operationId: api_v1_auth_sessions_revoke_all_create
+      description: Requires the current password or a valid verification code.
+      summary: Revoke every session for the current user
+      tags:
+      - api
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SessionRevokeAllRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/SessionRevokeAllRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/SessionRevokeAllRequest'
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionRevokeAllResponse'
+          description: ''
+  /api/v1/auth/signup/:
+    post:
+      operationId: api_v1_auth_signup_create
+      summary: Create an account and issue tokens
+      tags:
+      - api
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Signup'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/Signup'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Signup'
+        required: true
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthTokenResponse'
+          description: ''
+  /api/v1/bootstrap/:
+    get:
+      operationId: api_v1_bootstrap_retrieve
+      summary: Get the selected business bootstrap context
+      parameters:
+      - in: query
+        name: business_id
+        schema:
+          type: string
+          format: uuid
+        description: Business to select; defaults to the caller's first active membership.
+      tags:
+      - api
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Bootstrap'
+          description: ''
+  /api/v1/businesses/:
+    get:
+      operationId: api_v1_businesses_list
+      tags:
+      - api
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Business'
+          description: ''
+    post:
+      operationId: api_v1_businesses_create
+      tags:
+      - api
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Business'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/Business'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Business'
+        required: true
+      security:
+      - bearerAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Business'
+          description: ''
+  /api/v1/businesses/{id}/:
+    get:
+      operationId: api_v1_businesses_retrieve
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - api
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Business'
+          description: ''
+    put:
+      operationId: api_v1_businesses_update
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - api
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Business'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/Business'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Business'
+        required: true
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Business'
+          description: ''
+    patch:
+      operationId: api_v1_businesses_partial_update
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - api
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedBusiness'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedBusiness'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedBusiness'
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Business'
+          description: ''
+  /api/v1/expenses/:
+    get:
+      operationId: api_v1_expenses_list
+      description: List up to 200 posted records. Set brief=1 to omit lines, allocations,
+        and audit fields from the rows.
+      parameters:
+      - in: query
+        name: brief
+        schema:
+          type: boolean
+      - in: query
+        name: business_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      - in: query
+        name: location_id
+        schema:
+          type: string
+          format: uuid
+      tags:
+      - api
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Expense'
+          description: ''
+    post:
+      operationId: api_v1_expenses_create
+      tags:
+      - api
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ExpenseCreate'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/ExpenseCreate'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/ExpenseCreate'
+        required: true
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Expense'
+          description: ''
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Expense'
+          description: ''
+  /api/v1/expenses/{id}/:
+    get:
+      operationId: api_v1_expenses_retrieve
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: A UUID string identifying this expense.
+        required: true
+      tags:
+      - api
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Expense'
+          description: ''
+  /api/v1/expenses/{id}/reverse/:
+    post:
+      operationId: api_v1_expenses_reverse_create
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: A UUID string identifying this expense.
+        required: true
+      tags:
+      - api
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Reverse'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/Reverse'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Reverse'
+        required: true
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Expense'
+          description: ''
+  /api/v1/gst-registrations/:
+    get:
+      operationId: api_v1_gst_registrations_list
+      tags:
+      - api
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/GSTRegistration'
+          description: ''
+    post:
+      operationId: api_v1_gst_registrations_create
+      tags:
+      - api
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GSTRegistration'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/GSTRegistration'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/GSTRegistration'
+        required: true
+      security:
+      - bearerAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GSTRegistration'
+          description: ''
+  /api/v1/gst-registrations/{id}/:
+    get:
+      operationId: api_v1_gst_registrations_retrieve
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: A UUID string identifying this gst registration.
+        required: true
+      tags:
+      - api
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GSTRegistration'
+          description: ''
+    patch:
+      operationId: api_v1_gst_registrations_partial_update
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: A UUID string identifying this gst registration.
+        required: true
+      tags:
+      - api
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedGSTRegistration'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedGSTRegistration'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedGSTRegistration'
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GSTRegistration'
+          description: ''
+  /api/v1/imports/:
+    get:
+      operationId: imports_list
+      summary: List import jobs for a business
+      parameters:
+      - in: query
+        name: business_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - api
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ImportJobList'
+          description: ''
+  /api/v1/imports/{job_id}/:
+    get:
+      operationId: imports_retrieve
+      summary: Get an import job
+      parameters:
+      - in: path
+        name: job_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - api
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ImportJob'
+          description: ''
+  /api/v1/imports/{job_id}/confirm/:
+    post:
+      operationId: imports_confirm_create
+      summary: Confirm and apply a validated import
+      parameters:
+      - in: header
+        name: Idempotency-Key
+        schema:
+          type: string
+        description: Optional retry key; must match idempotency_key when both are
+          supplied.
+      - in: path
+        name: job_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - api
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ImportConfirm'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/ImportConfirm'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/ImportConfirm'
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ImportConfirmResponse'
+          description: ''
+  /api/v1/imports/parties/:
+    post:
+      operationId: api_v1_imports_parties_create
+      description: Set dry_run=true to return a validation and duplicate-action preview
+        without writes.
+      summary: Upload a CSV for validation or import
+      tags:
+      - api
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/ImportUpload'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/ImportUpload'
+        required: true
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ImportDryRun'
+          description: ''
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ImportJob'
+          description: ''
+  /api/v1/imports/products/:
+    post:
+      operationId: api_v1_imports_products_create
+      description: Set dry_run=true to return a validation and duplicate-action preview
+        without writes.
+      summary: Upload a CSV for validation or import
+      tags:
+      - api
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/ImportUpload'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/ImportUpload'
+        required: true
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ImportDryRun'
+          description: ''
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ImportJob'
+          description: ''
+  /api/v1/integrations/gmail/:
+    delete:
+      operationId: api_v1_integrations_gmail_destroy
+      summary: Disconnect the current user's Gmail account
+      tags:
+      - api
+      security:
+      - bearerAuth: []
+      responses:
+        '204':
+          description: No response body
+  /api/v1/integrations/gmail/callback/:
+    get:
+      operationId: api_v1_integrations_gmail_callback_retrieve
+      summary: Complete Gmail OAuth authorization
+      parameters:
+      - in: query
+        name: code
+        schema:
+          type: string
+      - in: query
+        name: error
+        schema:
+          type: string
+      - in: query
+        name: state
+        schema:
+          type: string
+        required: true
+      tags:
+      - api
+      responses:
+        '302':
+          description: No response body
+  /api/v1/integrations/gmail/connect/:
+    get:
+      operationId: api_v1_integrations_gmail_connect_retrieve
+      summary: Start Gmail OAuth authorization
+      tags:
+      - api
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GmailConnect'
+          description: ''
+  /api/v1/integrations/gmail/import/:
+    post:
+      operationId: api_v1_integrations_gmail_import_create
+      summary: Extract a reviewable financial fact from one Gmail message
+      tags:
+      - api
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GmailImport'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/GmailImport'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/GmailImport'
+        required: true
+      security:
+      - bearerAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GmailImportResult'
+          description: ''
+  /api/v1/integrations/gmail/imports/:
+    get:
+      operationId: api_v1_integrations_gmail_imports_retrieve
+      summary: List Gmail financial facts for a business
+      parameters:
+      - in: query
+        name: business_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - api
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GmailImports'
+          description: ''
+  /api/v1/integrations/gmail/messages/:
+    get:
+      operationId: api_v1_integrations_gmail_messages_retrieve
+      summary: List recent financial Gmail messages
+      parameters:
+      - in: query
+        name: max_results
+        schema:
+          type: integer
+        description: Clamped to 1-50; invalid values default to 20.
+      tags:
+      - api
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GmailMessages'
+          description: ''
+  /api/v1/integrations/gmail/status/:
+    get:
+      operationId: api_v1_integrations_gmail_status_retrieve
+      summary: Get the current user's Gmail connection status
+      tags:
+      - api
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GmailStatus'
+          description: ''
+  /api/v1/integrations/notifications/devices/:
+    get:
+      operationId: api_v1_integrations_notifications_devices_list
+      summary: List the current user's notification devices
+      tags:
+      - api
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/NotificationDevice'
+          description: ''
+    post:
+      operationId: api_v1_integrations_notifications_devices_create
+      summary: Register or refresh a notification device
+      tags:
+      - api
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NotificationDeviceRegistration'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/NotificationDeviceRegistration'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/NotificationDeviceRegistration'
+        required: true
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotificationDevice'
+          description: ''
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotificationDevice'
+          description: ''
+  /api/v1/integrations/notifications/devices/{device_id}/:
+    delete:
+      operationId: api_v1_integrations_notifications_devices_destroy
+      summary: Disable a notification device
+      parameters:
+      - in: path
+        name: device_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - api
+      security:
+      - bearerAuth: []
+      responses:
+        '204':
+          description: No response body
+  /api/v1/integrations/notifications/reminders/:
+    get:
+      operationId: notifications_reminders_list
+      summary: List the current user's reminders
+      tags:
+      - api
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Reminder'
+          description: ''
+    post:
+      operationId: notifications_reminders_create
+      summary: Schedule a durable reminder
+      tags:
+      - api
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReminderCreate'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/ReminderCreate'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/ReminderCreate'
+        required: true
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Reminder'
+          description: ''
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Reminder'
+          description: ''
+  /api/v1/integrations/notifications/reminders/{reminder_id}/:
+    get:
+      operationId: notifications_reminders_retrieve
+      summary: Get a scheduled reminder
+      parameters:
+      - in: path
+        name: reminder_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - api
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Reminder'
+          description: ''
+    patch:
+      operationId: notifications_reminders_update
+      summary: Update a scheduled reminder
+      parameters:
+      - in: path
+        name: reminder_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - api
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedReminderUpdate'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedReminderUpdate'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedReminderUpdate'
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Reminder'
+          description: ''
+    delete:
+      operationId: notifications_reminders_destroy
+      summary: Cancel a scheduled reminder
+      parameters:
+      - in: path
+        name: reminder_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - api
+      security:
+      - bearerAuth: []
+      responses:
+        '204':
+          description: No response body
+  /api/v1/invitations/:
+    get:
+      operationId: api_v1_invitations_list
+      tags:
+      - api
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Invitation'
+          description: ''
+    post:
+      operationId: api_v1_invitations_create
+      tags:
+      - api
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Invitation'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/Invitation'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Invitation'
+      security:
+      - bearerAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Invitation'
+          description: ''
+  /api/v1/invitations/{id}/revoke/:
+    post:
+      operationId: api_v1_invitations_revoke_create
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: A UUID string identifying this invitation.
+        required: true
+      tags:
+      - api
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Invitation'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/Invitation'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Invitation'
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Invitation'
+          description: ''
+  /api/v1/invitations/accept/:
+    post:
+      operationId: api_v1_invitations_accept_create
+      tags:
+      - api
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Invitation'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/Invitation'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Invitation'
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Invitation'
+          description: ''
+  /api/v1/invoices/sales/{sale_id}/pdf/:
+    get:
+      operationId: invoices_sale_pdf_retrieve
+      description: |-
+        Download a GST-style PDF for a sale the caller may already retrieve.
+
+        Owners and managers use their sale/location access. Cashiers intentionally
+        follow the same read policy as ``SaleViewSet``: an active membership at the
+        sale's location is required, otherwise DRF returns 403. The queryset also
+        limits lookup to the caller's active memberships; PostgreSQL RLS provides a
+        second, database-enforced tenant boundary.
+      parameters:
+      - in: path
+        name: sale_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - api
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/pdf:
+              schema:
+                type: string
+                format: binary
+          description: ''
+  /api/v1/locations/:
+    get:
+      operationId: api_v1_locations_list
+      tags:
+      - api
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Location'
+          description: ''
+    post:
+      operationId: api_v1_locations_create
+      tags:
+      - api
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Location'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/Location'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Location'
+        required: true
+      security:
+      - bearerAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Location'
+          description: ''
+  /api/v1/locations/{id}/:
+    get:
+      operationId: api_v1_locations_retrieve
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: A UUID string identifying this location.
+        required: true
+      tags:
+      - api
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Location'
+          description: ''
+    put:
+      operationId: api_v1_locations_update
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: A UUID string identifying this location.
+        required: true
+      tags:
+      - api
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Location'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/Location'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Location'
+        required: true
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Location'
+          description: ''
+    patch:
+      operationId: api_v1_locations_partial_update
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: A UUID string identifying this location.
+        required: true
+      tags:
+      - api
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedLocation'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedLocation'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedLocation'
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Location'
+          description: ''
+    delete:
+      operationId: api_v1_locations_destroy
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: A UUID string identifying this location.
+        required: true
+      tags:
+      - api
+      security:
+      - bearerAuth: []
+      responses:
+        '204':
+          description: No response body
+  /api/v1/me/:
+    get:
+      operationId: api_v1_me_retrieve
+      summary: Get the current user and memberships
+      tags:
+      - api
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Me'
+          description: ''
+  /api/v1/memberships/:
+    get:
+      operationId: api_v1_memberships_list
+      tags:
+      - api
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Membership'
+          description: ''
+    post:
+      operationId: api_v1_memberships_create
+      tags:
+      - api
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Membership'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/Membership'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Membership'
+        required: true
+      security:
+      - bearerAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Membership'
+          description: ''
+  /api/v1/memberships/{id}/:
+    get:
+      operationId: api_v1_memberships_retrieve
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: A UUID string identifying this membership.
+        required: true
+      tags:
+      - api
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Membership'
+          description: ''
+    put:
+      operationId: api_v1_memberships_update
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: A UUID string identifying this membership.
+        required: true
+      tags:
+      - api
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Membership'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/Membership'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Membership'
+        required: true
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Membership'
+          description: ''
+    patch:
+      operationId: api_v1_memberships_partial_update
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: A UUID string identifying this membership.
+        required: true
+      tags:
+      - api
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedMembership'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedMembership'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedMembership'
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Membership'
+          description: ''
+    delete:
+      operationId: api_v1_memberships_destroy
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: A UUID string identifying this membership.
+        required: true
+      tags:
+      - api
+      security:
+      - bearerAuth: []
+      responses:
+        '204':
+          description: No response body
+  /api/v1/parties/:
+    get:
+      operationId: api_v1_parties_list
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      tags:
+      - api
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedPartyList'
+          description: ''
+    post:
+      operationId: api_v1_parties_create
+      tags:
+      - api
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Party'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/Party'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Party'
+        required: true
+      security:
+      - bearerAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Party'
+          description: ''
+  /api/v1/parties/{id}/:
+    get:
+      operationId: api_v1_parties_retrieve
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: A UUID string identifying this party.
+        required: true
+      tags:
+      - api
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Party'
+          description: ''
+    put:
+      operationId: api_v1_parties_update
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: A UUID string identifying this party.
+        required: true
+      tags:
+      - api
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Party'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/Party'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Party'
+        required: true
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Party'
+          description: ''
+    patch:
+      operationId: api_v1_parties_partial_update
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: A UUID string identifying this party.
+        required: true
+      tags:
+      - api
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedParty'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedParty'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedParty'
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Party'
+          description: ''
+    delete:
+      operationId: api_v1_parties_destroy
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: A UUID string identifying this party.
+        required: true
+      tags:
+      - api
+      security:
+      - bearerAuth: []
+      responses:
+        '204':
+          description: No response body
+  /api/v1/party-ledger/opening-balances/:
+    post:
+      operationId: api_v1_party_ledger_opening_balances_create
+      summary: Post a party-ledger opening balance
+      tags:
+      - api
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OpeningBalanceCreate'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/OpeningBalanceCreate'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/OpeningBalanceCreate'
+        required: true
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PartyLedgerEntry'
+          description: ''
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PartyLedgerEntry'
+          description: ''
+  /api/v1/payments/:
+    get:
+      operationId: api_v1_payments_list
+      description: List up to 200 posted records. Set brief=1 to omit lines, allocations,
+        and audit fields from the rows.
+      parameters:
+      - in: query
+        name: brief
+        schema:
+          type: boolean
+      - in: query
+        name: business_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      - in: query
+        name: location_id
+        schema:
+          type: string
+          format: uuid
+      tags:
+      - api
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Payment'
+          description: ''
+    post:
+      operationId: api_v1_payments_create
+      tags:
+      - api
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PaymentCreate'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PaymentCreate'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PaymentCreate'
+        required: true
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Payment'
+          description: ''
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Payment'
+          description: ''
+  /api/v1/payments/{id}/:
+    get:
+      operationId: api_v1_payments_retrieve
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: A UUID string identifying this payment.
+        required: true
+      tags:
+      - api
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Payment'
+          description: ''
+  /api/v1/payments/{id}/reallocate/:
+    post:
+      operationId: payments_reallocate_create
+      summary: Replace a payment's document allocations
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: A UUID string identifying this payment.
+        required: true
+      tags:
+      - api
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PaymentReallocation'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PaymentReallocation'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PaymentReallocation'
+        required: true
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Payment'
+          description: ''
+  /api/v1/payments/{id}/reverse/:
+    post:
+      operationId: api_v1_payments_reverse_create
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: A UUID string identifying this payment.
+        required: true
+      tags:
+      - api
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Reverse'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/Reverse'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Reverse'
+        required: true
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Payment'
+          description: ''
+  /api/v1/payments/allocation-review/:
+    get:
+      operationId: payments_allocation_review_list
+      summary: Review payment allocations and outstanding documents
+      parameters:
+      - in: query
+        name: business_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      - in: query
+        name: direction
+        schema:
+          type: string
+          enum:
+          - PAYMENT
+          - RECEIPT
+      - in: query
+        name: location_id
+        schema:
+          type: string
+          format: uuid
+      - in: query
+        name: party_id
+        schema:
+          type: string
+          format: uuid
+      - in: query
+        name: status
+        schema:
+          type: string
+          enum:
+          - DRAFT
+          - POSTED
+          - REVERSED
+          default: POSTED
+      tags:
+      - api
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentAllocationReview'
+          description: ''
+  /api/v1/products/:
+    get:
+      operationId: api_v1_products_list
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      tags:
+      - api
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedProductList'
+          description: ''
+    post:
+      operationId: api_v1_products_create
+      tags:
+      - api
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Product'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/Product'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Product'
+        required: true
+      security:
+      - bearerAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Product'
+          description: ''
+  /api/v1/products/{id}/:
+    get:
+      operationId: api_v1_products_retrieve
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: A UUID string identifying this product.
+        required: true
+      tags:
+      - api
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Product'
+          description: ''
+    put:
+      operationId: api_v1_products_update
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: A UUID string identifying this product.
+        required: true
+      tags:
+      - api
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Product'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/Product'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Product'
+        required: true
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Product'
+          description: ''
+    patch:
+      operationId: api_v1_products_partial_update
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: A UUID string identifying this product.
+        required: true
+      tags:
+      - api
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedProduct'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedProduct'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedProduct'
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Product'
+          description: ''
+    delete:
+      operationId: api_v1_products_destroy
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: A UUID string identifying this product.
+        required: true
+      tags:
+      - api
+      security:
+      - bearerAuth: []
+      responses:
+        '204':
+          description: No response body
+  /api/v1/purchases/:
+    get:
+      operationId: api_v1_purchases_list
+      description: List up to 200 posted records. Set brief=1 to omit lines, allocations,
+        and audit fields from the rows.
+      parameters:
+      - in: query
+        name: brief
+        schema:
+          type: boolean
+      - in: query
+        name: business_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      - in: query
+        name: location_id
+        schema:
+          type: string
+          format: uuid
+      tags:
+      - api
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Purchase'
+          description: ''
+    post:
+      operationId: api_v1_purchases_create
+      tags:
+      - api
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PurchaseCreate'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PurchaseCreate'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PurchaseCreate'
+        required: true
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Purchase'
+          description: ''
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Purchase'
+          description: ''
+  /api/v1/purchases/{id}/:
+    get:
+      operationId: api_v1_purchases_retrieve
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: A UUID string identifying this purchase.
+        required: true
+      tags:
+      - api
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Purchase'
+          description: ''
+  /api/v1/purchases/{id}/reverse/:
+    post:
+      operationId: api_v1_purchases_reverse_create
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: A UUID string identifying this purchase.
+        required: true
+      tags:
+      - api
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Reverse'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/Reverse'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Reverse'
+        required: true
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Purchase'
+          description: ''
+  /api/v1/reports/dashboard/:
+    get:
+      operationId: api_v1_reports_dashboard_retrieve
+      summary: Get operational dashboard totals
+      parameters:
+      - in: query
+        name: business_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      - in: query
+        name: location_id
+        schema:
+          type: string
+          format: uuid
+      tags:
+      - api
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Dashboard'
+          description: ''
+  /api/v1/reports/party-ledger/:
+    get:
+      operationId: api_v1_reports_party_ledger_retrieve
+      summary: Get a party's ledger entries and balance
+      parameters:
+      - in: query
+        name: account
+        schema:
+          type: string
+          enum:
+          - PAYABLE
+          - RECEIVABLE
+      - in: query
+        name: business_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      - in: query
+        name: location_id
+        schema:
+          type: string
+          format: uuid
+      - in: query
+        name: party_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - api
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PartyLedgerReport'
+          description: ''
+  /api/v1/reports/stock/:
+    get:
+      operationId: api_v1_reports_stock_retrieve
+      summary: List current stock quantities and low-stock flags
+      parameters:
+      - in: query
+        name: business_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      - in: query
+        name: location_id
+        schema:
+          type: string
+          format: uuid
+      tags:
+      - api
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StockReport'
+          description: ''
+  /api/v1/reports/valuation/:
+    get:
+      operationId: api_v1_reports_valuation_retrieve
+      summary: Report inventory valuation and posted-sale costing
+      parameters:
+      - in: query
+        name: business_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      - in: query
+        name: date_from
+        schema:
+          type: string
+          format: date
+        description: Inclusive sale date lower bound (YYYY-MM-DD).
+      - in: query
+        name: date_to
+        schema:
+          type: string
+          format: date
+        description: Inclusive sale date upper bound (YYYY-MM-DD).
+      - in: query
+        name: location_id
+        schema:
+          type: string
+          format: uuid
+      tags:
+      - api
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValuationReport'
+          description: ''
+  /api/v1/sales/:
+    get:
+      operationId: api_v1_sales_list
+      description: List up to 200 posted records. Set brief=1 to omit lines, allocations,
+        and audit fields from the rows.
+      parameters:
+      - in: query
+        name: brief
+        schema:
+          type: boolean
+      - in: query
+        name: business_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      - in: query
+        name: location_id
+        schema:
+          type: string
+          format: uuid
+      tags:
+      - api
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Sale'
+          description: ''
+    post:
+      operationId: api_v1_sales_create
+      tags:
+      - api
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SaleCreate'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/SaleCreate'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/SaleCreate'
+        required: true
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Sale'
+          description: ''
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Sale'
+          description: ''
+  /api/v1/sales/{id}/:
+    get:
+      operationId: api_v1_sales_retrieve
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: A UUID string identifying this sale.
+        required: true
+      tags:
+      - api
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Sale'
+          description: ''
+  /api/v1/sales/{id}/reverse/:
+    post:
+      operationId: api_v1_sales_reverse_create
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: A UUID string identifying this sale.
+        required: true
+      tags:
+      - api
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Reverse'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/Reverse'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Reverse'
+        required: true
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Sale'
+          description: ''
+  /api/v1/stock/adjustments/:
+    post:
+      operationId: api_v1_stock_adjustments_create
+      summary: Post an opening-stock or manual stock adjustment
+      tags:
+      - api
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StockAdjustment'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/StockAdjustment'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/StockAdjustment'
+        required: true
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StockMovement'
+          description: ''
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StockMovement'
+          description: ''
+  /api/v1/transfers/:
+    get:
+      operationId: api_v1_transfers_list
+      description: List up to 200 posted records. Set brief=1 to omit lines, allocations,
+        and audit fields from the rows.
+      parameters:
+      - in: query
+        name: brief
+        schema:
+          type: boolean
+      - in: query
+        name: business_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      - in: query
+        name: location_id
+        schema:
+          type: string
+          format: uuid
+      tags:
+      - api
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Transfer'
+          description: ''
+    post:
+      operationId: api_v1_transfers_create
+      tags:
+      - api
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TransferCreate'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/TransferCreate'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/TransferCreate'
+        required: true
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Transfer'
+          description: ''
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Transfer'
+          description: ''
+  /api/v1/transfers/{id}/:
+    get:
+      operationId: api_v1_transfers_retrieve
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: A UUID string identifying this stock transfer.
+        required: true
+      tags:
+      - api
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Transfer'
+          description: ''
+  /api/v1/transfers/{id}/reverse/:
+    post:
+      operationId: api_v1_transfers_reverse_create
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: A UUID string identifying this stock transfer.
+        required: true
+      tags:
+      - api
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Reverse'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/Reverse'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Reverse'
+        required: true
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Transfer'
+          description: ''
+  /healthz/:
+    get:
+      operationId: healthz_retrieve
+      summary: Check API process health
+      tags:
+      - healthz
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Health'
+          description: ''
+  /readyz/:
+    get:
+      operationId: readyz_retrieve
+      summary: Check database readiness
+      tags:
+      - readyz
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Health'
+          description: ''
+        '503':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Health'
+          description: ''
+components:
+  schemas:
+    AssistantProposal:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        business:
+          type: string
+          format: uuid
+          readOnly: true
+        location:
+          type: string
+          format: uuid
+          readOnly: true
+        input_type:
+          enum:
+          - TEXT
+          - VOICE
+          - IMAGE
+          type: string
+          description: |-
+            * `TEXT` - Text
+            * `VOICE` - Voice transcript
+            * `IMAGE` - Image OCR text
+          x-spec-enum-id: 18ec21e9b1d10694
+          readOnly: true
+        locale:
+          type: string
+          readOnly: true
+        content:
+          type: string
+          readOnly: true
+        command_type:
+          type: string
+          readOnly: true
+        payload:
+          readOnly: true
+        preview:
+          type: string
+          readOnly: true
+        warnings:
+          readOnly: true
+        blocking_questions:
+          readOnly: true
+        status:
+          enum:
+          - DRAFT
+          - READY
+          - CONFIRMED
+          - CANCELLED
+          - EXPIRED
+          type: string
+          description: |-
+            * `DRAFT` - Needs clarification
+            * `READY` - Ready to confirm
+            * `CONFIRMED` - Confirmed
+            * `CANCELLED` - Cancelled
+            * `EXPIRED` - Expired
+          x-spec-enum-id: 3265216cef337572
+          readOnly: true
+        version:
+          type: integer
+          readOnly: true
+        expires_at:
+          type: string
+          format: date-time
+          readOnly: true
+        confirmed_at:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+        confirmed_result_type:
+          type: string
+          readOnly: true
+        confirmed_result_id:
+          type: string
+          format: uuid
+          readOnly: true
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - blocking_questions
+      - business
+      - command_type
+      - confirmed_at
+      - confirmed_result_id
+      - confirmed_result_type
+      - content
+      - created_at
+      - expires_at
+      - id
+      - input_type
+      - locale
+      - location
+      - payload
+      - preview
+      - status
+      - version
+      - warnings
+    Attachment:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        business:
+          type: string
+          format: uuid
+          readOnly: true
+        kind:
+          enum:
+          - VOICE
+          - IMAGE
+          type: string
+          description: |-
+            * `VOICE` - Voice recording
+            * `IMAGE` - Image or scan
+          x-spec-enum-id: e958943c6f833cb3
+          readOnly: true
+        mime:
+          type: string
+          readOnly: true
+        size_bytes:
+          type: integer
+          readOnly: true
+        status:
+          enum:
+          - PENDING
+          - READY
+          - FAILED
+          type: string
+          description: |-
+            * `PENDING` - Awaiting upload
+            * `READY` - Uploaded
+            * `FAILED` - Rejected
+          x-spec-enum-id: bdbaef0a27579079
+          readOnly: true
+        proposal:
+          type: string
+          format: uuid
+          readOnly: true
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - business
+      - created_at
+      - id
+      - kind
+      - mime
+      - proposal
+      - size_bytes
+      - status
+    AuditEvent:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        event_type:
+          type: string
+          readOnly: true
+        aggregate_type:
+          type: string
+          readOnly: true
+        aggregate_id:
+          type: string
+          format: uuid
+          readOnly: true
+        location:
+          type: string
+          format: uuid
+          readOnly: true
+          nullable: true
+        actor_name:
+          type: string
+          nullable: true
+          readOnly: true
+        source:
+          type: string
+          readOnly: true
+        metadata:
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - actor_name
+      - aggregate_id
+      - aggregate_type
+      - created_at
+      - event_type
+      - id
+      - location
+      - metadata
+      - source
+    AuthCapabilities:
+      type: object
+      properties:
+        password:
+          type: boolean
+        otp:
+          type: boolean
+        dev_otp:
+          type: boolean
+      required:
+      - dev_otp
+      - otp
+      - password
+    AuthTokenResponse:
+      type: object
+      properties:
+        user:
+          $ref: '#/components/schemas/AuthUser'
+        onboarding_required:
+          type: boolean
+        access:
+          type: string
+        refresh:
+          type: string
+      required:
+      - access
+      - onboarding_required
+      - refresh
+      - user
+    AuthUser:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        phone:
+          type: string
+        display_name:
+          type: string
+      required:
+      - display_name
+      - id
+      - phone
+    Bootstrap:
+      type: object
+      properties:
+        user:
+          $ref: '#/components/schemas/BootstrapUser'
+        business:
+          $ref: '#/components/schemas/BootstrapBusiness'
+        locations:
+          type: array
+          items:
+            $ref: '#/components/schemas/BootstrapLocation'
+        permissions:
+          type: array
+          items:
+            type: string
+      required:
+      - business
+      - locations
+      - permissions
+      - user
+    BootstrapBusiness:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        legal_name:
+          type: string
+        currency:
+          type: string
+        timezone:
+          type: string
+      required:
+      - currency
+      - id
+      - legal_name
+      - name
+      - timezone
+    BootstrapLocation:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        code:
+          type: string
+        state_code:
+          type: string
+      required:
+      - code
+      - id
+      - name
+      - state_code
+    BootstrapUser:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        phone:
+          type: string
+        role:
+          enum:
+          - OWNER
+          - MANAGER
+          - CASHIER
+          type: string
+          description: |-
+            * `OWNER` - Owner
+            * `MANAGER` - Manager
+            * `CASHIER` - Cashier
+          x-spec-enum-id: 93b0176ef72a532d
+      required:
+      - id
+      - name
+      - phone
+      - role
+    Business:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        name:
+          type: string
+          maxLength: 160
+        legal_name:
+          type: string
+          maxLength: 200
+        currency:
+          type: string
+          maxLength: 3
+        timezone:
+          type: string
+          maxLength: 64
+        gst_enabled:
+          type: boolean
+        negative_stock_allowed:
+          type: boolean
+        is_active:
+          type: boolean
+          readOnly: true
+        role:
+          type: string
+          nullable: true
+          readOnly: true
+        locations:
+          type: array
+          items:
+            $ref: '#/components/schemas/Location'
+          readOnly: true
+        location_name:
+          type: string
+          writeOnly: true
+          maxLength: 160
+        state_code:
+          type: string
+          writeOnly: true
+          maxLength: 2
+        gstin:
+          type: string
+          writeOnly: true
+          pattern: ^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$
+          maxLength: 15
+      required:
+      - id
+      - is_active
+      - locations
+      - name
+      - role
+    Dashboard:
+      type: object
+      properties:
+        business_id:
+          type: string
+          format: uuid
+        as_of:
+          type: string
+          format: date
+        today:
+          $ref: '#/components/schemas/DashboardToday'
+        books:
+          $ref: '#/components/schemas/DashboardBooks'
+        low_stock_count:
+          type: integer
+        gross_profit_minor:
+          type: integer
+          nullable: true
+        summary:
+          type: string
+      required:
+      - as_of
+      - books
+      - business_id
+      - gross_profit_minor
+      - low_stock_count
+      - summary
+      - today
+    DashboardBooks:
+      type: object
+      properties:
+        sales_minor:
+          type: integer
+        purchases_minor:
+          type: integer
+        expenses_minor:
+          type: integer
+        receipts_minor:
+          type: integer
+        supplier_payments_minor:
+          type: integer
+        receivable_minor:
+          type: integer
+        payable_minor:
+          type: integer
+        cash_flow_minor:
+          type: integer
+      required:
+      - cash_flow_minor
+      - expenses_minor
+      - payable_minor
+      - purchases_minor
+      - receipts_minor
+      - receivable_minor
+      - sales_minor
+      - supplier_payments_minor
+    DashboardToday:
+      type: object
+      properties:
+        sales_minor:
+          type: integer
+        purchases_minor:
+          type: integer
+        expenses_minor:
+          type: integer
+      required:
+      - expenses_minor
+      - purchases_minor
+      - sales_minor
+    Expense:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        business:
+          type: string
+          format: uuid
+        location:
+          type: string
+          format: uuid
+        status:
+          enum:
+          - DRAFT
+          - POSTED
+          - REVERSED
+          type: string
+          description: |-
+            * `DRAFT` - Draft
+            * `POSTED` - Posted
+            * `REVERSED` - Reversed
+          x-spec-enum-id: 3f8cd5a3bb6ef6b7
+        number:
+          type: string
+          maxLength: 48
+        document_date:
+          type: string
+          format: date
+        category:
+          type: string
+          maxLength: 80
+        payee:
+          type: string
+          maxLength: 180
+        note:
+          type: string
+          maxLength: 240
+        amount_minor:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
+        tax_amount_minor:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
+        total_minor:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
+        payment_method:
+          enum:
+          - CASH
+          - UPI
+          - CARD
+          - BANK
+          - OTHER
+          type: string
+          description: |-
+            * `CASH` - Cash
+            * `UPI` - UPI
+            * `CARD` - Card
+            * `BANK` - Bank transfer
+            * `OTHER` - Other
+          x-spec-enum-id: 5b7636fced84a913
+        source:
+          type: string
+          maxLength: 24
+        posted_at:
+          type: string
+          format: date-time
+        reversal_reason:
+          type: string
+          maxLength: 240
+        reversed_at:
+          type: string
+          format: date-time
+          nullable: true
+      required:
+      - amount_minor
+      - business
+      - category
+      - document_date
+      - id
+      - location
+      - number
+      - payment_method
+      - posted_at
+      - total_minor
+    ExpenseCreate:
+      type: object
+      properties:
+        business_id:
+          type: string
+          format: uuid
+        location_id:
+          type: string
+          format: uuid
+        expense_date:
+          type: string
+          format: date
+        category:
+          type: string
+          maxLength: 80
+        payee:
+          type: string
+          maxLength: 180
+        note:
+          type: string
+          maxLength: 240
+        amount_minor:
+          type: integer
+          minimum: 1
+        tax_amount_minor:
+          type: integer
+          minimum: 0
+          default: 0
+        payment_method:
+          enum:
+          - CASH
+          - UPI
+          - CARD
+          - BANK
+          - OTHER
+          type: string
+          description: |-
+            * `CASH` - Cash
+            * `UPI` - UPI
+            * `CARD` - Card
+            * `BANK` - Bank transfer
+            * `OTHER` - Other
+          x-spec-enum-id: 5b7636fced84a913
+        idempotency_key:
+          type: string
+          maxLength: 128
+      required:
+      - amount_minor
+      - business_id
+      - category
+      - idempotency_key
+      - location_id
+      - payment_method
+    GSTRegistration:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        business:
+          type: string
+          format: uuid
+        gstin:
+          type: string
+          pattern: ^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$
+          maxLength: 15
+        legal_name:
+          type: string
+          maxLength: 200
+        address:
+          type: string
+        state_code:
+          type: string
+          maxLength: 2
+        invoice_prefix:
+          type: string
+          maxLength: 8
+        is_active:
+          type: boolean
+      required:
+      - business
+      - gstin
+      - id
+      - legal_name
+      - state_code
+    GmailConnect:
+      type: object
+      properties:
+        authorization_url:
+          type: string
+          format: uri
+      required:
+      - authorization_url
+    GmailExtracted:
+      type: object
+      properties:
+        kind:
+          enum:
+          - PAYMENT
+          - RECEIPT
+          - EXPENSE
+          - UNKNOWN
+          type: string
+          description: |-
+            * `PAYMENT` - PAYMENT
+            * `RECEIPT` - RECEIPT
+            * `EXPENSE` - EXPENSE
+            * `UNKNOWN` - UNKNOWN
+          x-spec-enum-id: f50dcca8743af8e7
+        direction:
+          enum:
+          - RECEIPT
+          - PAYMENT
+          - ''
+          type: string
+          description: |-
+            * `RECEIPT` - RECEIPT
+            * `PAYMENT` - PAYMENT
+          x-spec-enum-id: 489aa9299e579771
+        party_name:
+          type: string
+        amount_minor:
+          type: integer
+          nullable: true
+        reference:
+          type: string
+        confidence:
+          type: number
+          format: double
+          nullable: true
+      required:
+      - amount_minor
+      - confidence
+      - direction
+      - kind
+      - party_name
+      - reference
+    GmailImport:
+      type: object
+      properties:
+        message_id:
+          type: string
+          maxLength: 128
+        business_id:
+          type: string
+          format: uuid
+        location_id:
+          type: string
+          format: uuid
+      required:
+      - business_id
+      - location_id
+      - message_id
+    GmailImportResult:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        status:
+          enum:
+          - NEEDS_REVIEW
+          - REVIEWED
+          - DISMISSED
+          type: string
+          description: |-
+            * `NEEDS_REVIEW` - Needs review
+            * `REVIEWED` - Reviewed
+            * `DISMISSED` - Dismissed
+          x-spec-enum-id: 9717865f32943f21
+        subject:
+          type: string
+          maxLength: 500
+        received_at:
+          type: string
+          format: date-time
+          nullable: true
+        preview:
+          type: string
+        extracted:
+          allOf:
+          - $ref: '#/components/schemas/GmailExtracted'
+          readOnly: true
+      required:
+      - extracted
+      - id
+    GmailImports:
+      type: object
+      properties:
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/GmailImportResult'
+      required:
+      - results
+    GmailMessage:
+      type: object
+      properties:
+        id:
+          type: string
+        subject:
+          type: string
+        snippet:
+          type: string
+        received_at:
+          type: string
+          format: date-time
+          nullable: true
+      required:
+      - id
+      - received_at
+      - snippet
+      - subject
+    GmailMessages:
+      type: object
+      properties:
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/GmailMessage'
+      required:
+      - results
+    GmailStatus:
+      type: object
+      properties:
+        connected:
+          type: boolean
+        email:
+          type: string
+          format: email
+          nullable: true
+      required:
+      - connected
+      - email
+    Health:
+      type: object
+      properties:
+        status:
+          type: string
+      required:
+      - status
+    ImportConfirm:
+      type: object
+      properties:
+        idempotency_key:
+          type: string
+          maxLength: 128
+    ImportConfirmResponse:
+      type: object
+      properties:
+        job:
+          $ref: '#/components/schemas/ImportJob'
+        replayed:
+          type: boolean
+      required:
+      - job
+      - replayed
+    ImportDryRun:
+      type: object
+      properties:
+        dry_run:
+          type: boolean
+        kind:
+          enum:
+          - PRODUCT
+          - PARTY
+          type: string
+          description: |-
+            * `PRODUCT` - Product
+            * `PARTY` - Party
+          x-spec-enum-id: fed3810778658489
+        duplicate_strategy:
+          enum:
+          - UPDATE
+          - SKIP
+          type: string
+          description: |-
+            * `UPDATE` - Update existing rows
+            * `SKIP` - Skip existing rows
+          x-spec-enum-id: d5bbd97056bbd797
+        row_count:
+          type: integer
+        valid_row_count:
+          type: integer
+        error_count:
+          type: integer
+        errors:
+          description: Per-row validation errors; keys depend on the imported product
+            or party columns.
+        created_count:
+          type: integer
+        updated_count:
+          type: integer
+        skipped_count:
+          type: integer
+        preview:
+          type: array
+          items:
+            $ref: '#/components/schemas/ImportDryRunPreview'
+      required:
+      - created_count
+      - dry_run
+      - duplicate_strategy
+      - error_count
+      - errors
+      - kind
+      - preview
+      - row_count
+      - skipped_count
+      - updated_count
+      - valid_row_count
+    ImportDryRunPreview:
+      type: object
+      properties:
+        row:
+          type: integer
+          description: One-based CSV row number, including the header.
+        action:
+          enum:
+          - CREATE
+          - UPDATE
+          - SKIP
+          type: string
+          description: |-
+            * `CREATE` - CREATE
+            * `UPDATE` - UPDATE
+            * `SKIP` - SKIP
+          x-spec-enum-id: 173cceea19240b8d
+      required:
+      - action
+      - row
+    ImportJob:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        business:
+          type: string
+          format: uuid
+          readOnly: true
+        user:
+          type: string
+          format: uuid
+          readOnly: true
+        confirmed_by:
+          type: string
+          format: uuid
+          readOnly: true
+          nullable: true
+        kind:
+          enum:
+          - PRODUCT
+          - PARTY
+          type: string
+          description: |-
+            * `PRODUCT` - Product
+            * `PARTY` - Party
+          x-spec-enum-id: fed3810778658489
+          readOnly: true
+        status:
+          enum:
+          - READY
+          - INVALID
+          - COMPLETED
+          - FAILED
+          type: string
+          description: |-
+            * `READY` - Ready to confirm
+            * `INVALID` - Contains invalid rows
+            * `COMPLETED` - Completed
+            * `FAILED` - Failed
+          x-spec-enum-id: 36cc01b26ea73089
+          readOnly: true
+        duplicate_strategy:
+          enum:
+          - UPDATE
+          - SKIP
+          type: string
+          description: |-
+            * `UPDATE` - Update existing rows
+            * `SKIP` - Skip existing rows
+          x-spec-enum-id: d5bbd97056bbd797
+          readOnly: true
+        row_count:
+          type: integer
+          readOnly: true
+        valid_row_count:
+          type: integer
+          readOnly: true
+        error_count:
+          type: integer
+          readOnly: true
+        created_count:
+          type: integer
+          readOnly: true
+        updated_count:
+          type: integer
+          readOnly: true
+        skipped_count:
+          type: integer
+          readOnly: true
+        errors:
+          readOnly: true
+        original_filename:
+          type: string
+          readOnly: true
+        file_sha256:
+          type: string
+          readOnly: true
+        file_size_bytes:
+          type: integer
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        confirmed_at:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+      required:
+      - business
+      - confirmed_at
+      - confirmed_by
+      - created_at
+      - created_count
+      - duplicate_strategy
+      - error_count
+      - errors
+      - file_sha256
+      - file_size_bytes
+      - id
+      - kind
+      - original_filename
+      - row_count
+      - skipped_count
+      - status
+      - updated_at
+      - updated_count
+      - user
+      - valid_row_count
+    ImportJobList:
+      type: object
+      properties:
+        count:
+          type: integer
+        next:
+          type: string
+          format: uri
+          nullable: true
+        previous:
+          type: string
+          format: uri
+          nullable: true
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/ImportJob'
+      required:
+      - count
+      - next
+      - previous
+      - results
+    ImportUpload:
+      type: object
+      properties:
+        business_id:
+          type: string
+          format: uuid
+        business:
+          type: string
+          format: uuid
+          writeOnly: true
+        file:
+          type: string
+          format: uri
+        dry_run:
+          type: boolean
+          default: false
+        duplicate_strategy:
+          type: string
+          default: UPDATE
+          description: UPDATE or SKIP (case-insensitive).
+          maxLength: 8
+      required:
+      - file
+    Invitation:
+      type: object
+      description: Safe invitation representation; the persisted token digest is never
+        exposed.
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        business:
+          type: string
+          format: uuid
+          readOnly: true
+        invitee_phone:
+          type: string
+          readOnly: true
+        role:
+          enum:
+          - OWNER
+          - MANAGER
+          - CASHIER
+          type: string
+          description: |-
+            * `OWNER` - Owner
+            * `MANAGER` - Manager
+            * `CASHIER` - Cashier
+          x-spec-enum-id: 93b0176ef72a532d
+          readOnly: true
+        locations:
+          type: array
+          items:
+            type: string
+            format: uuid
+          readOnly: true
+        status:
+          type: string
+          readOnly: true
+        expires_at:
+          type: string
+          format: date-time
+          readOnly: true
+        inviter:
+          type: string
+          format: uuid
+          readOnly: true
+        accepted_by:
+          type: string
+          format: uuid
+          readOnly: true
+          nullable: true
+        accepted_at:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+        revoked_at:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - accepted_at
+      - accepted_by
+      - business
+      - created_at
+      - expires_at
+      - id
+      - invitee_phone
+      - inviter
+      - locations
+      - revoked_at
+      - role
+      - status
+      - updated_at
+    Location:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        business:
+          type: string
+          format: uuid
+        gst_registration:
+          type: string
+          format: uuid
+          nullable: true
+        code:
+          type: string
+          maxLength: 20
+        name:
+          type: string
+          maxLength: 160
+        address:
+          type: string
+        state_code:
+          type: string
+          maxLength: 2
+        is_active:
+          type: boolean
+      required:
+      - business
+      - code
+      - id
+      - name
+    Login:
+      type: object
+      properties:
+        phone:
+          type: string
+          maxLength: 20
+        password:
+          type: string
+          writeOnly: true
+      required:
+      - password
+      - phone
+    LogoutRequest:
+      type: object
+      properties:
+        refresh:
+          type: string
+          writeOnly: true
+    Me:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        phone:
+          type: string
+        display_name:
+          type: string
+        memberships:
+          type: array
+          items:
+            $ref: '#/components/schemas/MembershipSummary'
+      required:
+      - display_name
+      - id
+      - memberships
+      - phone
+    Membership:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        user:
+          type: string
+          format: uuid
+        business:
+          type: string
+          format: uuid
+        role:
+          enum:
+          - OWNER
+          - MANAGER
+          - CASHIER
+          type: string
+          description: |-
+            * `OWNER` - Owner
+            * `MANAGER` - Manager
+            * `CASHIER` - Cashier
+          x-spec-enum-id: 93b0176ef72a532d
+        locations:
+          type: array
+          items:
+            type: string
+            format: uuid
+        is_active:
+          type: boolean
+      required:
+      - business
+      - id
+      - role
+      - user
+    MembershipSummary:
+      type: object
+      properties:
+        business_id:
+          type: string
+          format: uuid
+        business_name:
+          type: string
+        role:
+          enum:
+          - OWNER
+          - MANAGER
+          - CASHIER
+          type: string
+          description: |-
+            * `OWNER` - Owner
+            * `MANAGER` - Manager
+            * `CASHIER` - Cashier
+          x-spec-enum-id: 93b0176ef72a532d
+      required:
+      - business_id
+      - business_name
+      - role
+    MessageResponse:
+      type: object
+      properties:
+        detail:
+          type: string
+      required:
+      - detail
+    NotificationDevice:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        business:
+          type: string
+          format: uuid
+          readOnly: true
+        location:
+          type: string
+          format: uuid
+          readOnly: true
+          nullable: true
+        platform:
+          enum:
+          - ANDROID
+          - IOS
+          - WEB
+          type: string
+          description: |-
+            * `ANDROID` - Android
+            * `IOS` - iOS
+            * `WEB` - Web
+          x-spec-enum-id: 5617f81b72d11de6
+          readOnly: true
+        status:
+          enum:
+          - ACTIVE
+          - DISABLED
+          type: string
+          description: |-
+            * `ACTIVE` - Active
+            * `DISABLED` - Disabled
+          x-spec-enum-id: 041bed90e562129a
+          readOnly: true
+        token_suffix:
+          type: string
+          readOnly: true
+        last_seen_at:
+          type: string
+          format: date-time
+          readOnly: true
+        unregistered_at:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+        metadata:
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - business
+      - created_at
+      - id
+      - last_seen_at
+      - location
+      - metadata
+      - platform
+      - status
+      - token_suffix
+      - unregistered_at
+      - updated_at
+    NotificationDeviceRegistration:
+      type: object
+      properties:
+        business_id:
+          type: string
+          format: uuid
+        location_id:
+          type: string
+          format: uuid
+          nullable: true
+        fcm_token:
+          type: string
+          writeOnly: true
+          maxLength: 512
+        platform:
+          enum:
+          - ANDROID
+          - IOS
+          - WEB
+          type: string
+          description: |-
+            * `ANDROID` - Android
+            * `IOS` - iOS
+            * `WEB` - Web
+          x-spec-enum-id: 5617f81b72d11de6
+          default: ANDROID
+        metadata:
+          description: Arbitrary device metadata supplied by the client; must be a
+            JSON object.
+      required:
+      - business_id
+      - fcm_token
+    OpeningBalanceCreate:
+      type: object
+      properties:
+        business_id:
+          type: string
+          format: uuid
+        location_id:
+          type: string
+          format: uuid
+        party_id:
+          type: string
+          format: uuid
+        account:
+          enum:
+          - RECEIVABLE
+          - PAYABLE
+          type: string
+          description: |-
+            * `RECEIVABLE` - Customer receivable
+            * `PAYABLE` - Supplier payable
+          x-spec-enum-id: 212527ce2daeab78
+        amount_minor:
+          type: integer
+          minimum: 0
+        note:
+          type: string
+          maxLength: 240
+        idempotency_key:
+          type: string
+          maxLength: 128
+      required:
+      - account
+      - amount_minor
+      - business_id
+      - idempotency_key
+      - location_id
+      - party_id
+    OtpResponse:
+      type: object
+      properties:
+        detail:
+          type: string
+        phone:
+          type: string
+        dev_otp:
+          type: string
+          description: Local-development code only.
+      required:
+      - detail
+      - phone
+    OtpSend:
+      type: object
+      properties:
+        phone:
+          type: string
+          maxLength: 20
+      required:
+      - phone
+    OtpVerify:
+      type: object
+      properties:
+        phone:
+          type: string
+          maxLength: 20
+        otp:
+          type: string
+          maxLength: 8
+          minLength: 4
+      required:
+      - otp
+      - phone
+    OutstandingDocument:
+      type: object
+      properties:
+        document_type:
+          enum:
+          - SALE
+          - PURCHASE
+          type: string
+          description: |-
+            * `SALE` - SALE
+            * `PURCHASE` - PURCHASE
+          x-spec-enum-id: b5440020c5a4c96c
+        document_id:
+          type: string
+          format: uuid
+        number:
+          type: string
+        document_date:
+          type: string
+          format: date
+        party_id:
+          type: string
+          format: uuid
+          nullable: true
+        party_name:
+          type: string
+          nullable: true
+        grand_total_minor:
+          type: integer
+        paid_total_minor:
+          type: integer
+        due_total_minor:
+          type: integer
+      required:
+      - document_date
+      - document_id
+      - document_type
+      - due_total_minor
+      - grand_total_minor
+      - number
+      - paid_total_minor
+      - party_id
+      - party_name
+    PaginatedAssistantProposalList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/AssistantProposal'
+    PaginatedPartyList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/Party'
+    PaginatedProductList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/Product'
+    Party:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        business:
+          type: string
+          format: uuid
+        name:
+          type: string
+          maxLength: 180
+        kind:
+          enum:
+          - CUSTOMER
+          - SUPPLIER
+          - BOTH
+          type: string
+          description: |-
+            * `CUSTOMER` - Customer
+            * `SUPPLIER` - Supplier
+            * `BOTH` - Customer and supplier
+          x-spec-enum-id: 9799b9769aae660b
+        phone_e164:
+          type: string
+          maxLength: 20
+        gstin:
+          type: string
+          maxLength: 15
+        state_code:
+          type: string
+          maxLength: 2
+        address:
+          type: string
+        is_active:
+          type: boolean
+        receivable_minor:
+          type: integer
+          readOnly: true
+          default: 0
+        payable_minor:
+          type: integer
+          readOnly: true
+          default: 0
+      required:
+      - business
+      - id
+      - kind
+      - name
+      - payable_minor
+      - receivable_minor
+    PartyLedgerEntry:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        business:
+          type: string
+          format: uuid
+        location:
+          type: string
+          format: uuid
+        party:
+          type: string
+          format: uuid
+        account:
+          enum:
+          - RECEIVABLE
+          - PAYABLE
+          type: string
+          description: |-
+            * `RECEIVABLE` - Customer receivable
+            * `PAYABLE` - Supplier payable
+          x-spec-enum-id: 212527ce2daeab78
+        amount_minor:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
+        source_type:
+          type: string
+          maxLength: 32
+        source_id:
+          type: string
+          format: uuid
+        note:
+          type: string
+          maxLength: 240
+        occurred_at:
+          type: string
+          format: date-time
+      required:
+      - account
+      - amount_minor
+      - business
+      - id
+      - location
+      - occurred_at
+      - party
+      - source_id
+      - source_type
+    PartyLedgerReport:
+      type: object
+      properties:
+        party_id:
+          type: string
+          format: uuid
+        balance:
+          type: integer
+        entries:
+          type: array
+          items:
+            $ref: '#/components/schemas/PartyLedgerEntry'
+      required:
+      - balance
+      - entries
+      - party_id
+    PasswordChange:
+      type: object
+      properties:
+        old_password:
+          type: string
+          writeOnly: true
+        new_password:
+          type: string
+          writeOnly: true
+          minLength: 8
+      required:
+      - new_password
+      - old_password
+    PasswordResetConfirm:
+      type: object
+      properties:
+        phone:
+          type: string
+          maxLength: 20
+        otp:
+          type: string
+          maxLength: 8
+          minLength: 4
+        new_password:
+          type: string
+          writeOnly: true
+          minLength: 8
+      required:
+      - new_password
+      - otp
+      - phone
+    PasswordResetRequest:
+      type: object
+      properties:
+        phone:
+          type: string
+          maxLength: 20
+      required:
+      - phone
+    PatchedBusiness:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        name:
+          type: string
+          maxLength: 160
+        legal_name:
+          type: string
+          maxLength: 200
+        currency:
+          type: string
+          maxLength: 3
+        timezone:
+          type: string
+          maxLength: 64
+        gst_enabled:
+          type: boolean
+        negative_stock_allowed:
+          type: boolean
+        is_active:
+          type: boolean
+          readOnly: true
+        role:
+          type: string
+          nullable: true
+          readOnly: true
+        locations:
+          type: array
+          items:
+            $ref: '#/components/schemas/Location'
+          readOnly: true
+        location_name:
+          type: string
+          writeOnly: true
+          maxLength: 160
+        state_code:
+          type: string
+          writeOnly: true
+          maxLength: 2
+        gstin:
+          type: string
+          writeOnly: true
+          pattern: ^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$
+          maxLength: 15
+    PatchedGSTRegistration:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        business:
+          type: string
+          format: uuid
+        gstin:
+          type: string
+          pattern: ^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$
+          maxLength: 15
+        legal_name:
+          type: string
+          maxLength: 200
+        address:
+          type: string
+        state_code:
+          type: string
+          maxLength: 2
+        invoice_prefix:
+          type: string
+          maxLength: 8
+        is_active:
+          type: boolean
+    PatchedLocation:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        business:
+          type: string
+          format: uuid
+        gst_registration:
+          type: string
+          format: uuid
+          nullable: true
+        code:
+          type: string
+          maxLength: 20
+        name:
+          type: string
+          maxLength: 160
+        address:
+          type: string
+        state_code:
+          type: string
+          maxLength: 2
+        is_active:
+          type: boolean
+    PatchedMembership:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        user:
+          type: string
+          format: uuid
+        business:
+          type: string
+          format: uuid
+        role:
+          enum:
+          - OWNER
+          - MANAGER
+          - CASHIER
+          type: string
+          description: |-
+            * `OWNER` - Owner
+            * `MANAGER` - Manager
+            * `CASHIER` - Cashier
+          x-spec-enum-id: 93b0176ef72a532d
+        locations:
+          type: array
+          items:
+            type: string
+            format: uuid
+        is_active:
+          type: boolean
+    PatchedParty:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        business:
+          type: string
+          format: uuid
+        name:
+          type: string
+          maxLength: 180
+        kind:
+          enum:
+          - CUSTOMER
+          - SUPPLIER
+          - BOTH
+          type: string
+          description: |-
+            * `CUSTOMER` - Customer
+            * `SUPPLIER` - Supplier
+            * `BOTH` - Customer and supplier
+          x-spec-enum-id: 9799b9769aae660b
+        phone_e164:
+          type: string
+          maxLength: 20
+        gstin:
+          type: string
+          maxLength: 15
+        state_code:
+          type: string
+          maxLength: 2
+        address:
+          type: string
+        is_active:
+          type: boolean
+        receivable_minor:
+          type: integer
+          readOnly: true
+          default: 0
+        payable_minor:
+          type: integer
+          readOnly: true
+          default: 0
+    PatchedProduct:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        business:
+          type: string
+          format: uuid
+        name:
+          type: string
+          maxLength: 180
+        sku:
+          type: string
+          maxLength: 64
+        base_unit:
+          enum:
+          - PIECE
+          - KILOGRAM
+          - LITRE
+          - METRE
+          - SERVICE
+          type: string
+          description: |-
+            * `PIECE` - Piece
+            * `KILOGRAM` - Kilogram
+            * `LITRE` - Litre
+            * `METRE` - Metre
+            * `SERVICE` - Service
+          x-spec-enum-id: abcea417b605009c
+        track_inventory:
+          type: boolean
+        hsn_sac:
+          type: string
+          maxLength: 12
+        tax_rate_bps:
+          type: integer
+          maximum: 10000
+          minimum: 0
+        low_stock_threshold:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,15}(?:\.\d{0,3})?$
+        is_active:
+          type: boolean
+        stock_quantity:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,15}(?:\.\d{0,3})?$
+          readOnly: true
+        packs:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProductPack'
+    PatchedReminderUpdate:
+      type: object
+      properties:
+        title:
+          type: string
+          maxLength: 120
+        body:
+          type: string
+          maxLength: 500
+        scheduled_at:
+          type: string
+          format: date-time
+    Payment:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        business:
+          type: string
+          format: uuid
+        location:
+          type: string
+          format: uuid
+        party:
+          type: string
+          format: uuid
+          nullable: true
+        direction:
+          enum:
+          - RECEIPT
+          - PAYMENT
+          type: string
+          description: |-
+            * `RECEIPT` - Customer receipt
+            * `PAYMENT` - Supplier payment
+          x-spec-enum-id: 59728d56f0d02d26
+        method:
+          enum:
+          - CASH
+          - UPI
+          - CARD
+          - BANK
+          - OTHER
+          type: string
+          description: |-
+            * `CASH` - Cash
+            * `UPI` - UPI
+            * `CARD` - Card
+            * `BANK` - Bank transfer
+            * `OTHER` - Other
+          x-spec-enum-id: 5b7636fced84a913
+        amount_minor:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
+        reference:
+          type: string
+          maxLength: 120
+        note:
+          type: string
+          maxLength: 240
+        payment_date:
+          type: string
+          format: date
+        status:
+          enum:
+          - DRAFT
+          - POSTED
+          - REVERSED
+          type: string
+          description: |-
+            * `DRAFT` - Draft
+            * `POSTED` - Posted
+            * `REVERSED` - Reversed
+          x-spec-enum-id: 3f8cd5a3bb6ef6b7
+        source:
+          type: string
+          maxLength: 24
+        reversal_reason:
+          type: string
+          maxLength: 240
+        reversed_at:
+          type: string
+          format: date-time
+          nullable: true
+        allocations:
+          type: array
+          items:
+            $ref: '#/components/schemas/PaymentAllocation'
+          readOnly: true
+        allocated_total_minor:
+          type: integer
+          readOnly: true
+        unallocated_total_minor:
+          type: integer
+          readOnly: true
+      required:
+      - allocated_total_minor
+      - allocations
+      - amount_minor
+      - business
+      - direction
+      - id
+      - location
+      - method
+      - payment_date
+      - unallocated_total_minor
+    PaymentAllocation:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        sale:
+          type: string
+          format: uuid
+          nullable: true
+        purchase:
+          type: string
+          format: uuid
+          nullable: true
+        amount_minor:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
+        document_type:
+          type: string
+          enum:
+          - SALE
+          - PURCHASE
+          readOnly: true
+        document_id:
+          type: string
+          nullable: true
+          readOnly: true
+        document_number:
+          type: string
+          nullable: true
+          readOnly: true
+        document_total_minor:
+          type: integer
+          nullable: true
+          readOnly: true
+        document_paid_total_minor:
+          type: integer
+          nullable: true
+          readOnly: true
+        document_due_total_minor:
+          type: integer
+          nullable: true
+          readOnly: true
+      required:
+      - amount_minor
+      - document_due_total_minor
+      - document_id
+      - document_number
+      - document_paid_total_minor
+      - document_total_minor
+      - document_type
+      - id
+    PaymentAllocationInput:
+      type: object
+      properties:
+        amount_minor:
+          type: integer
+          minimum: 1
+        sale_id:
+          type: string
+          format: uuid
+          nullable: true
+        purchase_id:
+          type: string
+          format: uuid
+          nullable: true
+        document_type:
+          enum:
+          - SALE
+          - PURCHASE
+          - null
+          type: string
+          description: |-
+            * `SALE` - SALE
+            * `PURCHASE` - PURCHASE
+          x-spec-enum-id: b5440020c5a4c96c
+          nullable: true
+        document_id:
+          type: string
+          format: uuid
+          nullable: true
+      required:
+      - amount_minor
+    PaymentAllocationReview:
+      type: object
+      properties:
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/Payment'
+        totals:
+          $ref: '#/components/schemas/PaymentAllocationTotals'
+        outstanding_documents:
+          type: array
+          items:
+            $ref: '#/components/schemas/OutstandingDocument'
+      required:
+      - outstanding_documents
+      - results
+      - totals
+    PaymentAllocationTotals:
+      type: object
+      properties:
+        payment_count:
+          type: integer
+        payment_total_minor:
+          type: integer
+        allocated_total_minor:
+          type: integer
+        unallocated_total_minor:
+          type: integer
+        outstanding_document_count:
+          type: integer
+        outstanding_total_minor:
+          type: integer
+      required:
+      - allocated_total_minor
+      - outstanding_document_count
+      - outstanding_total_minor
+      - payment_count
+      - payment_total_minor
+      - unallocated_total_minor
+    PaymentCreate:
+      type: object
+      properties:
+        business_id:
+          type: string
+          format: uuid
+        location_id:
+          type: string
+          format: uuid
+        party_id:
+          type: string
+          format: uuid
+        direction:
+          enum:
+          - RECEIPT
+          - PAYMENT
+          type: string
+          description: |-
+            * `RECEIPT` - Customer receipt
+            * `PAYMENT` - Supplier payment
+          x-spec-enum-id: 59728d56f0d02d26
+        method:
+          enum:
+          - CASH
+          - UPI
+          - CARD
+          - BANK
+          - OTHER
+          type: string
+          description: |-
+            * `CASH` - Cash
+            * `UPI` - UPI
+            * `CARD` - Card
+            * `BANK` - Bank transfer
+            * `OTHER` - Other
+          x-spec-enum-id: 5b7636fced84a913
+        amount_minor:
+          type: integer
+          minimum: 1
+        sale_id:
+          type: string
+          format: uuid
+          nullable: true
+        purchase_id:
+          type: string
+          format: uuid
+          nullable: true
+        payment_date:
+          type: string
+          format: date
+        reference:
+          type: string
+          maxLength: 120
+        note:
+          type: string
+          maxLength: 240
+        idempotency_key:
+          type: string
+          maxLength: 128
+      required:
+      - amount_minor
+      - business_id
+      - direction
+      - idempotency_key
+      - location_id
+      - method
+      - party_id
+    PaymentReallocation:
+      type: object
+      properties:
+        allocations:
+          type: array
+          items:
+            $ref: '#/components/schemas/PaymentAllocationInput'
+        reason:
+          type: string
+          maxLength: 240
+        idempotency_key:
+          type: string
+          maxLength: 128
+      required:
+      - allocations
+      - idempotency_key
+      - reason
+    Product:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        business:
+          type: string
+          format: uuid
+        name:
+          type: string
+          maxLength: 180
+        sku:
+          type: string
+          maxLength: 64
+        base_unit:
+          enum:
+          - PIECE
+          - KILOGRAM
+          - LITRE
+          - METRE
+          - SERVICE
+          type: string
+          description: |-
+            * `PIECE` - Piece
+            * `KILOGRAM` - Kilogram
+            * `LITRE` - Litre
+            * `METRE` - Metre
+            * `SERVICE` - Service
+          x-spec-enum-id: abcea417b605009c
+        track_inventory:
+          type: boolean
+        hsn_sac:
+          type: string
+          maxLength: 12
+        tax_rate_bps:
+          type: integer
+          maximum: 10000
+          minimum: 0
+        low_stock_threshold:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,15}(?:\.\d{0,3})?$
+        is_active:
+          type: boolean
+        stock_quantity:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,15}(?:\.\d{0,3})?$
+          readOnly: true
+        packs:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProductPack'
+      required:
+      - business
+      - id
+      - name
+      - packs
+      - stock_quantity
+    ProductPack:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        name:
+          type: string
+          maxLength: 80
+        conversion_factor:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,12}(?:\.\d{0,6})?$
+        retail_price_minor:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
+        wholesale_price_minor:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
+        is_active:
+          type: boolean
+      required:
+      - conversion_factor
+      - id
+      - name
+      - retail_price_minor
+      - wholesale_price_minor
+    Purchase:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        business:
+          type: string
+          format: uuid
+        location:
+          type: string
+          format: uuid
+        supplier:
+          type: string
+          format: uuid
+        status:
+          enum:
+          - DRAFT
+          - POSTED
+          - REVERSED
+          type: string
+          description: |-
+            * `DRAFT` - Draft
+            * `POSTED` - Posted
+            * `REVERSED` - Reversed
+          x-spec-enum-id: 3f8cd5a3bb6ef6b7
+        number:
+          type: string
+          maxLength: 48
+        financial_year:
+          type: string
+          maxLength: 7
+        document_date:
+          type: string
+          format: date
+        supplier_bill_number:
+          type: string
+          maxLength: 64
+        tax_inclusive:
+          type: boolean
+        seller_name:
+          type: string
+          maxLength: 180
+        seller_gstin:
+          type: string
+          maxLength: 15
+        buyer_name:
+          type: string
+          maxLength: 200
+        buyer_gstin:
+          type: string
+          maxLength: 15
+        place_of_supply:
+          type: string
+          maxLength: 2
+        subtotal_minor:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
+        discount_total_minor:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
+        taxable_total_minor:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
+        tax_total_minor:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
+        grand_total_minor:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
+        paid_total_minor:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
+        due_total_minor:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
+        source:
+          type: string
+          maxLength: 24
+        posted_at:
+          type: string
+          format: date-time
+        reversal_reason:
+          type: string
+          maxLength: 240
+        reversed_at:
+          type: string
+          format: date-time
+          nullable: true
+        lines:
+          type: array
+          items:
+            $ref: '#/components/schemas/PurchaseLine'
+          readOnly: true
+      required:
+      - business
+      - document_date
+      - financial_year
+      - id
+      - lines
+      - location
+      - number
+      - posted_at
+      - supplier
+    PurchaseCreate:
+      type: object
+      properties:
+        business_id:
+          type: string
+          format: uuid
+        location_id:
+          type: string
+          format: uuid
+        supplier_id:
+          type: string
+          format: uuid
+        purchase_date:
+          type: string
+          format: date
+        supplier_bill_number:
+          type: string
+          maxLength: 64
+        tax_inclusive:
+          type: boolean
+          default: false
+        discount_total_minor:
+          type: integer
+          minimum: 0
+          default: 0
+        lines:
+          type: array
+          items:
+            $ref: '#/components/schemas/PurchaseLineInput'
+        paid_amount_minor:
+          type: integer
+          minimum: 0
+          default: 0
+        payment_method:
+          enum:
+          - CASH
+          - UPI
+          - CARD
+          - BANK
+          - OTHER
+          type: string
+          description: |-
+            * `CASH` - Cash
+            * `UPI` - UPI
+            * `CARD` - Card
+            * `BANK` - Bank transfer
+            * `OTHER` - Other
+          x-spec-enum-id: 5b7636fced84a913
+          default: CASH
+        payment_reference:
+          type: string
+          maxLength: 120
+        idempotency_key:
+          type: string
+          maxLength: 128
+      required:
+      - business_id
+      - idempotency_key
+      - lines
+      - location_id
+      - supplier_id
+    PurchaseLine:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        product:
+          type: string
+          format: uuid
+        pack:
+          type: string
+          format: uuid
+        description:
+          type: string
+          maxLength: 180
+        hsn_sac:
+          type: string
+          maxLength: 12
+        quantity:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,15}(?:\.\d{0,3})?$
+        conversion_factor:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,12}(?:\.\d{0,6})?$
+        base_quantity:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,15}(?:\.\d{0,3})?$
+        unit_cost_minor:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
+        discount_minor:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
+        taxable_value_minor:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
+        tax_rate_bps:
+          type: integer
+          maximum: 10000
+          minimum: 0
+        cgst_amount_minor:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
+        sgst_amount_minor:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
+        igst_amount_minor:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
+        line_total_minor:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
+      required:
+      - base_quantity
+      - conversion_factor
+      - description
+      - id
+      - line_total_minor
+      - pack
+      - product
+      - quantity
+      - taxable_value_minor
+      - unit_cost_minor
+    PurchaseLineInput:
+      type: object
+      properties:
+        pack_id:
+          type: string
+          format: uuid
+        quantity:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,15}(?:\.\d{0,3})?$
+        unit_cost_minor:
+          type: integer
+          minimum: 0
+        discount_minor:
+          type: integer
+          minimum: 0
+          default: 0
+      required:
+      - pack_id
+      - quantity
+      - unit_cost_minor
+    RefreshRequest:
+      type: object
+      properties:
+        refresh:
+          type: string
+          writeOnly: true
+      required:
+      - refresh
+    RefreshResponse:
+      type: object
+      properties:
+        access:
+          type: string
+      required:
+      - access
+    Reminder:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        business:
+          type: string
+          format: uuid
+          readOnly: true
+        location:
+          type: string
+          format: uuid
+          readOnly: true
+          nullable: true
+        kind:
+          enum:
+          - USER
+          - DOMAIN
+          type: string
+          description: |-
+            * `USER` - User reminder
+            * `DOMAIN` - Domain event
+          x-spec-enum-id: bf02e66ba71ee382
+          readOnly: true
+        title:
+          type: string
+          readOnly: true
+        body:
+          type: string
+          readOnly: true
+        scheduled_at:
+          type: string
+          format: date-time
+          readOnly: true
+        status:
+          enum:
+          - SCHEDULED
+          - QUEUED
+          - SENT
+          - FAILED
+          - CANCELLED
+          - SKIPPED
+          type: string
+          description: |-
+            * `SCHEDULED` - Scheduled
+            * `QUEUED` - Queued
+            * `SENT` - Sent
+            * `FAILED` - Failed
+            * `CANCELLED` - Cancelled
+            * `SKIPPED` - Skipped
+          x-spec-enum-id: 07daa8c7d780444f
+          readOnly: true
+        dedupe_key:
+          type: string
+          readOnly: true
+        data:
+          readOnly: true
+        metadata:
+          readOnly: true
+        queued_at:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+        sent_at:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+        cancelled_at:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+        last_error:
+          type: string
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - body
+      - business
+      - cancelled_at
+      - created_at
+      - data
+      - dedupe_key
+      - id
+      - kind
+      - last_error
+      - location
+      - metadata
+      - queued_at
+      - scheduled_at
+      - sent_at
+      - status
+      - title
+      - updated_at
+    ReminderCreate:
+      type: object
+      properties:
+        business_id:
+          type: string
+          format: uuid
+        location_id:
+          type: string
+          format: uuid
+          nullable: true
+        title:
+          type: string
+          maxLength: 120
+        body:
+          type: string
+          maxLength: 500
+        scheduled_at:
+          type: string
+          format: date-time
+        dedupe_key:
+          type: string
+          maxLength: 160
+        data:
+          description: Arbitrary notification payload fields; must be a JSON object.
+      required:
+      - body
+      - business_id
+      - scheduled_at
+      - title
+    Reverse:
+      type: object
+      properties:
+        reason:
+          type: string
+          maxLength: 240
+        idempotency_key:
+          type: string
+          maxLength: 128
+        negative_stock_acknowledged:
+          type: boolean
+          default: false
+      required:
+      - idempotency_key
+      - reason
+    Sale:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        business:
+          type: string
+          format: uuid
+        location:
+          type: string
+          format: uuid
+        customer:
+          type: string
+          format: uuid
+          nullable: true
+        status:
+          enum:
+          - DRAFT
+          - POSTED
+          - REVERSED
+          type: string
+          description: |-
+            * `DRAFT` - Draft
+            * `POSTED` - Posted
+            * `REVERSED` - Reversed
+          x-spec-enum-id: 3f8cd5a3bb6ef6b7
+        number:
+          type: string
+          maxLength: 48
+        financial_year:
+          type: string
+          maxLength: 7
+        document_date:
+          type: string
+          format: date
+        price_mode:
+          enum:
+          - RETAIL
+          - WHOLESALE
+          type: string
+          description: |-
+            * `RETAIL` - Retail
+            * `WHOLESALE` - Wholesale
+          x-spec-enum-id: a475d511d56e1b4c
+        tax_inclusive:
+          type: boolean
+        seller_name:
+          type: string
+          maxLength: 200
+        seller_gstin:
+          type: string
+          maxLength: 15
+        buyer_name:
+          type: string
+          maxLength: 180
+        buyer_gstin:
+          type: string
+          maxLength: 15
+        place_of_supply:
+          type: string
+          maxLength: 2
+        subtotal_minor:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
+        discount_total_minor:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
+        taxable_total_minor:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
+        tax_total_minor:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
+        grand_total_minor:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
+        paid_total_minor:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
+        due_total_minor:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
+        negative_stock_acknowledged:
+          type: boolean
+        negative_stock_reason:
+          type: string
+          maxLength: 240
+        source:
+          type: string
+          maxLength: 24
+        posted_at:
+          type: string
+          format: date-time
+        reversal_reason:
+          type: string
+          maxLength: 240
+        reversed_at:
+          type: string
+          format: date-time
+          nullable: true
+        lines:
+          type: array
+          items:
+            $ref: '#/components/schemas/SaleLine'
+          readOnly: true
+      required:
+      - business
+      - document_date
+      - financial_year
+      - id
+      - lines
+      - location
+      - number
+      - posted_at
+    SaleCreate:
+      type: object
+      properties:
+        business_id:
+          type: string
+          format: uuid
+        location_id:
+          type: string
+          format: uuid
+        customer_id:
+          type: string
+          format: uuid
+          nullable: true
+        invoice_date:
+          type: string
+          format: date
+        price_mode:
+          enum:
+          - RETAIL
+          - WHOLESALE
+          type: string
+          description: |-
+            * `RETAIL` - Retail
+            * `WHOLESALE` - Wholesale
+          x-spec-enum-id: a475d511d56e1b4c
+          default: RETAIL
+        tax_inclusive:
+          type: boolean
+          default: false
+        discount_total_minor:
+          type: integer
+          minimum: 0
+          default: 0
+        lines:
+          type: array
+          items:
+            $ref: '#/components/schemas/SaleLineInput'
+        paid_amount_minor:
+          type: integer
+          minimum: 0
+          default: 0
+        payment_method:
+          enum:
+          - CASH
+          - UPI
+          - CARD
+          - BANK
+          - OTHER
+          type: string
+          description: |-
+            * `CASH` - Cash
+            * `UPI` - UPI
+            * `CARD` - Card
+            * `BANK` - Bank transfer
+            * `OTHER` - Other
+          x-spec-enum-id: 5b7636fced84a913
+          default: CASH
+        payment_reference:
+          type: string
+          maxLength: 120
+        negative_stock_acknowledged:
+          type: boolean
+          default: false
+        negative_stock_reason:
+          type: string
+          maxLength: 240
+        idempotency_key:
+          type: string
+          maxLength: 128
+      required:
+      - business_id
+      - idempotency_key
+      - lines
+      - location_id
+    SaleLine:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        product:
+          type: string
+          format: uuid
+        pack:
+          type: string
+          format: uuid
+        pack_name:
+          type: string
+          readOnly: true
+        description:
+          type: string
+          maxLength: 180
+        hsn_sac:
+          type: string
+          maxLength: 12
+        quantity:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,15}(?:\.\d{0,3})?$
+        conversion_factor:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,12}(?:\.\d{0,6})?$
+        base_quantity:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,15}(?:\.\d{0,3})?$
+        unit_price_minor:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
+        discount_minor:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
+        taxable_value_minor:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
+        tax_rate_bps:
+          type: integer
+          maximum: 10000
+          minimum: 0
+        cgst_amount_minor:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
+        sgst_amount_minor:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
+        igst_amount_minor:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
+        line_total_minor:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
+        unit_cost_minor:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
+          nullable: true
+        cogs_minor:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
+          nullable: true
+        costing_complete:
+          type: boolean
+      required:
+      - base_quantity
+      - conversion_factor
+      - description
+      - id
+      - line_total_minor
+      - pack
+      - pack_name
+      - product
+      - quantity
+      - taxable_value_minor
+      - unit_price_minor
+    SaleLineInput:
+      type: object
+      properties:
+        pack_id:
+          type: string
+          format: uuid
+        quantity:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,15}(?:\.\d{0,3})?$
+        unit_price_minor:
+          type: integer
+          minimum: 0
+        discount_minor:
+          type: integer
+          minimum: 0
+          default: 0
+      required:
+      - pack_id
+      - quantity
+    SalesMetrics:
+      type: object
+      properties:
+        posted_sale_count:
+          type: integer
+        line_count:
+          type: integer
+        net_sales_minor:
+          type: integer
+        cogs_minor:
+          type: integer
+        gross_profit_minor:
+          type: integer
+          nullable: true
+        missing_cost_line_count:
+          type: integer
+        costing_complete:
+          type: boolean
+      required:
+      - cogs_minor
+      - costing_complete
+      - gross_profit_minor
+      - line_count
+      - missing_cost_line_count
+      - net_sales_minor
+      - posted_sale_count
+    SessionRevokeAllRequest:
+      type: object
+      properties:
+        password:
+          type: string
+          writeOnly: true
+        current_password:
+          type: string
+          writeOnly: true
+        otp:
+          type: string
+          writeOnly: true
+    SessionRevokeAllResponse:
+      type: object
+      properties:
+        detail:
+          type: string
+        token_version:
+          type: integer
+      required:
+      - detail
+      - token_version
+    Signup:
+      type: object
+      properties:
+        phone:
+          type: string
+          maxLength: 20
+        password:
+          type: string
+          writeOnly: true
+          minLength: 8
+        display_name:
+          type: string
+          maxLength: 120
+      required:
+      - password
+      - phone
+    StockAdjustment:
+      type: object
+      properties:
+        business_id:
+          type: string
+          format: uuid
+        location_id:
+          type: string
+          format: uuid
+        product_id:
+          type: string
+          format: uuid
+        quantity_delta:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,15}(?:\.\d{0,3})?$
+        movement_type:
+          enum:
+          - OPENING
+          - ADJUSTMENT
+          type: string
+          description: |-
+            * `OPENING` - OPENING
+            * `ADJUSTMENT` - ADJUSTMENT
+          x-spec-enum-id: 849ef548f698b2d7
+          default: ADJUSTMENT
+        reason:
+          type: string
+          maxLength: 240
+        negative_stock_acknowledged:
+          type: boolean
+          default: false
+        idempotency_key:
+          type: string
+          maxLength: 128
+      required:
+      - business_id
+      - idempotency_key
+      - location_id
+      - product_id
+      - quantity_delta
+      - reason
+    StockMovement:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        business:
+          type: string
+          format: uuid
+        location:
+          type: string
+          format: uuid
+        product:
+          type: string
+          format: uuid
+        pack:
+          type: string
+          format: uuid
+          nullable: true
+        movement_type:
+          enum:
+          - OPENING
+          - SALE
+          - SALE_REVERSAL
+          - PURCHASE
+          - PURCHASE_REVERSAL
+          - ADJUSTMENT
+          - TRANSFER_OUT
+          - TRANSFER_IN
+          - TRANSFER_REVERSAL
+          type: string
+          description: |-
+            * `OPENING` - Opening stock
+            * `SALE` - Sale
+            * `SALE_REVERSAL` - Sale reversal
+            * `PURCHASE` - Purchase
+            * `PURCHASE_REVERSAL` - Purchase reversal
+            * `ADJUSTMENT` - Adjustment
+            * `TRANSFER_OUT` - Transfer out
+            * `TRANSFER_IN` - Transfer in
+            * `TRANSFER_REVERSAL` - Transfer reversal
+          x-spec-enum-id: 5d560c8ae62cb9b0
+        quantity:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,15}(?:\.\d{0,3})?$
+        source_type:
+          type: string
+          maxLength: 32
+        source_id:
+          type: string
+          format: uuid
+        note:
+          type: string
+          maxLength: 240
+        occurred_at:
+          type: string
+          format: date-time
+      required:
+      - business
+      - id
+      - location
+      - movement_type
+      - occurred_at
+      - product
+      - quantity
+      - source_id
+      - source_type
+    StockReport:
+      type: object
+      properties:
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/StockReportRow'
+      required:
+      - results
+    StockReportRow:
+      type: object
+      properties:
+        product_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        unit:
+          type: string
+        quantity:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,15}(?:\.\d{0,3})?$
+        low_stock_threshold:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,15}(?:\.\d{0,3})?$
+        is_low_stock:
+          type: boolean
+      required:
+      - is_low_stock
+      - low_stock_threshold
+      - name
+      - product_id
+      - quantity
+      - unit
+    Transfer:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        business:
+          type: string
+          format: uuid
+        from_location:
+          type: string
+          format: uuid
+        to_location:
+          type: string
+          format: uuid
+        status:
+          enum:
+          - DRAFT
+          - POSTED
+          - REVERSED
+          type: string
+          description: |-
+            * `DRAFT` - Draft
+            * `POSTED` - Posted
+            * `REVERSED` - Reversed
+          x-spec-enum-id: 3f8cd5a3bb6ef6b7
+        number:
+          type: string
+          maxLength: 48
+        document_date:
+          type: string
+          format: date
+        note:
+          type: string
+          maxLength: 240
+        negative_stock_acknowledged:
+          type: boolean
+        negative_stock_reason:
+          type: string
+          maxLength: 240
+        posted_at:
+          type: string
+          format: date-time
+        reversal_reason:
+          type: string
+          maxLength: 240
+        reversed_at:
+          type: string
+          format: date-time
+          nullable: true
+        lines:
+          type: array
+          items:
+            $ref: '#/components/schemas/TransferLine'
+          readOnly: true
+      required:
+      - business
+      - document_date
+      - from_location
+      - id
+      - lines
+      - number
+      - posted_at
+      - to_location
+    TransferCreate:
+      type: object
+      properties:
+        business_id:
+          type: string
+          format: uuid
+        from_location_id:
+          type: string
+          format: uuid
+        to_location_id:
+          type: string
+          format: uuid
+        transfer_date:
+          type: string
+          format: date
+        note:
+          type: string
+          maxLength: 240
+        lines:
+          type: array
+          items:
+            $ref: '#/components/schemas/TransferLineInput'
+        negative_stock_acknowledged:
+          type: boolean
+          default: false
+        negative_stock_reason:
+          type: string
+          maxLength: 240
+        idempotency_key:
+          type: string
+          maxLength: 128
+      required:
+      - business_id
+      - from_location_id
+      - idempotency_key
+      - lines
+      - to_location_id
+    TransferLine:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        product:
+          type: string
+          format: uuid
+        pack:
+          type: string
+          format: uuid
+        quantity:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,15}(?:\.\d{0,3})?$
+        conversion_factor:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,12}(?:\.\d{0,6})?$
+        base_quantity:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,15}(?:\.\d{0,3})?$
+      required:
+      - base_quantity
+      - conversion_factor
+      - id
+      - pack
+      - product
+      - quantity
+    TransferLineInput:
+      type: object
+      properties:
+        pack_id:
+          type: string
+          format: uuid
+        quantity:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,15}(?:\.\d{0,3})?$
+      required:
+      - pack_id
+      - quantity
+    ValuationInventory:
+      type: object
+      properties:
+        total_quantity:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,15}(?:\.\d{0,3})?$
+        average_cost_minor:
+          type: integer
+          nullable: true
+        total_value_minor:
+          type: integer
+          nullable: true
+        known_value_minor:
+          type: integer
+        costing_complete:
+          type: boolean
+      required:
+      - average_cost_minor
+      - costing_complete
+      - known_value_minor
+      - total_quantity
+      - total_value_minor
+    ValuationReport:
+      type: object
+      properties:
+        inventory:
+          $ref: '#/components/schemas/ValuationInventory'
+        sales:
+          $ref: '#/components/schemas/SalesMetrics'
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/ValuationRow'
+      required:
+      - inventory
+      - results
+      - sales
+    ValuationRow:
+      type: object
+      properties:
+        product_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        unit:
+          type: string
+        quantity:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,15}(?:\.\d{0,3})?$
+        average_cost_minor:
+          type: integer
+          nullable: true
+        total_value_minor:
+          type: integer
+          nullable: true
+        known_value_minor:
+          type: integer
+        unknown_cost_quantity:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,15}(?:\.\d{0,3})?$
+        costing_complete:
+          type: boolean
+      required:
+      - average_cost_minor
+      - costing_complete
+      - known_value_minor
+      - name
+      - product_id
+      - quantity
+      - total_value_minor
+      - unit
+      - unknown_cost_quantity
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Access JWT issued by signup, login, OTP verification, or refresh.

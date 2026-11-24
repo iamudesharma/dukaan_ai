@@ -102,7 +102,7 @@ def test_revision_api_and_location_revocation(shop):
     assert client.get(url).status_code == 200
     membership.locations.clear()
     assert client.get(url).status_code == 404
-    assert client.get("/api/v1/assistant/proposals/").json() == []
+    assert client.get("/api/v1/assistant/proposals/").json()["results"] == []
 
 
 def test_unrepresentable_total_needs_correction(shop):

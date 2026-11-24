@@ -12,6 +12,7 @@ from .views import (
     StockAdjustmentView,
     StockReportView,
     TransferViewSet,
+    ValuationReportView,
 )
 
 router = DefaultRouter()
@@ -26,5 +27,6 @@ urlpatterns = [
     path("party-ledger/opening-balances/", OpeningBalanceView.as_view(), name="opening-balance"),
     path("reports/dashboard/", DashboardView.as_view(), name="dashboard"),
     path("reports/stock/", StockReportView.as_view(), name="stock-report"),
+    path("reports/valuation/", ValuationReportView.as_view(), name="valuation-report"),
     path("reports/party-ledger/", PartyLedgerReportView.as_view(), name="party-ledger-report"),
 ] + router.urls

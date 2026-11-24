@@ -1,3 +1,3 @@
-# Public compile-time Flutter values. Never add a Supabase service-role key here.
+# Public compile-time Flutter values. The app signs in with phone/password or
+# OTP when enabled; it holds no server secret and never ships sample data.
 DUKAAN_API_BASE_URL=https://api.example.com/api/v1/
-DUKAAN_DEMO_MODE=false

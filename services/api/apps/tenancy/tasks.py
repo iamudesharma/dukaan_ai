@@ -62,6 +62,8 @@ def process_outbox_event(self, event_id: str) -> str:
             return "missing"
         if event.status == OutboxEvent.Status.PROCESSED:
             return "already-processed"
+        if event.available_at > timezone.now():
+            return "not-due"
         try:
             _deliver(event)
         except _PermanentFailure as exc:
@@ -71,6 +73,31 @@ def process_outbox_event(self, event_id: str) -> str:
             event.save(update_fields=["status", "last_error", "processed_at", "updated_at"])
             logger.exception("Outbox event %s failed permanently.", event_id)
             return "failed"
+        except _RetryableFailure as exc:
+            if event.attempts >= MAX_ATTEMPTS:
+                event.status = OutboxEvent.Status.FAILED
+                event.processed_at = timezone.now()
+                event.last_error = str(exc)[:2000]
+                event.save(update_fields=["status", "last_error", "processed_at", "updated_at"])
+                logger.warning("Outbox event %s exhausted its retries.", event_id)
+                return "failed"
+            # Commit successful partial work (for example, one device delivery)
+            # while returning the event to the durable dispatcher queue.
+            event.status = OutboxEvent.Status.PENDING
+            event.available_at = timezone.now() + _backoff(max(event.attempts, 1))
+            event.last_error = str(exc)[:2000]
+            event.processed_at = None
+            event.save(
+                update_fields=[
+                    "status",
+                    "available_at",
+                    "last_error",
+                    "processed_at",
+                    "updated_at",
+                ]
+            )
+            logger.warning("Outbox event %s will retry: %s", event_id, exc)
+            return "retry"
         event.status = OutboxEvent.Status.PROCESSED
         event.processed_at = timezone.now()
         event.save(update_fields=["status", "processed_at", "updated_at"])
@@ -81,10 +108,12 @@ class _PermanentFailure(Exception):
     """A delivery failure that retrying will not fix (bad payload/route)."""
 
 
+class _RetryableFailure(Exception):
+    """A transient provider failure; keep the durable row available to retry."""
+
+
 def _deliver(event: OutboxEvent) -> None:
-    """Route one event to its handler. Handlers are local-only for now; each
-    provider integration (OCR, WhatsApp, push) lands here behind the same
-    dedupe key, never inline in request handling."""
+    """Route one event to its handler behind the row's dedupe key."""
     handler = _HANDLERS.get(event.topic)
     if handler is None:
         raise _PermanentFailure(f"No handler for outbox topic {event.topic!r}")
@@ -92,19 +121,26 @@ def _deliver(event: OutboxEvent) -> None:
 
 
 def _handle_domain_posted(event: OutboxEvent) -> None:
-    # Posting confirmations/notifications fan out from here. Until a provider
-    # is configured this is a durable no-op: the row is still marked
-    # PROCESSED so dispatch does not retry it forever.
-    logger.info(
-        "Outbox delivered locally: topic=%s business=%s dedupe=%s",
-        event.topic,
-        event.business_id,
-        event.dedupe_key,
-    )
+    from apps.integrations.notifications import enqueue_domain_notification
+
+    # Persist a notification reminder plus its own outbox event. FCM is called
+    # only by the notification handler on a later worker delivery.
+    enqueue_domain_notification(event)
 
 
 def _handle_domain_reversed(event: OutboxEvent) -> None:
     _handle_domain_posted(event)
+
+
+def _handle_notification_reminder(event: OutboxEvent) -> None:
+    from apps.integrations.notifications import deliver_reminder
+
+    payload = event.payload if isinstance(event.payload, dict) else {}
+    reminder_id = payload.get("reminder_id")
+    if not reminder_id:
+        raise _PermanentFailure("Notification outbox payload has no reminder_id")
+    if deliver_reminder(str(reminder_id)) == "retry":
+        raise _RetryableFailure("One or more push deliveries are temporarily unavailable")
 
 
 _HANDLERS = {
@@ -118,4 +154,5 @@ _HANDLERS = {
     "payment.reversed": _handle_domain_reversed,
     "expense.reversed": _handle_domain_reversed,
     "transfer.reversed": _handle_domain_reversed,
+    "notification.reminder": _handle_notification_reminder,
 }

@@ -1,19 +1,30 @@
 import { useMemo, useState, type FormEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeftRight, Boxes, PackagePlus, Search, X } from "lucide-react";
+import { ArrowLeftRight, Boxes, FileSpreadsheet, PackagePlus, Search, X } from "lucide-react";
 import { useWorkspace } from "../app/WorkspaceContext";
 import { EmptyState } from "../components/EmptyState";
 import { LoadingBlock } from "../components/LoadingBlock";
 import { PageHeader } from "../components/PageHeader";
 import { StatusBadge } from "../components/StatusBadge";
-import { adjustStock, createProduct, createTransfer, getProducts, getStockReport } from "../data/repository";
+import { adjustStock, createProduct, createTransfer, getProducts, getStockReport, getValuationReport } from "../data/repository";
 import { formatMoney } from "../lib/format";
+import { CsvImportPanel } from "../features/imports/CsvImportPanel";
+
+function isLowStock(product: { onHand: string; reorderLevel: string; isLowStock?: boolean }): boolean {
+  return product.isLowStock ?? Number(product.onHand) <= Number(product.reorderLevel);
+}
+
+function stockStatus(product: { onHand: string; reorderLevel: string; isLowStock?: boolean }): "out" | "low" | "in" {
+  if (Number(product.onHand) <= 0) return "out";
+  return isLowStock(product) ? "low" : "in";
+}
 
 export function StockPage() {
-  const { bootstrap, locationId } = useWorkspace();
+  const { bootstrap, access, locationId } = useWorkspace();
   const [search, setSearch] = useState("");
   const [showOnly, setShowOnly] = useState<"all" | "low" | "out">("all");
   const [adding, setAdding] = useState(false);
+  const [importing, setImporting] = useState(false);
   const [transferring, setTransferring] = useState(false);
   const [adjustingId, setAdjustingId] = useState<string | null>(null);
   const [productName, setProductName] = useState("");
@@ -27,25 +38,33 @@ export function StockPage() {
   const [reason, setReason] = useState("");
   const queryClient = useQueryClient();
   const query = useQuery({
-    queryKey: ["products", bootstrap.business.id, locationId],
-    queryFn: () => getProducts(bootstrap.business.id, locationId),
+    queryKey: ["products", bootstrap.user.id, bootstrap.business.id, locationId],
+    queryFn: () => getProducts(bootstrap.business.id, locationId, { includeWholesalePrices: access.canViewWholesalePrices }),
   });
   const report = useQuery({
-    queryKey: ["stock-report", bootstrap.business.id, locationId],
+    queryKey: ["stock-report", bootstrap.user.id, bootstrap.business.id, locationId],
     queryFn: () => getStockReport(bootstrap.business.id, locationId),
   });
+  const valuation = useQuery({
+    queryKey: ["valuation", bootstrap.user.id, bootstrap.business.id, locationId],
+    queryFn: () => getValuationReport(bootstrap.business.id, locationId),
+    enabled: access.canViewStockValuation,
+  });
   const addProduct = useMutation({
-    mutationFn: () => createProduct({
-      business: bootstrap.business.id,
-      name: productName,
-      sku: sku || undefined,
-      baseUnit: "PIECE",
-      packs: [{
-        name: "Default pack",
-        retailPriceMinor: Math.round(Number(retail || 0) * 100),
-        wholesalePriceMinor: Math.round(Number(wholesale || 0) * 100),
-      }],
-    }),
+    mutationFn: () => {
+      if (!access.canManageStock) throw new Error("Your role cannot add products.");
+      return createProduct({
+        business: bootstrap.business.id,
+        name: productName,
+        sku: sku || undefined,
+        baseUnit: "PIECE",
+        packs: [{
+          name: "Default pack",
+          retailPriceMinor: Math.round(Number(retail || 0) * 100),
+          wholesalePriceMinor: Math.round(Number(wholesale || 0) * 100),
+        }],
+      });
+    },
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["products"] });
       await queryClient.invalidateQueries({ queryKey: ["stock-report"] });
@@ -57,51 +76,79 @@ export function StockPage() {
     },
   });
   const transfer = useMutation({
-    mutationFn: () => createTransfer({
-      businessId: bootstrap.business.id,
-      fromLocationId: locationId,
-      toLocationId: toLocation,
-      lines: [{ packId: transferPack, quantity: transferQty }],
-    }),
+    mutationFn: () => {
+      if (!access.canManageStock) throw new Error("Your role cannot transfer stock.");
+      return createTransfer({
+        businessId: bootstrap.business.id,
+        fromLocationId: locationId,
+        toLocationId: toLocation,
+        lines: [{ packId: transferPack, quantity: transferQty }],
+      });
+    },
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ["products"] });
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["products"] }),
+        queryClient.invalidateQueries({ queryKey: ["stock-report"] }),
+        queryClient.invalidateQueries({ queryKey: ["valuation"] }),
+      ]);
       setTransferring(false);
     },
   });
   const adjust = useMutation({
-    mutationFn: ({ productId }: { productId: string }) => adjustStock({
-      businessId: bootstrap.business.id,
-      locationId,
-      productId,
-      quantityDelta: delta,
-      reason: reason || "Manual correction",
-    }),
+    mutationFn: ({ productId }: { productId: string }) => {
+      if (!access.canManageStock) throw new Error("Your role cannot adjust stock.");
+      return adjustStock({
+        businessId: bootstrap.business.id,
+        locationId,
+        productId,
+        quantityDelta: delta,
+        reason: reason || "Manual correction",
+      });
+    },
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ["products"] });
-      await queryClient.invalidateQueries({ queryKey: ["stock-report"] });
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["products"] }),
+        queryClient.invalidateQueries({ queryKey: ["stock-report"] }),
+        queryClient.invalidateQueries({ queryKey: ["valuation"] }),
+      ]);
       setAdjustingId(null);
       setDelta("1");
       setReason("");
     },
   });
-  const products = useMemo(() => (query.data ?? []).filter((product) => {
-    if (!`${product.name} ${product.sku}`.toLowerCase().includes(search.toLowerCase())) return false;
-    if (showOnly === "low") return Number(product.onHand) <= Number(product.reorderLevel);
-    if (showOnly === "out") return Number(product.onHand) <= 0;
-    return true;
-  }), [query.data, search, showOnly]);
-  const stockValue = products.reduce((sum, product) => sum + Number(product.onHand) * product.wholesalePriceMinor, 0);
-  const lowStock = products.filter((product) => Number(product.onHand) <= Number(product.reorderLevel));
+  const products = useMemo(() => {
+    const stockByProduct = new Map((report.data ?? []).map((row) => [row.productId, row]));
+    return (query.data ?? [])
+      .map((product) => {
+        const stock = stockByProduct.get(product.id);
+        return stock ? {
+          ...product,
+          onHand: stock.quantity,
+          reorderLevel: stock.lowStockThreshold ?? product.reorderLevel,
+          isLowStock: stock.isLowStock,
+        } : product;
+      })
+      .filter((product) => {
+        if (!`${product.name} ${product.sku}`.toLowerCase().includes(search.toLowerCase())) return false;
+        if (showOnly === "low") return isLowStock(product);
+        if (showOnly === "out") return Number(product.onHand) <= 0;
+        return true;
+      });
+  }, [query.data, report.data, search, showOnly]);
+  const lowStock = products.filter(isLowStock);
+  const inventory = valuation.data?.inventory;
+  const stockValue = inventory?.totalValueMinor ?? inventory?.knownValueMinor;
 
   return (
     <>
       <PageHeader
-        eyebrow="Inventory"
-        title="Stock & transfers"
-        description="Products are shared across the business; quantities and movements always belong to one location."
-        actions={<><button className="secondary-button" onClick={() => setTransferring(true)}><ArrowLeftRight />Transfer stock</button><button className="primary-button" onClick={() => setAdding(true)}><PackagePlus />Add product</button></>}
+        eyebrow="01 · Inventory"
+        title={access.isCashier ? "Stock" : "Stock & transfers"}
+        description={access.isCashier ? "Check retail stock quantities for this location." : "Products are shared across the business; quantities and movements always belong to one location."}
+        actions={access.canManageStock ? <><button className="primary-button" onClick={() => setAdding(true)}><PackagePlus />Add product</button><button className="secondary-button" onClick={() => setImporting(true)}><FileSpreadsheet />Import CSV</button><button className="secondary-button" onClick={() => setTransferring(true)}><ArrowLeftRight />Transfer stock</button></> : undefined}
       />
-      {adding ? (
+      {importing && access.canManageStock ? <CsvImportPanel businessId={bootstrap.business.id} initialKind="PRODUCT" canImport={access.canManageStock} onClose={() => setImporting(false)} onChanged={async () => { await Promise.all([queryClient.invalidateQueries({ queryKey: ["products"] }), queryClient.invalidateQueries({ queryKey: ["stock-report"] }), queryClient.invalidateQueries({ queryKey: ["valuation"] })]); }} /> : null}
+      {adding && access.canManageStock ? (
         <section className="panel" role="dialog" aria-label="Add product">
           <form className="manual-form" onSubmit={(e: FormEvent) => { e.preventDefault(); if (productName.trim()) addProduct.mutate(); }}>
             <div className="two-fields">
@@ -120,7 +167,7 @@ export function StockPage() {
           </form>
         </section>
       ) : null}
-      {transferring ? (
+      {transferring && access.canManageStock ? (
         <section className="panel" role="dialog" aria-label="Transfer stock">
           <form className="manual-form" onSubmit={(e: FormEvent) => { e.preventDefault(); if (toLocation && transferPack) transfer.mutate(); }}>
             <div className="two-fields">
@@ -136,46 +183,48 @@ export function StockPage() {
           </form>
         </section>
       ) : null}
-      {report.data?.length ? (
-        <section className="panel"><p><strong>{report.data.filter((r) => r.isLowStock).length} low-stock rows</strong> in the server stock report.</p></section>
+      {report.isError ? (
+        <p className="form-error" role="alert">Could not refresh the live stock report. Catalog quantities are shown below.</p>
       ) : null}
       <section className="mini-metrics">
-        <div><span className="mini-icon blue"><Boxes /></span><div><span>Products</span><strong>{products.length}</strong></div></div>
-        <div><span className="mini-icon amber"><Boxes /></span><div><span>Low stock</span><strong>{lowStock.length}</strong></div></div>
-        <div><span className="mini-icon green"><Boxes /></span><div><span>Stock value at wholesale price</span><strong>{formatMoney(stockValue)}</strong></div></div>
+        <div><span className="mini-icon primary"><Boxes /></span><div><span>Products</span><strong>{products.length}</strong></div></div>
+        <div><span className="mini-icon attention"><Boxes /></span><div><span>Low stock</span><strong>{lowStock.length}</strong></div></div>
+        {access.canViewStockValuation ? <div><span className="mini-icon positive"><Boxes /></span><div><span>{inventory && inventory.totalValueMinor === null ? "Known stock value · incomplete costing" : "Weighted-average stock value"}</span><strong>{valuation.isLoading ? "…" : valuation.error || stockValue === undefined ? "Unavailable" : formatMoney(stockValue)}</strong></div></div> : null}
       </section>
-      <section className="panel data-panel">
+      <section className="panel register-section data-panel">
         <div className="filter-row">
           <label className="inline-search wide"><Search /><span className="sr-only">Search products</span><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search product, SKU or barcode" /></label>
           <label className="compact-select">Show<select value={showOnly} onChange={(e) => setShowOnly(e.target.value as typeof showOnly)}><option value="all">All products</option><option value="low">Low stock</option><option value="out">Out of stock</option></select></label>
         </div>
-        {query.isLoading ? <LoadingBlock /> : products.length ? (
+        {query.isLoading ? <LoadingBlock /> : query.error ? (
+          <EmptyState title="Stock unavailable" detail="We couldn’t load products for this location. Check your connection and try again." />
+        ) : products.length ? (
           <div className="table-scroll">
             <table>
-              <thead><tr><th>Product</th><th>On hand</th><th>Reorder at</th><th>Retail</th><th>Wholesale</th><th>GST</th><th>Status</th><th><span className="sr-only">Actions</span></th></tr></thead>
+              <thead><tr><th>Product</th><th>On hand</th><th>Reorder at</th><th>Retail</th>{access.canViewWholesalePrices ? <th>Wholesale</th> : null}<th>GST</th><th>Status</th>{access.canManageStock ? <th><span className="sr-only">Actions</span></th> : null}</tr></thead>
               <tbody>{products.map((product) => {
-                const low = Number(product.onHand) <= Number(product.reorderLevel);
+                const status = stockStatus(product);
                 return <tr key={product.id}>
                   <td><strong>{product.name}</strong><small>{product.sku}</small></td>
                   <td><strong>{product.onHand}</strong> {product.unit}</td>
                   <td>{product.reorderLevel} {product.unit}</td>
                   <td>{formatMoney(product.retailPriceMinor)}</td>
-                  <td>{formatMoney(product.wholesalePriceMinor)}</td>
+                  {access.canViewWholesalePrices ? <td>{formatMoney(product.wholesalePriceMinor)}</td> : null}
                   <td>{product.gstRateBps / 100}%</td>
-                  <td>{low ? <StatusBadge tone="warning">Low stock</StatusBadge> : <StatusBadge tone="positive">In stock</StatusBadge>}</td>
-                  <td>{adjustingId === product.id ? (
-                    <form className="inline-search" onSubmit={(e: FormEvent) => { e.preventDefault(); adjust.mutate({ productId: product.id }); }}>
-                      <input aria-label="Quantity delta" type="number" step="0.001" value={delta} onChange={(e) => setDelta(e.target.value)} style={{ width: 72 }} />
-                      <input aria-label="Reason" value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Reason" style={{ width: 110 }} />
+                  <td>{status === "out" ? <StatusBadge tone="danger">Out of stock</StatusBadge> : status === "low" ? <StatusBadge tone="warning">Low stock</StatusBadge> : <StatusBadge tone="positive">In stock</StatusBadge>}</td>
+                  {access.canManageStock ? <td>{adjustingId === product.id ? (
+                    <form className="inline-search adjust-row" onSubmit={(e: FormEvent) => { e.preventDefault(); adjust.mutate({ productId: product.id }); }}>
+                      <input aria-label="Quantity delta" className="delta-input" type="number" step="0.001" value={delta} onChange={(e) => setDelta(e.target.value)} />
+                      <input aria-label="Reason" className="reason-input" value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Reason" />
                       <button className="text-button" disabled={adjust.isPending}>Save</button>
                       <button className="icon-button" aria-label="Cancel adjustment" type="button" onClick={() => setAdjustingId(null)}><X /></button>
                     </form>
-                  ) : <button type="button" className="text-button" onClick={() => setAdjustingId(product.id)}>Adjust</button>}</td>
+                  ) : <button type="button" className="text-button" onClick={() => setAdjustingId(product.id)}>Adjust</button>}</td> : null}
                 </tr>;
               })}</tbody>
             </table>
           </div>
-        ) : <EmptyState title="No products found" detail="Add a product or change your search." />}
+        ) : <EmptyState title="No products found" detail={access.isCashier ? "No retail stock matches this search." : "Add a product or change your search."} />}
       </section>
     </>
   );

@@ -22,6 +22,7 @@ dependencies:
   image_picker: ^1.2.1
   intl: ^0.20.3
   path_provider: ^2.1.5
+  record: ^7.2.0
   share_plus: ^11.0.0
   speech_to_text: ^7.4.0
   sqlite3_flutter_libs: ^0.5.39
@@ -30,8 +31,43 @@ dependencies:
 dev_dependencies:
   flutter_test:
     sdk: flutter
+  integration_test:
+    sdk: flutter
   flutter_lints: ^5.0.0
 
 flutter:
   uses-material-design: true
+  fonts:
+    # Weights are static instances cut from the variable sources, so Flutter
+    # matches on OS/2 usWeightClass instead of guessing. See
+    # packages/design-tokens/scripts/fetch-fonts.mjs. Licences live in
+    # packages/design-tokens/font-licenses.
+    - family: Manrope
+      fonts:
+        - asset: assets/fonts/manrope-400.ttf
+          weight: 400
+        - asset: assets/fonts/manrope-500.ttf
+          weight: 500
+        - asset: assets/fonts/manrope-600.ttf
+          weight: 600
+        - asset: assets/fonts/manrope-700.ttf
+          weight: 700
+        - asset: assets/fonts/manrope-800.ttf
+          weight: 800
+    - family: NotoSansDevanagari
+      fonts:
+        - asset: assets/fonts/noto-devanagari-400.ttf
+          weight: 400
+        - asset: assets/fonts/noto-devanagari-500.ttf
+          weight: 500
+        - asset: assets/fonts/noto-devanagari-600.ttf
+          weight: 600
+        - asset: assets/fonts/noto-devanagari-700.ttf
+          weight: 700
+    - family: IBMPlexMono
+      fonts:
+        - asset: assets/fonts/plex-mono-400.ttf
+          weight: 400
+        - asset: assets/fonts/plex-mono-500.ttf
+          weight: 500
 

@@ -1,13 +1,23 @@
+import uuid
+
 from django.db import connection
 from django.http import JsonResponse
+from drf_spectacular.utils import OpenApiParameter, extend_schema
 from rest_framework.permissions import AllowAny
 from rest_framework.views import APIView
+
+from .serializers import BootstrapSerializer, HealthSerializer, MeSerializer
 
 
 class HealthView(APIView):
     authentication_classes = []
     permission_classes = [AllowAny]
 
+    @extend_schema(
+        summary="Check API process health",
+        responses={200: HealthSerializer},
+        auth=[],
+    )
     def get(self, request):
         return JsonResponse({"status": "ok"})
 
@@ -16,6 +26,11 @@ class ReadyView(APIView):
     authentication_classes = []
     permission_classes = [AllowAny]
 
+    @extend_schema(
+        summary="Check database readiness",
+        responses={200: HealthSerializer, 503: HealthSerializer},
+        auth=[],
+    )
     def get(self, request):
         try:
             with connection.cursor() as cursor:
@@ -27,6 +42,7 @@ class ReadyView(APIView):
 
 
 class MeView(APIView):
+    @extend_schema(summary="Get the current user and memberships", responses=MeSerializer)
     def get(self, request):
         memberships = request.user.memberships.filter(is_active=True).select_related("business")
         return JsonResponse(
@@ -47,9 +63,21 @@ class MeView(APIView):
 
 
 class BootstrapView(APIView):
+    @extend_schema(
+        summary="Get the selected business bootstrap context",
+        parameters=[
+            OpenApiParameter(
+                name="business_id",
+                type=uuid.UUID,
+                location=OpenApiParameter.QUERY,
+                required=False,
+                description="Business to select; defaults to the caller's first active membership.",
+            )
+        ],
+        responses=BootstrapSerializer,
+    )
     def get(self, request):
-        from rest_framework.exceptions import NotFound
-
+        from apps.common.exceptions import OnboardingRequired
         from apps.tenancy.access import accessible_location_ids, require_membership
         from apps.tenancy.models import Location
 
@@ -63,7 +91,7 @@ class BootstrapView(APIView):
             require_membership(request.user, business_id) if business_id else memberships.first()
         )
         if membership is None:
-            raise NotFound("Create a business to get started", code="onboarding_required")
+            raise OnboardingRequired("Create a business to get started")
         business = membership.business
         locations = Location.objects.filter(pk__in=accessible_location_ids(membership))
         return JsonResponse(

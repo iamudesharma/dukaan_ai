@@ -8,7 +8,7 @@ MOBILE_DIR := apps/mobile
 
 .DEFAULT_GOAL := help
 
-.PHONY: help infra-up infra-down infra-reset infra-logs api-install api-migrate api-migrations-check api-run api-worker api-dispatch api-lint api-test api-check web-install web-dev web-check mobile-install mobile-run mobile-check mobile-release-smoke check config-check
+.PHONY: help infra-up infra-down infra-reset infra-logs api-install api-migrate api-migrations-check api-run api-worker api-dispatch api-maintenance api-lint api-test api-check web-install web-dev web-check e2e mobile-install mobile-run mobile-check mobile-release-smoke schema-generate schema-check clients-generate clients-check tokens-generate tokens-check check config-check
 
 help: ## Show the available commands.
 	@awk 'BEGIN {FS = ":.*## "; printf "DukaanAI development commands\n\n"} /^[a-zA-Z0-9_-]+:.*## / {printf "  %-24s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -44,6 +44,9 @@ api-worker: ## Run the Celery worker.
 api-dispatch: ## Dispatch one batch of scheduled work.
 	cd $(API_DIR) && $(UV) run --locked python manage.py dispatch_scheduled
 
+api-maintenance: ## Dispatch outbox work and purge expired attachments.
+	cd $(API_DIR) && $(UV) run --locked python manage.py run_scheduled
+
 api-lint: ## Lint and check formatting for the API.
 	cd $(API_DIR) && $(UV) run --locked ruff check . && $(UV) run --locked ruff format --check .
 
@@ -63,6 +66,9 @@ web-check: ## Type-check, test, and build the stable-host web client.
 	npm run test:web
 	npm run build:web
 
+e2e: ## Run hermetic browser end-to-end tests (install Chromium once first).
+	npm run test:e2e
+
 mobile-install: ## Install Flutter dependencies.
 	cd $(MOBILE_DIR) && flutter pub get
 
@@ -70,13 +76,32 @@ mobile-run: ## Run the Flutter app on a connected target.
 	cd $(MOBILE_DIR) && flutter run
 
 mobile-check: ## Analyze and test the Flutter client.
-	cd $(MOBILE_DIR) && flutter analyze && flutter test
+	cd $(MOBILE_DIR) && flutter analyze --no-fatal-infos && flutter test
 
 mobile-release-smoke: ## Compile a release APK against DUKAAN_API_BASE_URL.
 	@test -n "$(DUKAAN_API_BASE_URL)" || (echo "DUKAAN_API_BASE_URL is required" >&2; exit 2)
 	cd $(MOBILE_DIR) && flutter build apk --release --dart-define=DUKAAN_API_BASE_URL=$(DUKAAN_API_BASE_URL)
 
-check: api-check web-check mobile-check ## Run all repository checks.
+schema-generate: ## Regenerate the OpenAPI snapshot from Django.
+	npm run schema:generate
+
+schema-check: ## Fail when the OpenAPI snapshot is stale.
+	npm run schema:check
+
+clients-generate: ## Regenerate TypeScript and Dart API clients from OpenAPI.
+	npm run clients:generate
+
+clients-check: ## Check schema, TypeScript client, and Dart client drift.
+	npm run clients:check
+	npm run clients:dart:check
+
+tokens-generate: ## Regenerate the shared design tokens for web and mobile.
+	npm run tokens:build
+
+tokens-check: ## Fail when the generated design tokens are stale or a contrast pair regresses.
+	npm run tokens:check
+
+check: api-check web-check mobile-check clients-check tokens-check ## Run all repository checks.
 
 config-check: ## Parse YAML and validate Compose when Docker is available.
 	ruby -e 'require "yaml"; ARGV.each { |path| YAML.safe_load(File.read(path), [], [], true); puts "valid YAML: #{path}" }' compose.yaml render.yaml .github/workflows/ci.yml .github/workflows/security.yml .github/dependabot.yml

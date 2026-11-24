@@ -31,7 +31,8 @@ String formatCompactMoney(int minor, String localeName) {
 }
 
 String formatRupeeDecimal(Decimal value, String localeName) {
-  return formatMoney((value * Decimal.fromInt(100)).round().toBigInt().toInt(), localeName);
+  return formatMoney(
+      (value * Decimal.fromInt(100)).round().toBigInt().toInt(), localeName);
 }
 
 String formatDateTime(DateTime value, String localeName) {

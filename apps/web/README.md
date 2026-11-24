@@ -12,11 +12,11 @@ npm ci
 npm run dev:web
 ```
 
-`VITE_DEMO_MODE=true` uses local, clearly labelled sample data. Set it to `false` for Django/Supabase integration and provide `VITE_API_URL`, `VITE_SUPABASE_URL`, and `VITE_SUPABASE_ANON_KEY`.
+`VITE_API_URL` is the only switch: every request, including sign-in and sign-out, goes to that host. A first visit shows password sign-in; OTP appears when the API reports it enabled. A new owner creates an account and then sets up their shop (name, optional GSTIN and state) before the console opens.
 
 ## Safety boundaries
 
-- Browser clients use Supabase only for authentication. Business data goes through Django.
+- Business data and authentication both go through Django. The browser holds no provider key.
 - Mutating requests carry idempotency keys.
 - Assistant interpretation creates a proposal only; the confirmation call performs the write.
 - Offline capture is stored in IndexedDB as a local draft and is never posted automatically.

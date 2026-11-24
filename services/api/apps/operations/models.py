@@ -3,6 +3,7 @@ from decimal import Decimal
 from django.conf import settings
 from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
+from django.db.models import F, Q
 
 from apps.catalog.models import Party, Product, ProductPack
 from apps.common.models import UUIDModel
@@ -111,6 +112,9 @@ class SaleLine(UUIDModel):
     sgst_amount_minor = models.BigIntegerField(default=0)
     igst_amount_minor = models.BigIntegerField(default=0)
     line_total_minor = models.BigIntegerField()
+    unit_cost_minor = models.BigIntegerField(null=True, blank=True)
+    cogs_minor = models.BigIntegerField(null=True, blank=True)
+    costing_complete = models.BooleanField(default=False)
 
 
 class Purchase(PostedDocument):
@@ -258,12 +262,73 @@ class StockBalance(UUIDModel):
     location = models.ForeignKey(Location, on_delete=models.PROTECT, related_name="stock_balances")
     product = models.ForeignKey(Product, on_delete=models.PROTECT, related_name="stock_balances")
     quantity = models.DecimalField(max_digits=18, decimal_places=3, default=Decimal("0"))
+    costed_quantity = models.DecimalField(max_digits=18, decimal_places=3, default=Decimal("0"))
+    unknown_cost_quantity = models.DecimalField(
+        max_digits=18, decimal_places=3, default=Decimal("0")
+    )
+    inventory_value_minor = models.BigIntegerField(default=0)
+    average_cost_minor = models.BigIntegerField(null=True, blank=True)
 
     class Meta:
         constraints = [
             models.UniqueConstraint(
                 fields=["business", "location", "product"], name="uniq_stock_balance"
             )
+        ]
+
+
+class InventoryCostLayer(UUIDModel):
+    """Append-only moving-average valuation postings.
+
+    Purchase layers add known quantity and value. Sales post negative quantity
+    and the exact weighted-average cost consumed. Reversals link to the original
+    layer and post its inverse, so later purchases cannot rewrite historical
+    COGS. Unknown legacy/opening stock is carried explicitly rather than being
+    assigned a fabricated zero cost.
+    """
+
+    class Type(models.TextChoices):
+        OPENING = "OPENING", "Opening/unknown stock"
+        PURCHASE = "PURCHASE", "Purchase"
+        SALE = "SALE", "Sale"
+        PURCHASE_REVERSAL = "PURCHASE_REVERSAL", "Purchase reversal"
+        SALE_REVERSAL = "SALE_REVERSAL", "Sale reversal"
+        TRANSFER = "TRANSFER", "Transfer"
+        ADJUSTMENT = "ADJUSTMENT", "Adjustment"
+
+    business = models.ForeignKey(Business, on_delete=models.CASCADE, related_name="cost_layers")
+    location = models.ForeignKey(Location, on_delete=models.CASCADE, related_name="cost_layers")
+    product = models.ForeignKey(Product, on_delete=models.CASCADE, related_name="cost_layers")
+    layer_type = models.CharField(max_length=24, choices=Type.choices)
+    source_type = models.CharField(max_length=32)
+    source_id = models.UUIDField()
+    source_line_id = models.UUIDField(null=True, blank=True)
+    quantity_delta = models.DecimalField(max_digits=18, decimal_places=3)
+    costed_quantity_delta = models.DecimalField(max_digits=18, decimal_places=3)
+    unknown_cost_quantity_delta = models.DecimalField(max_digits=18, decimal_places=3)
+    unit_cost_minor = models.BigIntegerField(null=True, blank=True)
+    value_delta_minor = models.BigIntegerField()
+    reversal_of = models.ForeignKey(
+        "self", null=True, blank=True, on_delete=models.CASCADE, related_name="reversals"
+    )
+    occurred_at = models.DateTimeField()
+
+    class Meta:
+        constraints = [
+            models.CheckConstraint(
+                condition=Q(
+                    quantity_delta=F("costed_quantity_delta") + F("unknown_cost_quantity_delta")
+                ),
+                name="cost_layer_quantity_reconciles",
+            ),
+            models.UniqueConstraint(fields=["reversal_of"], name="uniq_cost_layer_reversal"),
+        ]
+        indexes = [
+            models.Index(
+                fields=["business", "location", "product", "occurred_at"],
+                name="cost_layer_valuation_idx",
+            ),
+            models.Index(fields=["source_type", "source_id"], name="cost_layer_source_idx"),
         ]
 
 

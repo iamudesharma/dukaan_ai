@@ -17,8 +17,10 @@ class SignupSerializer(serializers.Serializer):
     def validate_phone(self, value: str) -> str:
         normalized = re.sub(r"[\s()-]", "", value)
         if not PHONE_REGEX.match(normalized):
-            raise serializers.ValidationError("Enter a valid phone number with country code, e.g. +919876543210.")
-        if User.objects.filter(phone_e164=normalized, is_active=True).exists():
+            raise serializers.ValidationError(
+                "Enter a valid phone number with country code, e.g. +919876543210."
+            )
+        if User.objects.filter(phone_e164=normalized).exists():
             raise serializers.ValidationError("An account with this phone number already exists.")
         return normalized
 
@@ -45,7 +47,9 @@ class LoginSerializer(serializers.Serializer):
     def validate(self, attrs: dict) -> dict:
         user = authenticate(username=f"phone_{attrs['phone']}", password=attrs["password"])
         if not user:
-            raise serializers.ValidationError("Invalid phone number or password.", "invalid_credentials")
+            raise serializers.ValidationError(
+                "Invalid phone number or password.", "invalid_credentials"
+            )
         if not user.is_active:
             raise serializers.ValidationError("This account has been disabled.", "account_disabled")
         attrs["user"] = user
@@ -58,7 +62,9 @@ class OtpSendSerializer(serializers.Serializer):
     def validate_phone(self, value: str) -> str:
         normalized = re.sub(r"[\s()-]", "", value)
         if not PHONE_REGEX.match(normalized):
-            raise serializers.ValidationError("Enter a valid phone number with country code, e.g. +919876543210.")
+            raise serializers.ValidationError(
+                "Enter a valid phone number with country code, e.g. +919876543210."
+            )
         return normalized
 
 
@@ -94,7 +100,9 @@ class PasswordResetRequestSerializer(serializers.Serializer):
     def validate_phone(self, value: str) -> str:
         normalized = re.sub(r"[\s()-]", "", value)
         if not PHONE_REGEX.match(normalized):
-            raise serializers.ValidationError("Enter a valid phone number with country code, e.g. +919876543210.")
+            raise serializers.ValidationError(
+                "Enter a valid phone number with country code, e.g. +919876543210."
+            )
         return normalized
 
 
@@ -109,3 +117,56 @@ class PasswordResetConfirmSerializer(serializers.Serializer):
     def validate_new_password(self, value: str) -> str:
         validate_password(value)
         return value
+
+
+class AuthCapabilitiesSerializer(serializers.Serializer):
+    password = serializers.BooleanField()
+    otp = serializers.BooleanField()
+    dev_otp = serializers.BooleanField()
+
+
+class AuthUserSerializer(serializers.Serializer):
+    id = serializers.UUIDField()
+    phone = serializers.CharField(allow_blank=True)
+    display_name = serializers.CharField(allow_blank=True)
+
+
+class AuthTokenResponseSerializer(serializers.Serializer):
+    user = AuthUserSerializer()
+    onboarding_required = serializers.BooleanField()
+    access = serializers.CharField()
+    refresh = serializers.CharField()
+
+
+class OtpResponseSerializer(serializers.Serializer):
+    detail = serializers.CharField()
+    phone = serializers.CharField()
+    # Present only when local development explicitly exposes generated codes.
+    dev_otp = serializers.CharField(required=False, help_text="Local-development code only.")
+
+
+class RefreshRequestSerializer(serializers.Serializer):
+    refresh = serializers.CharField(write_only=True)
+
+
+class RefreshResponseSerializer(serializers.Serializer):
+    access = serializers.CharField()
+
+
+class LogoutRequestSerializer(serializers.Serializer):
+    refresh = serializers.CharField(required=False, allow_blank=True, write_only=True)
+
+
+class SessionRevokeAllRequestSerializer(serializers.Serializer):
+    password = serializers.CharField(required=False, allow_blank=True, write_only=True)
+    current_password = serializers.CharField(required=False, allow_blank=True, write_only=True)
+    otp = serializers.CharField(required=False, allow_blank=True, write_only=True)
+
+
+class SessionRevokeAllResponseSerializer(serializers.Serializer):
+    detail = serializers.CharField()
+    token_version = serializers.IntegerField()
+
+
+class MessageResponseSerializer(serializers.Serializer):
+    detail = serializers.CharField()

@@ -11,9 +11,9 @@ This is the minimum launch posture for a multi-tenant system that stores busines
 
 ## Authentication and authorization
 
-1. Supabase Auth signs the user JWT.
-2. Django verifies signature via the project JWKS, issuer, `authenticated` audience, expiry, and allowed algorithm.
-3. Django maps the immutable token subject to an internal user and active business membership.
+1. Django authenticates the phone/password and issues a signed access/refresh JWT.
+2. Django verifies signature, expiry, token type, per-token blacklisting, all-device token version, and internal user status. Password change/reset and explicit session revocation invalidate every existing access/refresh token.
+3. Django maps the immutable user ID to active business memberships and locations.
 4. Every queryset and object lookup is scoped to that business before role checks.
 5. Sensitive actions use explicit permissions and write an audit event.
 
@@ -32,7 +32,7 @@ Production must have `DEV_AUTH_ENABLED=false`. Never accept tenant ID, role, act
 ## Secrets and environments
 
 - Secrets live in Render/Supabase/GitHub secret controls, not source, logs, screenshots, crash reports, or mobile binaries.
-- Separate development, staging, and production Supabase projects and keys.
+- Separate development, staging, and production Postgres/Storage projects and keys (Neon/Supabase or equivalent).
 - Rotate `DJANGO_SECRET_KEY`, database credentials, service-role keys, provider tokens, and webhook secrets after suspected exposure.
 - Keep only `VITE_*` public configuration, publishable/anon keys, and `DUKAAN_API_BASE_URL` in client builds.
 - Restrict production database network access to approved egress ranges when operationally possible, and enforce TLS.
@@ -54,9 +54,11 @@ The checked-in production templates contain names and placeholders only. `render
 - Buckets are private. Issue short-lived signed URLs only after a tenant-scoped authorization check.
 - Enforce size, MIME allowlist, extension, and decoded-file validation; do not trust filename or `Content-Type` alone.
 - Generate random object keys prefixed by tenant and attachment IDs; discard user paths.
-- Quarantine files until malware/format checks and OCR processing finish.
+- Quarantine files until the configured malware/format scanner allows them; broken or missing production scanners fail closed. OCR/STT never receives quarantined bytes.
+- Bound storage reads by the upload limit and reject expired objects before processing or signed reads.
 - Strip unsafe metadata when producing derivatives. Never serve active content inline from the application origin.
-- Define retention/deletion behavior and record deletion audits.
+- Define retention/deletion behavior, preserve open review work, and record object-purge audits.
+- Treat FCM tokens and invitation tokens as credentials: write-only/one-time exposure, hashed invitation storage, and no secrets in logs.
 
 ## Supply chain and change control
 

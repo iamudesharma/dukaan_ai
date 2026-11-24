@@ -1,23 +1,23 @@
 # DukaanAI MVP architecture
 
-Status: approved implementation baseline, 2026-09-04.
+Status: implemented foundation, updated 2026-11-24.
 
 ## Product boundary
 
 The MVP is a mobile-first business operations system, not a general autonomous agent. It records sales, purchases, payments, expenses, stock movements, parties, and credit balances from structured forms or natural-language drafts. The system may propose a transaction, but the deterministic domain layer validates and commits it.
 
-The production clients are the Flutter Android app and the React/Vite console in `apps/web`. Both authenticate with Supabase and use Django as the only business-data API. The prior Vinext/OpenAI Sites scaffold was retired; see [Sites production boundary](sites-production-boundary.md).
+The production clients are the Flutter Android app and the React/Vite console in `apps/web`. Both authenticate against Django's phone/password JWT API and use Django as the only business-data API. Supabase supplies hosted Postgres and private object Storage; it is not the identity provider. The prior Vinext/OpenAI Sites scaffold was retired; see [Sites production boundary](sites-production-boundary.md).
 
 ## Runtime view
 
 ```text
 Flutter Android app / React web console
                  |
-          HTTPS + Supabase JWT
+          HTTPS + Django JWT
                  |
         Render Web Service (Django API)
             |                 |
-     Supabase Postgres   Render Key Value
+     Postgres (Neon/Supabase)  Redis/Valkey
        + Storage              |
                               v
                     Render Background Worker
@@ -26,20 +26,21 @@ Flutter Android app / React web console
 ```
 
 - **Django API:** owns validation, authorization, idempotency, business transactions, and the public `/api/v1` contract.
-- **Supabase Auth:** issues user JWTs. The API verifies issuer, audience, signature, expiry, and membership; clients never receive the service-role key.
-- **Supabase Postgres:** the sole durable system of record for operational and financial data.
-- **Supabase Storage:** private receipt and attachment objects. Postgres stores object metadata and tenant ownership.
-- **Render Key Value (Valkey-compatible):** Celery broker only. It is not authoritative business storage.
-- **Celery worker:** performs retryable OCR, notifications, summaries, exports, and other slow work.
-- **Scheduled dispatcher:** runs once per minute, claims due rows/outbox work in Postgres, and enqueues idempotent tasks.
+- **Django authentication:** issues and verifies access/refresh JWTs for the internal user model, checks per-token blacklisting and all-device token versions, and derives active business/location memberships. Clients never receive the service-role key.
+- **PostgreSQL (Neon or Supabase):** the sole durable system of record for operational and financial data. Tenant tables enforce Row Level Security, including child and valuation tables. DukaanAI currently uses direct Neon connections because its RLS scope is session/connection-local.
+- **Private object Storage:** receipt and attachment objects. Postgres stores object metadata, scan/quarantine state, retention deadlines, and tenant ownership.
+- **Redis/Valkey (local, Upstash, or Render Key Value):** Celery broker and production cache. It is not authoritative business storage; the Postgres outbox remains the recovery source.
+- **Celery worker:** performs retryable OCR/STT, push delivery, summaries, exports, and other slow work.
+- **Rust `doc-extractor`:** separate HTTP OCR plane using the provisioned OCRia-nano-1 model; DukaanAI sends raw document bytes and rejects provider fallback.
+- **Scheduled dispatcher:** runs once per minute, claims due outbox work, enqueues idempotent tasks, and purges a bounded batch of policy-eligible expired attachments.
 
-All Render services run in Singapore. The Supabase project should use the closest available Southeast Asia region. Keeping the API, queue, and database near one another reduces latency and avoids unnecessary cross-region data movement.
+All Render services run in Singapore. The Postgres and Redis projects should use the closest available Southeast Asia region. Keeping the API, queue, and database near one another reduces latency and avoids unnecessary cross-region data movement.
 
 ## Data ownership and tenancy
 
-Every tenant-owned aggregate carries an immutable `business_id`. Membership maps a Supabase user ID to a business and a role. The API derives the active user from the verified token and validates access to the requested business; it never trusts a client-supplied user ID.
+Every tenant-owned aggregate carries an immutable `business_id`. Membership maps an internal Django user ID to a business, role, and assigned locations. The API derives the active user from the verified token and validates access to the requested business; it never trusts a client-supplied user ID.
 
-The baseline defense is application-enforced tenant scoping plus database constraints. Privileged database credentials are server-only. If direct client database access is introduced later, Row Level Security must be enabled and tested before that path ships.
+The baseline defense is application-enforced tenant scoping plus forced PostgreSQL Row Level Security and runtime grants for a separate least-privilege role. Privileged migration/operator credentials are server-only. Cross-tenant negative tests cover direct database access as well as HTTP paths.
 
 Recommended invariants:
 
@@ -48,6 +49,7 @@ Recommended invariants:
 - each sale, purchase, payment, and stock change has a stable ID, actor, tenant, timestamp, and audit metadata;
 - idempotency keys are unique within a business and command type;
 - inventory changes are represented as movements, not silent counter edits;
+- purchases, sales, transfers, and reversals write append-only valuation layers; missing historical cost stays unknown and profit stays null;
 - outstanding balances are derived from posted documents and allocations;
 - posted documents are reversed or adjusted, not destructively rewritten;
 - all rows touched by one business command commit in one database transaction.
@@ -90,6 +92,7 @@ Horizontal API/worker scaling is permitted once idempotency and database locking
 - Add OCR behind an attachment-processing interface; preserve the original object and extraction provenance.
 - Add WhatsApp behind an outbound-message adapter and durable delivery state.
 - Add read replicas/search/warehouse only after measured load requires them.
+- Treat `packages/api-contract/openapi.json` as the canonical wire contract; regenerate TypeScript/Dart clients and fail CI on drift.
 - Do not introduce microservices for the MVP. Django modules and transaction boundaries are the scaling seam.
 
 ## Primary references

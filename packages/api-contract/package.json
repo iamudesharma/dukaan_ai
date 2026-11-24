@@ -1,0 +1,24 @@
+{
+  "name": "@dukaanai/api-contract",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./types": "./src/types.ts"
+  },
+  "scripts": {
+    "generate": "node scripts/sync.mjs && openapi-typescript openapi.json -o src/types.ts",
+    "generate:dart": "node scripts/dart-client.mjs",
+    "check": "node scripts/check-types.mjs",
+    "check:dart": "node scripts/dart-client.mjs --check",
+    "typecheck": "tsc --noEmit --moduleResolution Bundler --module ESNext --target ES2022 --skipLibCheck src/index.ts"
+  },
+  "dependencies": {
+    "openapi-fetch": "^0.15.0"
+  },
+  "devDependencies": {
+    "openapi-typescript": "^7.10.1",
+    "typescript": "^5.9.3"
+  }
+}

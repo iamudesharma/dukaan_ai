@@ -1,0 +1,14 @@
+{
+  "name": "@dukaanai/design-tokens",
+  "version": "1.0.0",
+  "private": true,
+  "description": "The single source of truth for DukaanAI colour, type, spacing, radius, elevation and motion.",
+  "type": "module",
+  "exports": {
+    "./tokens.json": "./tokens.json"
+  },
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "check": "node scripts/build.mjs --check"
+  }
+}

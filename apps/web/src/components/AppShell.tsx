@@ -7,8 +7,8 @@ import {
   ChevronDown,
   CircleHelp,
   CloudOff,
-  FileClock,
   LayoutDashboard,
+  LogOut,
   Menu,
   Plus,
   ReceiptText,
@@ -16,12 +16,14 @@ import {
   Settings,
   Sparkles,
   Store,
+  UserPlus,
   Users,
   X,
 } from "lucide-react";
 import { NavLink, useLocation } from "react-router-dom";
 import { useWorkspace } from "../app/WorkspaceContext";
-import { clearTokens, demoMode, getAccessToken } from "../lib/supabase";
+import { logout } from "../data/repository";
+import { clearTokens, getRefreshToken } from "../lib/supabase";
 import { AssistantPanel } from "../features/assistant/AssistantPanel";
 
 const primaryNavigation = [
@@ -47,10 +49,11 @@ const pageNames: Record<string, string> = {
   "/team": "Team & locations",
   "/activity": "Activity",
   "/settings": "Settings",
+  "/invitation": "Accept invitation",
 };
 
 export function AppShell({ children }: { children: ReactNode }) {
-  const { bootstrap, locationId, setLocationId, openAssistant } = useWorkspace();
+  const { bootstrap, access, locationId, setLocationId, openAssistant } = useWorkspace();
   const [menuOpen, setMenuOpen] = useState(false);
   const [online, setOnline] = useState(navigator.onLine);
   const location = useLocation();
@@ -70,14 +73,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   async function signOut() {
     try {
-      await fetch("/api/v1/auth/logout/", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${await getAccessToken() ?? ""}`,
-        },
-        body: JSON.stringify({ refresh: localStorage.getItem("dukaan_refresh_token") }),
-      });
+      await logout(getRefreshToken());
     } catch {
       // Still clear local tokens on network failure.
     }
@@ -88,9 +84,14 @@ export function AppShell({ children }: { children: ReactNode }) {
   const nav = (items: typeof primaryNavigation) => items.map(({ to, label, icon: Icon }) => (
     <NavLink key={to} to={to} end={to === "/"} className={({ isActive }) => isActive ? "nav-link active" : "nav-link"}>
       <Icon aria-hidden="true" />
-      <span>{label}</span>
+      <span>{to === "/parties" && access.isCashier ? "Customers" : to === "/stock" && access.isCashier ? "Stock" : label}</span>
     </NavLink>
   ));
+  const primaryItems = primaryNavigation.filter((item) => item.to !== "/reports" || access.canViewReports);
+  const adminItems = adminNavigation.filter((item) => {
+    if (item.to === "/team") return access.canManageTeam;
+    return access.canViewActivity || access.canViewSettings;
+  });
 
   return (
     <div className="app-shell">
@@ -106,9 +107,10 @@ export function AppShell({ children }: { children: ReactNode }) {
 
         <nav aria-label="Main navigation">
           <p className="nav-heading">Workspace</p>
-          {nav(primaryNavigation)}
+          {nav(primaryItems)}
           <p className="nav-heading second">Manage</p>
-          {nav(adminNavigation)}
+          {nav(adminItems)}
+          <NavLink to="/invitation" className={({ isActive }) => isActive ? "nav-link active" : "nav-link"}><UserPlus aria-hidden="true" /><span>Accept invitation</span></NavLink>
         </nav>
 
         <div className="sidebar-footer">
@@ -116,9 +118,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           <div className="user-card">
             <span className="avatar">AS</span>
             <div><strong>{bootstrap.user.name}</strong><span>{bootstrap.user.role.toLowerCase()}</span></div>
-            {!demoMode ? (
-              <button className="icon-button" aria-label="Sign out" title="Sign out" onClick={() => void signOut()}><ChevronDown /></button>
-            ) : null}
+            <button className="icon-button" aria-label="Sign out" title="Sign out" onClick={() => void signOut()}><LogOut /></button>
           </div>
         </div>
       </aside>
@@ -129,7 +129,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         <header className="topbar">
           <div className="topbar-start">
             <button className="icon-button mobile-menu" onClick={() => setMenuOpen(true)} aria-label="Open navigation"><Menu /></button>
-            <div className="desktop-page-name"><span>{bootstrap.business.name}</span><strong>{pageNames[location.pathname] ?? "DukaanAI"}</strong></div>
+            <div className="desktop-page-name"><span>{bootstrap.business.name}</span><strong>{access.isCashier && location.pathname === "/parties" ? "Customers" : pageNames[location.pathname] ?? "DukaanAI"}</strong></div>
           </div>
           <label className="location-picker">
             <span>Location</span>
@@ -139,8 +139,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             <ChevronDown aria-hidden="true" />
           </label>
           <div className="topbar-actions">
-            <button className="search-button" type="button"><Search aria-hidden="true" /><span>Search business</span><kbd>⌘ K</kbd></button>
-            {demoMode ? <span className="demo-pill">Demo data</span> : null}
+            {access.canViewSuppliers ? <button className="search-button" type="button"><Search aria-hidden="true" /><span>Search business</span><kbd>⌘ K</kbd></button> : null}
             <button className="primary-button compact" onClick={openAssistant}><Sparkles aria-hidden="true" />Ask / Add</button>
           </div>
         </header>
@@ -152,7 +151,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           <NavLink to="/entries"><ReceiptText /><span>Entries</span></NavLink>
           <button className="mobile-add" onClick={openAssistant}><Plus /><span>Ask/Add</span></button>
           <NavLink to="/stock"><Boxes /><span>Stock</span></NavLink>
-          <NavLink to="/parties"><Users /><span>Parties</span></NavLink>
+          <NavLink to="/parties"><Users /><span>{access.isCashier ? "Customers" : "Parties"}</span></NavLink>
         </nav>
       </div>
       <AssistantPanel />

@@ -1,6 +1,7 @@
-import 'package:dukaan_ai_mobile/core/config.dart';
+import 'package:dukaan_ai_mobile/core/generated/dukaan_tokens.dart';
 import 'package:dukaan_ai_mobile/l10n/app_strings.dart';
 import 'package:dukaan_ai_mobile/state/app_providers.dart';
+import 'package:dukaan_ai_mobile/ui/components/dukaan_widgets.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -24,11 +25,12 @@ class AppShell extends ConsumerWidget {
     final strings = context.strings;
     final locations = ref.watch(locationsProvider);
     final active = ref.watch(activeLocationProvider);
-    final online = ref.watch(networkStatusProvider).valueOrNull ?? AppConfig.demoMode;
+    final online = ref.watch(networkStatusProvider).valueOrNull ?? false;
+    final scheme = Theme.of(context).colorScheme;
 
     return Scaffold(
       appBar: AppBar(
-        titleSpacing: 16,
+        titleSpacing: DukaanTokens.space4,
         title: locations.when(
           loading: () => const _BrandTitle(),
           error: (_, __) => const _BrandTitle(),
@@ -37,9 +39,13 @@ class AppShell extends ConsumerWidget {
             button: true,
             child: DropdownButtonHideUnderline(
               child: DropdownButton<String>(
-                value: active.valueOrNull?.id ?? (items.isEmpty ? null : items.first.id),
-                icon: const Icon(Icons.expand_more_rounded),
+                value: active.valueOrNull?.id ??
+                    (items.isEmpty ? null : items.first.id),
+                icon: const Icon(Icons.expand_more_rounded, size: 20),
                 isDense: true,
+                borderRadius: BorderRadius.circular(DukaanTokens.radiusControl),
+                style:
+                    DukaanTokens.textSubhead.copyWith(color: scheme.onSurface),
                 items: items
                     .map(
                       (location) => DropdownMenuItem(
@@ -47,12 +53,10 @@ class AppShell extends ConsumerWidget {
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            const Icon(Icons.storefront_rounded, size: 20),
-                            const SizedBox(width: 8),
-                            Text(
-                              location.name,
-                              style: const TextStyle(fontWeight: FontWeight.w700),
-                            ),
+                            const Icon(Icons.storefront_rounded, size: 18),
+                            const SizedBox(width: DukaanTokens.space2),
+                            Text(location.name,
+                                style: DukaanTokens.textSubhead),
                           ],
                         ),
                       ),
@@ -71,26 +75,26 @@ class AppShell extends ConsumerWidget {
           IconButton(
             tooltip: strings.t('changeLanguage'),
             onPressed: ref.read(localeProvider.notifier).toggle,
-            icon: const Icon(Icons.translate_rounded),
+            icon: const Icon(Icons.translate_rounded, size: 22),
           ),
-          const SizedBox(width: 4),
+          IconButton(
+            key: const Key('open-settings'),
+            tooltip: strings.t('settings'),
+            onPressed: () => context.go('/settings'),
+            icon: const Icon(Icons.settings_outlined, size: 22),
+          ),
+          const SizedBox(width: DukaanTokens.space1),
         ],
       ),
       body: Column(
         children: [
           if (!online)
-            _StatusBanner(
+            // Offline means drafts only. That is attention, not failure.
+            DukaanBanner(
               icon: Icons.cloud_off_rounded,
               title: strings.t('offline'),
               detail: strings.t('offlineDetail'),
-              color: Theme.of(context).colorScheme.errorContainer,
-            )
-          else if (AppConfig.demoMode)
-            _StatusBanner(
-              icon: Icons.science_outlined,
-              title: strings.t('demo'),
-              detail: strings.t('demoDetail'),
-              color: Theme.of(context).colorScheme.tertiaryContainer,
+              tone: DukaanTone.attention,
             ),
           Expanded(child: child),
         ],
@@ -112,9 +116,18 @@ class AppShell extends ConsumerWidget {
           NavigationDestination(
             icon: Semantics(
               label: strings.t('ask'),
-              child: const CircleAvatar(
-                radius: 19,
-                child: Icon(Icons.auto_awesome_rounded),
+              child: Container(
+                width: 44,
+                height: 44,
+                decoration: const BoxDecoration(
+                  color: DukaanTokens.colorHero,
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.auto_awesome_rounded,
+                  size: 20,
+                  color: DukaanTokens.colorOnHero,
+                ),
               ),
             ),
             label: strings.t('ask'),
@@ -142,60 +155,25 @@ class _BrandTitle extends StatelessWidget {
   Widget build(BuildContext context) {
     return Row(
       children: [
-        Icon(Icons.storefront_rounded, color: Theme.of(context).colorScheme.primary),
-        const SizedBox(width: 8),
-        Text(context.strings.t('appName')),
+        Container(
+          width: DukaanTokens.sizeTile,
+          height: DukaanTokens.sizeTile,
+          decoration: BoxDecoration(
+            color: Theme.of(context).colorScheme.primary,
+            borderRadius: BorderRadius.circular(DukaanTokens.radiusControl),
+          ),
+          child: const Icon(
+            Icons.storefront_rounded,
+            size: 20,
+            color: DukaanTokens.colorOnPrimary,
+          ),
+        ),
+        const SizedBox(width: DukaanTokens.space3),
+        Text(
+          context.strings.t('appName'),
+          style: DukaanTokens.textSubhead,
+        ),
       ],
     );
   }
 }
-
-class _StatusBanner extends StatelessWidget {
-  const _StatusBanner({
-    required this.icon,
-    required this.title,
-    required this.detail,
-    required this.color,
-  });
-
-  final IconData icon;
-  final String title;
-  final String detail;
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) {
-    return Semantics(
-      liveRegion: true,
-      container: true,
-      label: '$title. $detail',
-      child: Container(
-        width: double.infinity,
-        color: color,
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        child: Row(
-          children: [
-            Icon(icon, size: 20),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Text.rich(
-                TextSpan(
-                  text: '$title  ',
-                  style: const TextStyle(fontWeight: FontWeight.w700),
-                  children: [
-                    TextSpan(
-                      text: detail,
-                      style: const TextStyle(fontWeight: FontWeight.w400),
-                    ),
-                  ],
-                ),
-                maxLines: 2,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-

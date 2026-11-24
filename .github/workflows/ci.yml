@@ -32,10 +32,14 @@ jobs:
               - 'services/api/**'
             web:
               - 'apps/web/**'
+              - 'packages/**'
+              - 'e2e/**'
+              - 'playwright.config.ts'
               - 'package.json'
               - 'package-lock.json'
             mobile:
               - 'apps/mobile/**'
+              - 'packages/**'
             ops:
               - '.github/**'
               - 'config/env/**'
@@ -88,7 +92,6 @@ jobs:
       CELERY_BROKER_URL: redis://127.0.0.1:6379/0
       CELERY_TASK_ALWAYS_EAGER: "true"
       DEV_AUTH_ENABLED: "true"
-      SUPABASE_JWT_AUDIENCE: authenticated
     defaults:
       run:
         working-directory: services/api
@@ -120,9 +123,9 @@ jobs:
         run: uv run --locked pytest
 
   web:
-    name: Web checks
+    name: Web and API contract checks
     needs: changes
-    if: needs.changes.outputs.web == 'true' || needs.changes.outputs.ops == 'true'
+    if: needs.changes.outputs.web == 'true' || needs.changes.outputs.backend == 'true' || needs.changes.outputs.ops == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -132,14 +135,27 @@ jobs:
           node-version: "22"
           cache: npm
           cache-dependency-path: package-lock.json
+      - uses: astral-sh/setup-uv@v7
+        with:
+          version: "0.9.17"
+          enable-cache: true
+          cache-dependency-glob: services/api/uv.lock
       - name: Install dependencies
         run: npm ci
+      - name: Check generated design tokens
+        run: npm run tokens:check
+      - name: Check OpenAPI snapshot and generated clients
+        run: npm run clients:check && npm run typecheck --workspace @dukaanai/api-contract
       - name: Lint
         run: npm run lint:web
       - name: Test
         run: npm run test:web
       - name: Build
         run: npm run build:web
+      - name: Install Chromium for browser E2E
+        run: npx playwright install --with-deps chromium
+      - name: Run browser E2E
+        run: npm run test:e2e
 
   mobile:
     name: Flutter checks
@@ -152,14 +168,28 @@ jobs:
         working-directory: apps/mobile
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: package-lock.json
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
       - uses: subosito/flutter-action@v2
         with:
-          channel: stable
+          flutter-version: "3.50.0"
           cache: true
+      - name: Install generated-client tooling
+        working-directory: .
+        run: npm ci
+      - name: Check generated Dart client
+        run: npm run clients:dart:check && dart analyze ../../packages/api-contract/dart
       - name: Install dependencies
         run: flutter pub get
       - name: Analyze
-        run: flutter analyze
+        run: flutter analyze --no-fatal-infos
       - name: Test
         run: flutter test
 

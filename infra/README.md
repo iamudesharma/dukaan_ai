@@ -4,6 +4,7 @@ DukaanAI keeps infrastructure intentionally small:
 
 - [`../compose.yaml`](../compose.yaml) starts disposable local Postgres and Valkey with named development volumes.
 - [`../render.yaml`](../render.yaml) declares the production Render API, worker, cron dispatcher, and private persistent Key Value topology in Singapore.
+- [`../services/api/Dockerfile`](../services/api/Dockerfile) packages the Python API/worker. OCR is delegated over HTTP to the Rust `doc-extractor` service and its provisioned OCRia-nano-1 model; the image contains no OCR packages or model weights.
 - [`../config/env`](../config/env) documents environment contracts without real secrets.
 - Supabase supplies production Postgres, Auth, and private Storage; Django migrations own the application schema.
 

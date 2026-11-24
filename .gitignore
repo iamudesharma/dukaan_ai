@@ -12,6 +12,9 @@ node_modules/
 /coverage
 apps/web/coverage/
 apps/mobile/coverage/
+/playwright-report/
+/test-results/
+/e2e/.auth/
 
 # next.js
 /.next/
@@ -44,6 +47,11 @@ htmlcov/
 .venv/
 *.egg-info/
 services/api/staticfiles/
+services/api/.local_storage/
+.local_storage/
+/models/
+*.gguf
+*.ggml
 
 # Flutter / Dart
 .dart_tool/
