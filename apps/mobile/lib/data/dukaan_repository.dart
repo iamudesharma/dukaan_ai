@@ -1448,15 +1448,19 @@ class ApiDukaanRepository implements DukaanRepository {
   static BusinessEntry _entryFromJson(
       Map<String, dynamic> json, EntryType type) {
     final party = json['customer'] ?? json['supplier'] ?? json['party'];
-    final partyName = party is Map ? party['name'] : json['party_name'];
+    final partyName = party is Map
+        ? party['name']
+        : json['customer_name'] ?? json['supplier_name'] ?? json['party_name'];
+    final reference = [json['invoice_number'], json['reference'], json['number']]
+        .map((value) => value?.toString() ?? '')
+        .firstWhere(
+          (value) => value.isNotEmpty,
+          orElse: () => '#${json['id'].toString().substring(0, 8)}',
+        );
     return BusinessEntry(
       id: json['id'].toString(),
       type: type,
-      reference: (json['invoice_number'] ??
-              json['reference'] ??
-              json['number'] ??
-              '#${json['id'].toString().substring(0, 8)}')
-          .toString(),
+      reference: reference,
       partyName: (partyName ?? 'Walk-in').toString(),
       totalMinor: minorFromRecord(
         json,
@@ -1493,11 +1497,10 @@ class ApiDukaanRepository implements DukaanRepository {
         : json;
     return PostedResult(
       id: (result['id'] ?? result['transaction_id'] ?? '').toString(),
-      reference: (result['invoice_number'] ??
-              result['reference'] ??
-              result['id'] ??
-              'Saved')
-          .toString(),
+      reference:
+          (result['invoice_number'] ?? result['reference'] ?? result['number'] ?? result['id'] ??
+                  'Saved')
+              .toString(),
       message: (json['message'] ?? 'Entry recorded').toString(),
     );
   }

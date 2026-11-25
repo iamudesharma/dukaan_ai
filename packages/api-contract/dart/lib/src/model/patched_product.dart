@@ -39,7 +39,11 @@ class PatchedProduct {
 
     this.isActive,
 
+    this.defaultPackId,
+
     this.stockQuantity,
+
+    this.isLowStock,
 
     this.packs,
   });
@@ -77,8 +81,14 @@ class PatchedProduct {
   @JsonKey(name: r'is_active', required: false, includeIfNull: false)
   final bool? isActive;
 
+  @JsonKey(name: r'default_pack_id', required: false, includeIfNull: false)
+  final String? defaultPackId;
+
   @JsonKey(name: r'stock_quantity', required: false, includeIfNull: false)
-  final double? stockQuantity;
+  final String? stockQuantity;
+
+  @JsonKey(name: r'is_low_stock', required: false, includeIfNull: false)
+  final bool? isLowStock;
 
   @JsonKey(name: r'packs', required: false, includeIfNull: false)
   final List<ProductPack>? packs;
@@ -97,7 +107,9 @@ class PatchedProduct {
           other.taxRateBps == taxRateBps &&
           other.lowStockThreshold == lowStockThreshold &&
           other.isActive == isActive &&
+          other.defaultPackId == defaultPackId &&
           other.stockQuantity == stockQuantity &&
+          other.isLowStock == isLowStock &&
           other.packs == packs;
 
   @override
@@ -112,7 +124,9 @@ class PatchedProduct {
       taxRateBps.hashCode +
       lowStockThreshold.hashCode +
       isActive.hashCode +
+      (defaultPackId == null ? 0 : defaultPackId.hashCode) +
       stockQuantity.hashCode +
+      isLowStock.hashCode +
       packs.hashCode;
 
   factory PatchedProduct.fromJson(Map<String, dynamic> json) =>

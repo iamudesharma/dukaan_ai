@@ -28,6 +28,8 @@ class Party {
 
     this.phoneE164,
 
+    required this.phone,
+
     this.gstin,
 
     this.stateCode,
@@ -36,9 +38,9 @@ class Party {
 
     this.isActive,
 
-    this.receivableMinor = 0,
+    required this.receivableMinor,
 
-    this.payableMinor = 0,
+    required this.payableMinor,
   });
 
   @JsonKey(name: r'id', required: true, includeIfNull: false)
@@ -57,6 +59,9 @@ class Party {
   @JsonKey(name: r'phone_e164', required: false, includeIfNull: false)
   final String? phoneE164;
 
+  @JsonKey(name: r'phone', required: true, includeIfNull: false)
+  final String phone;
+
   @JsonKey(name: r'gstin', required: false, includeIfNull: false)
   final String? gstin;
 
@@ -69,20 +74,10 @@ class Party {
   @JsonKey(name: r'is_active', required: false, includeIfNull: false)
   final bool? isActive;
 
-  @JsonKey(
-    defaultValue: 0,
-    name: r'receivable_minor',
-    required: true,
-    includeIfNull: false,
-  )
+  @JsonKey(name: r'receivable_minor', required: true, includeIfNull: false)
   final int receivableMinor;
 
-  @JsonKey(
-    defaultValue: 0,
-    name: r'payable_minor',
-    required: true,
-    includeIfNull: false,
-  )
+  @JsonKey(name: r'payable_minor', required: true, includeIfNull: false)
   final int payableMinor;
 
   @override
@@ -94,6 +89,7 @@ class Party {
           other.name == name &&
           other.kind == kind &&
           other.phoneE164 == phoneE164 &&
+          other.phone == phone &&
           other.gstin == gstin &&
           other.stateCode == stateCode &&
           other.address == address &&
@@ -108,6 +104,7 @@ class Party {
       name.hashCode +
       kind.hashCode +
       phoneE164.hashCode +
+      phone.hashCode +
       gstin.hashCode +
       stateCode.hashCode +
       address.hashCode +

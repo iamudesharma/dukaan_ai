@@ -21,6 +21,8 @@ abstract class _$PatchedLocationCWProxy {
 
   PatchedLocation stateCode(String? stateCode);
 
+  PatchedLocation isPrimary(bool? isPrimary);
+
   PatchedLocation isActive(bool? isActive);
 
   /// This function **does support** nullification of nullable fields. All `null` values passed to `non-nullable` fields will be ignored. You can also use `PatchedLocation(...).copyWith.fieldName(...)` to override fields one at a time with nullification support.
@@ -37,6 +39,7 @@ abstract class _$PatchedLocationCWProxy {
     String? name,
     String? address,
     String? stateCode,
+    bool? isPrimary,
     bool? isActive,
   });
 }
@@ -70,6 +73,9 @@ class _$PatchedLocationCWProxyImpl implements _$PatchedLocationCWProxy {
   PatchedLocation stateCode(String? stateCode) => this(stateCode: stateCode);
 
   @override
+  PatchedLocation isPrimary(bool? isPrimary) => this(isPrimary: isPrimary);
+
+  @override
   PatchedLocation isActive(bool? isActive) => this(isActive: isActive);
 
   @override
@@ -87,6 +93,7 @@ class _$PatchedLocationCWProxyImpl implements _$PatchedLocationCWProxy {
     Object? name = const $CopyWithPlaceholder(),
     Object? address = const $CopyWithPlaceholder(),
     Object? stateCode = const $CopyWithPlaceholder(),
+    Object? isPrimary = const $CopyWithPlaceholder(),
     Object? isActive = const $CopyWithPlaceholder(),
   }) {
     return PatchedLocation(
@@ -118,6 +125,10 @@ class _$PatchedLocationCWProxyImpl implements _$PatchedLocationCWProxy {
           ? _value.stateCode
           // ignore: cast_nullable_to_non_nullable
           : stateCode as String?,
+      isPrimary: isPrimary == const $CopyWithPlaceholder()
+          ? _value.isPrimary
+          // ignore: cast_nullable_to_non_nullable
+          : isPrimary as bool?,
       isActive: isActive == const $CopyWithPlaceholder()
           ? _value.isActive
           // ignore: cast_nullable_to_non_nullable
@@ -152,6 +163,7 @@ PatchedLocation _$PatchedLocationFromJson(Map<String, dynamic> json) =>
           name: $checkedConvert('name', (v) => v as String?),
           address: $checkedConvert('address', (v) => v as String?),
           stateCode: $checkedConvert('state_code', (v) => v as String?),
+          isPrimary: $checkedConvert('is_primary', (v) => v as bool?),
           isActive: $checkedConvert('is_active', (v) => v as bool?),
         );
         return val;
@@ -159,6 +171,7 @@ PatchedLocation _$PatchedLocationFromJson(Map<String, dynamic> json) =>
       fieldKeyMap: const {
         'gstRegistration': 'gst_registration',
         'stateCode': 'state_code',
+        'isPrimary': 'is_primary',
         'isActive': 'is_active',
       },
     );
@@ -172,5 +185,6 @@ Map<String, dynamic> _$PatchedLocationToJson(PatchedLocation instance) =>
       'name': ?instance.name,
       'address': ?instance.address,
       'state_code': ?instance.stateCode,
+      'is_primary': ?instance.isPrimary,
       'is_active': ?instance.isActive,
     };

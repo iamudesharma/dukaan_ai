@@ -203,6 +203,7 @@ def test_dashboard_contract_keeps_paise_and_reports_real_low_stock(shop, client)
         "sales_minor": 12345,
         "purchases_minor": 23456,
         "expenses_minor": 3456,
+        "receipts_minor": 1000,
     }
     assert data["books"] == {
         "sales_minor": 12900,
@@ -280,7 +281,8 @@ def test_product_list_and_detail_include_location_stock_and_pack_prices(shop, cl
 
     unscoped = client.get(f"/api/v1/products/{product.pk}/", {"business_id": str(business.pk)})
     assert unscoped.status_code == 200
-    assert unscoped.json()["stock_quantity"] is None
+    # Without a location filter, catalog stock aggregates every accessible location.
+    assert Decimal(unscoped.json()["stock_quantity"]) == Decimal("13")
 
 
 def test_party_list_and_detail_include_location_scoped_ledger_balances(shop, client):

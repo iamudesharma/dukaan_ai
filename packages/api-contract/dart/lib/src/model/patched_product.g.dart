@@ -27,7 +27,11 @@ abstract class _$PatchedProductCWProxy {
 
   PatchedProduct isActive(bool? isActive);
 
-  PatchedProduct stockQuantity(double? stockQuantity);
+  PatchedProduct defaultPackId(String? defaultPackId);
+
+  PatchedProduct stockQuantity(String? stockQuantity);
+
+  PatchedProduct isLowStock(bool? isLowStock);
 
   PatchedProduct packs(List<ProductPack>? packs);
 
@@ -48,7 +52,9 @@ abstract class _$PatchedProductCWProxy {
     int? taxRateBps,
     double? lowStockThreshold,
     bool? isActive,
-    double? stockQuantity,
+    String? defaultPackId,
+    String? stockQuantity,
+    bool? isLowStock,
     List<ProductPack>? packs,
   });
 }
@@ -93,8 +99,15 @@ class _$PatchedProductCWProxyImpl implements _$PatchedProductCWProxy {
   PatchedProduct isActive(bool? isActive) => this(isActive: isActive);
 
   @override
-  PatchedProduct stockQuantity(double? stockQuantity) =>
+  PatchedProduct defaultPackId(String? defaultPackId) =>
+      this(defaultPackId: defaultPackId);
+
+  @override
+  PatchedProduct stockQuantity(String? stockQuantity) =>
       this(stockQuantity: stockQuantity);
+
+  @override
+  PatchedProduct isLowStock(bool? isLowStock) => this(isLowStock: isLowStock);
 
   @override
   PatchedProduct packs(List<ProductPack>? packs) => this(packs: packs);
@@ -117,7 +130,9 @@ class _$PatchedProductCWProxyImpl implements _$PatchedProductCWProxy {
     Object? taxRateBps = const $CopyWithPlaceholder(),
     Object? lowStockThreshold = const $CopyWithPlaceholder(),
     Object? isActive = const $CopyWithPlaceholder(),
+    Object? defaultPackId = const $CopyWithPlaceholder(),
     Object? stockQuantity = const $CopyWithPlaceholder(),
+    Object? isLowStock = const $CopyWithPlaceholder(),
     Object? packs = const $CopyWithPlaceholder(),
   }) {
     return PatchedProduct(
@@ -161,10 +176,18 @@ class _$PatchedProductCWProxyImpl implements _$PatchedProductCWProxy {
           ? _value.isActive
           // ignore: cast_nullable_to_non_nullable
           : isActive as bool?,
+      defaultPackId: defaultPackId == const $CopyWithPlaceholder()
+          ? _value.defaultPackId
+          // ignore: cast_nullable_to_non_nullable
+          : defaultPackId as String?,
       stockQuantity: stockQuantity == const $CopyWithPlaceholder()
           ? _value.stockQuantity
           // ignore: cast_nullable_to_non_nullable
-          : stockQuantity as double?,
+          : stockQuantity as String?,
+      isLowStock: isLowStock == const $CopyWithPlaceholder()
+          ? _value.isLowStock
+          // ignore: cast_nullable_to_non_nullable
+          : isLowStock as bool?,
       packs: packs == const $CopyWithPlaceholder()
           ? _value.packs
           // ignore: cast_nullable_to_non_nullable
@@ -183,54 +206,53 @@ extension $PatchedProductCopyWith on PatchedProduct {
 // JsonSerializableGenerator
 // **************************************************************************
 
-PatchedProduct _$PatchedProductFromJson(Map<String, dynamic> json) =>
-    $checkedCreate(
-      'PatchedProduct',
-      json,
-      ($checkedConvert) {
-        final val = PatchedProduct(
-          id: $checkedConvert('id', (v) => v as String?),
-          business: $checkedConvert('business', (v) => v as String?),
-          name: $checkedConvert('name', (v) => v as String?),
-          sku: $checkedConvert('sku', (v) => v as String?),
-          baseUnit: $checkedConvert(
-            'base_unit',
-            (v) => $enumDecodeNullable(_$PatchedProductBaseUnitEnumEnumMap, v),
-          ),
-          trackInventory: $checkedConvert('track_inventory', (v) => v as bool?),
-          hsnSac: $checkedConvert('hsn_sac', (v) => v as String?),
-          taxRateBps: $checkedConvert(
-            'tax_rate_bps',
-            (v) => (v as num?)?.toInt(),
-          ),
-          lowStockThreshold: $checkedConvert(
-            'low_stock_threshold',
-            (v) => (v as num?)?.toDouble(),
-          ),
-          isActive: $checkedConvert('is_active', (v) => v as bool?),
-          stockQuantity: $checkedConvert(
-            'stock_quantity',
-            (v) => (v as num?)?.toDouble(),
-          ),
-          packs: $checkedConvert(
-            'packs',
-            (v) => (v as List<dynamic>?)
-                ?.map((e) => ProductPack.fromJson(e as Map<String, dynamic>))
-                .toList(),
-          ),
-        );
-        return val;
-      },
-      fieldKeyMap: const {
-        'baseUnit': 'base_unit',
-        'trackInventory': 'track_inventory',
-        'hsnSac': 'hsn_sac',
-        'taxRateBps': 'tax_rate_bps',
-        'lowStockThreshold': 'low_stock_threshold',
-        'isActive': 'is_active',
-        'stockQuantity': 'stock_quantity',
-      },
+PatchedProduct _$PatchedProductFromJson(
+  Map<String, dynamic> json,
+) => $checkedCreate(
+  'PatchedProduct',
+  json,
+  ($checkedConvert) {
+    final val = PatchedProduct(
+      id: $checkedConvert('id', (v) => v as String?),
+      business: $checkedConvert('business', (v) => v as String?),
+      name: $checkedConvert('name', (v) => v as String?),
+      sku: $checkedConvert('sku', (v) => v as String?),
+      baseUnit: $checkedConvert(
+        'base_unit',
+        (v) => $enumDecodeNullable(_$PatchedProductBaseUnitEnumEnumMap, v),
+      ),
+      trackInventory: $checkedConvert('track_inventory', (v) => v as bool?),
+      hsnSac: $checkedConvert('hsn_sac', (v) => v as String?),
+      taxRateBps: $checkedConvert('tax_rate_bps', (v) => (v as num?)?.toInt()),
+      lowStockThreshold: $checkedConvert(
+        'low_stock_threshold',
+        (v) => (v as num?)?.toDouble(),
+      ),
+      isActive: $checkedConvert('is_active', (v) => v as bool?),
+      defaultPackId: $checkedConvert('default_pack_id', (v) => v as String?),
+      stockQuantity: $checkedConvert('stock_quantity', (v) => v as String?),
+      isLowStock: $checkedConvert('is_low_stock', (v) => v as bool?),
+      packs: $checkedConvert(
+        'packs',
+        (v) => (v as List<dynamic>?)
+            ?.map((e) => ProductPack.fromJson(e as Map<String, dynamic>))
+            .toList(),
+      ),
     );
+    return val;
+  },
+  fieldKeyMap: const {
+    'baseUnit': 'base_unit',
+    'trackInventory': 'track_inventory',
+    'hsnSac': 'hsn_sac',
+    'taxRateBps': 'tax_rate_bps',
+    'lowStockThreshold': 'low_stock_threshold',
+    'isActive': 'is_active',
+    'defaultPackId': 'default_pack_id',
+    'stockQuantity': 'stock_quantity',
+    'isLowStock': 'is_low_stock',
+  },
+);
 
 Map<String, dynamic> _$PatchedProductToJson(PatchedProduct instance) =>
     <String, dynamic>{
@@ -244,7 +266,9 @@ Map<String, dynamic> _$PatchedProductToJson(PatchedProduct instance) =>
       'tax_rate_bps': ?instance.taxRateBps,
       'low_stock_threshold': ?instance.lowStockThreshold,
       'is_active': ?instance.isActive,
+      'default_pack_id': ?instance.defaultPackId,
       'stock_quantity': ?instance.stockQuantity,
+      'is_low_stock': ?instance.isLowStock,
       'packs': ?instance.packs?.map((e) => e.toJson()).toList(),
     };
 

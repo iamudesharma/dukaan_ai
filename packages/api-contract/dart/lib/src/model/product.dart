@@ -39,7 +39,11 @@ class Product {
 
     this.isActive,
 
+    required this.defaultPackId,
+
     required this.stockQuantity,
+
+    required this.isLowStock,
 
     required this.packs,
   });
@@ -77,8 +81,14 @@ class Product {
   @JsonKey(name: r'is_active', required: false, includeIfNull: false)
   final bool? isActive;
 
+  @JsonKey(name: r'default_pack_id', required: true, includeIfNull: true)
+  final String? defaultPackId;
+
   @JsonKey(name: r'stock_quantity', required: true, includeIfNull: false)
-  final double stockQuantity;
+  final String stockQuantity;
+
+  @JsonKey(name: r'is_low_stock', required: true, includeIfNull: false)
+  final bool isLowStock;
 
   @JsonKey(name: r'packs', required: true, includeIfNull: false)
   final List<ProductPack> packs;
@@ -97,7 +107,9 @@ class Product {
           other.taxRateBps == taxRateBps &&
           other.lowStockThreshold == lowStockThreshold &&
           other.isActive == isActive &&
+          other.defaultPackId == defaultPackId &&
           other.stockQuantity == stockQuantity &&
+          other.isLowStock == isLowStock &&
           other.packs == packs;
 
   @override
@@ -112,7 +124,9 @@ class Product {
       taxRateBps.hashCode +
       lowStockThreshold.hashCode +
       isActive.hashCode +
+      (defaultPackId == null ? 0 : defaultPackId.hashCode) +
       stockQuantity.hashCode +
+      isLowStock.hashCode +
       packs.hashCode;
 
   factory Product.fromJson(Map<String, dynamic> json) =>

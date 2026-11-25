@@ -11,6 +11,10 @@ abstract class _$MembershipCWProxy {
 
   Membership user(String user);
 
+  Membership userName(String userName);
+
+  Membership userPhone(String userPhone);
+
   Membership business(String business);
 
   Membership role(MembershipRoleEnum role);
@@ -28,6 +32,8 @@ abstract class _$MembershipCWProxy {
   Membership call({
     String id,
     String user,
+    String userName,
+    String userPhone,
     String business,
     MembershipRoleEnum role,
     List<String>? locations,
@@ -46,6 +52,12 @@ class _$MembershipCWProxyImpl implements _$MembershipCWProxy {
 
   @override
   Membership user(String user) => this(user: user);
+
+  @override
+  Membership userName(String userName) => this(userName: userName);
+
+  @override
+  Membership userPhone(String userPhone) => this(userPhone: userPhone);
 
   @override
   Membership business(String business) => this(business: business);
@@ -69,6 +81,8 @@ class _$MembershipCWProxyImpl implements _$MembershipCWProxy {
   Membership call({
     Object? id = const $CopyWithPlaceholder(),
     Object? user = const $CopyWithPlaceholder(),
+    Object? userName = const $CopyWithPlaceholder(),
+    Object? userPhone = const $CopyWithPlaceholder(),
     Object? business = const $CopyWithPlaceholder(),
     Object? role = const $CopyWithPlaceholder(),
     Object? locations = const $CopyWithPlaceholder(),
@@ -83,6 +97,14 @@ class _$MembershipCWProxyImpl implements _$MembershipCWProxy {
           ? _value.user
           // ignore: cast_nullable_to_non_nullable
           : user as String,
+      userName: userName == const $CopyWithPlaceholder()
+          ? _value.userName
+          // ignore: cast_nullable_to_non_nullable
+          : userName as String,
+      userPhone: userPhone == const $CopyWithPlaceholder()
+          ? _value.userPhone
+          // ignore: cast_nullable_to_non_nullable
+          : userPhone as String,
       business: business == const $CopyWithPlaceholder()
           ? _value.business
           // ignore: cast_nullable_to_non_nullable
@@ -113,30 +135,52 @@ extension $MembershipCopyWith on Membership {
 // JsonSerializableGenerator
 // **************************************************************************
 
-Membership _$MembershipFromJson(Map<String, dynamic> json) =>
-    $checkedCreate('Membership', json, ($checkedConvert) {
-      $checkKeys(json, requiredKeys: const ['id', 'user', 'business', 'role']);
-      final val = Membership(
-        id: $checkedConvert('id', (v) => v as String),
-        user: $checkedConvert('user', (v) => v as String),
-        business: $checkedConvert('business', (v) => v as String),
-        role: $checkedConvert(
-          'role',
-          (v) => $enumDecode(_$MembershipRoleEnumEnumMap, v),
-        ),
-        locations: $checkedConvert(
-          'locations',
-          (v) => (v as List<dynamic>?)?.map((e) => e as String).toList(),
-        ),
-        isActive: $checkedConvert('is_active', (v) => v as bool?),
-      );
-      return val;
-    }, fieldKeyMap: const {'isActive': 'is_active'});
+Membership _$MembershipFromJson(Map<String, dynamic> json) => $checkedCreate(
+  'Membership',
+  json,
+  ($checkedConvert) {
+    $checkKeys(
+      json,
+      requiredKeys: const [
+        'id',
+        'user',
+        'user_name',
+        'user_phone',
+        'business',
+        'role',
+      ],
+    );
+    final val = Membership(
+      id: $checkedConvert('id', (v) => v as String),
+      user: $checkedConvert('user', (v) => v as String),
+      userName: $checkedConvert('user_name', (v) => v as String),
+      userPhone: $checkedConvert('user_phone', (v) => v as String),
+      business: $checkedConvert('business', (v) => v as String),
+      role: $checkedConvert(
+        'role',
+        (v) => $enumDecode(_$MembershipRoleEnumEnumMap, v),
+      ),
+      locations: $checkedConvert(
+        'locations',
+        (v) => (v as List<dynamic>?)?.map((e) => e as String).toList(),
+      ),
+      isActive: $checkedConvert('is_active', (v) => v as bool?),
+    );
+    return val;
+  },
+  fieldKeyMap: const {
+    'userName': 'user_name',
+    'userPhone': 'user_phone',
+    'isActive': 'is_active',
+  },
+);
 
 Map<String, dynamic> _$MembershipToJson(Membership instance) =>
     <String, dynamic>{
       'id': instance.id,
       'user': instance.user,
+      'user_name': instance.userName,
+      'user_phone': instance.userPhone,
       'business': instance.business,
       'role': _$MembershipRoleEnumEnumMap[instance.role]!,
       'locations': ?instance.locations,

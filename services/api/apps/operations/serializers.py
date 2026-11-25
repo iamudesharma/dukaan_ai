@@ -89,6 +89,9 @@ class SaleLineSerializer(serializers.ModelSerializer):
 
 class SaleSerializer(serializers.ModelSerializer):
     lines = SaleLineSerializer(many=True, read_only=True)
+    customer_name = serializers.SerializerMethodField()
+    invoice_number = serializers.CharField(source="number", read_only=True)
+    occurred_at = serializers.DateTimeField(source="posted_at", read_only=True)
 
     def to_representation(self, instance):
         data = super().to_representation(instance)
@@ -107,8 +110,11 @@ class SaleSerializer(serializers.ModelSerializer):
             "business",
             "location",
             "customer",
+            "customer_name",
             "status",
             "number",
+            "invoice_number",
+            "occurred_at",
             "financial_year",
             "document_date",
             "price_mode",
@@ -133,6 +139,11 @@ class SaleSerializer(serializers.ModelSerializer):
             "reversed_at",
             "lines",
         ]
+
+    def get_customer_name(self, obj) -> str:
+        if obj.customer_id:
+            return obj.customer.name
+        return obj.buyer_name
 
 
 class PurchaseLineInputSerializer(serializers.Serializer):
@@ -192,6 +203,9 @@ class PurchaseLineSerializer(serializers.ModelSerializer):
 
 class PurchaseSerializer(serializers.ModelSerializer):
     lines = PurchaseLineSerializer(many=True, read_only=True)
+    supplier_name = serializers.SerializerMethodField()
+    invoice_number = serializers.CharField(source="number", read_only=True)
+    occurred_at = serializers.DateTimeField(source="posted_at", read_only=True)
 
     class Meta:
         model = Purchase
@@ -200,8 +214,11 @@ class PurchaseSerializer(serializers.ModelSerializer):
             "business",
             "location",
             "supplier",
+            "supplier_name",
             "status",
             "number",
+            "invoice_number",
+            "occurred_at",
             "financial_year",
             "document_date",
             "supplier_bill_number",
@@ -224,6 +241,9 @@ class PurchaseSerializer(serializers.ModelSerializer):
             "reversed_at",
             "lines",
         ]
+
+    def get_supplier_name(self, obj) -> str:
+        return obj.supplier.name if obj.supplier_id else ""
 
 
 class PaymentCreateSerializer(serializers.Serializer):
@@ -342,6 +362,8 @@ class PaymentSerializer(serializers.ModelSerializer):
     allocations = PaymentAllocationSerializer(many=True, read_only=True)
     allocated_total_minor = serializers.SerializerMethodField()
     unallocated_total_minor = serializers.SerializerMethodField()
+    party_name = serializers.SerializerMethodField()
+    occurred_at = serializers.DateField(source="payment_date", read_only=True)
 
     def get_allocated_total_minor(self, payment) -> int:
         return sum(allocation.amount_minor for allocation in payment.allocations.all())
@@ -356,12 +378,14 @@ class PaymentSerializer(serializers.ModelSerializer):
             "business",
             "location",
             "party",
+            "party_name",
             "direction",
             "method",
             "amount_minor",
             "reference",
             "note",
             "payment_date",
+            "occurred_at",
             "status",
             "source",
             "reversal_reason",
@@ -370,6 +394,9 @@ class PaymentSerializer(serializers.ModelSerializer):
             "allocated_total_minor",
             "unallocated_total_minor",
         ]
+
+    def get_party_name(self, obj) -> str:
+        return obj.party.name if obj.party_id else ""
 
 
 class PaymentAllocationTotalsSerializer(serializers.Serializer):
@@ -417,6 +444,8 @@ class ExpenseCreateSerializer(serializers.Serializer):
 
 
 class ExpenseSerializer(serializers.ModelSerializer):
+    occurred_at = serializers.DateTimeField(source="posted_at", read_only=True)
+
     class Meta:
         model = Expense
         fields = [
@@ -426,6 +455,7 @@ class ExpenseSerializer(serializers.ModelSerializer):
             "status",
             "number",
             "document_date",
+            "occurred_at",
             "category",
             "payee",
             "note",
@@ -575,6 +605,7 @@ class DashboardTodaySerializer(serializers.Serializer):
     sales_minor = serializers.IntegerField()
     purchases_minor = serializers.IntegerField()
     expenses_minor = serializers.IntegerField()
+    receipts_minor = serializers.IntegerField()
 
 
 class DashboardBooksSerializer(serializers.Serializer):

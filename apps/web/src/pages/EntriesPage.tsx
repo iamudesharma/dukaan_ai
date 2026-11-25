@@ -66,11 +66,11 @@ export function EntriesPage() {
     onError: (err) => setError(err instanceof Error ? err.message : "Could not download this invoice."),
   });
   const reverse = useMutation({
-    mutationFn: ({ id, kind }: { id: string; kind: EntryKind }) => {
+    mutationFn: ({ id, kind, reason }: { id: string; kind: EntryKind; reason: string }) => {
       if (!access.canReverseEntries || !allowedKinds.includes(kind)) {
         throw new Error("Your role cannot reverse this entry.");
       }
-      return reverseDocument(collectionFor(kind), id, "Reversed from Entries page");
+      return reverseDocument(collectionFor(kind), id, reason);
     },
     onSuccess: () => queryClient.invalidateQueries(),
     onSettled: () => setReversingId(null),
@@ -122,7 +122,7 @@ export function EntriesPage() {
                           if (!reason) return;
                           setError(null);
                           setReversingId(entry.id);
-                          reverse.mutate({ id: entry.id, kind: entry.kind });
+                          reverse.mutate({ id: entry.id, kind: entry.kind, reason });
                         }}
                       >{reversingId === entry.id ? "Reversing…" : "Reverse"}</button>
                     ) : null}

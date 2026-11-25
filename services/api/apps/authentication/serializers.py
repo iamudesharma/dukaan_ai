@@ -20,7 +20,7 @@ class SignupSerializer(serializers.Serializer):
             raise serializers.ValidationError(
                 "Enter a valid phone number with country code, e.g. +919876543210."
             )
-        if User.objects.filter(phone_e164=normalized).exists():
+        if User.objects.filter(phone_e164=normalized, is_active=True).exists():
             raise serializers.ValidationError("An account with this phone number already exists.")
         return normalized
 

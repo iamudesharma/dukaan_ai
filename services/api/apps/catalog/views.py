@@ -1,14 +1,14 @@
 import uuid
 from decimal import Decimal
 
-from django.db.models import BigIntegerField, DecimalField, OuterRef, Subquery, Sum, Value
+from django.db.models import BigIntegerField, DecimalField, Q, Sum, Value
 from django.db.models.functions import Coalesce
 from rest_framework import viewsets
 from rest_framework.exceptions import ValidationError
 
 from apps.common.pagination import StandardResultsPagination
-from apps.operations.models import PartyLedgerEntry, StockBalance
-from apps.tenancy.access import require_membership
+from apps.operations.models import PartyLedgerEntry
+from apps.tenancy.access import accessible_location_ids, require_membership
 from apps.tenancy.models import Membership
 
 from .models import Party, Product
@@ -49,6 +49,20 @@ class BusinessScopedCatalogViewSet(viewsets.ModelViewSet):
             )
         self._location_id = location_id
         return location_id
+
+    def get_location_ids(self):
+        """Resolve the request's location scope for aggregate columns.
+
+        A ``location_id`` query parameter narrows the scope; otherwise the
+        caller sees aggregates across every location they can access."""
+        business_id = self.get_business_id()
+        if not business_id:
+            return None
+        self.get_membership()
+        location_id = self.get_location_id()
+        if location_id:
+            return [location_id]
+        return list(accessible_location_ids(self._membership))
 
     def get_queryset(self):
         business_id = self.get_business_id()
@@ -98,49 +112,23 @@ class BusinessScopedCatalogViewSet(viewsets.ModelViewSet):
         instance.save(update_fields=["is_active", "updated_at"])
 
 
-def _ledger_total_subquery(account, location_id=None):
-    entries = PartyLedgerEntry.objects.filter(
-        business_id=OuterRef("business_id"),
-        party_id=OuterRef("pk"),
-        account=account,
-    )
-    if location_id:
-        entries = entries.filter(location_id=location_id)
-    return Subquery(
-        entries.values("party_id").annotate(total=Sum("amount_minor")).values("total"),
-        output_field=BigIntegerField(),
-    )
-
-
 class ProductViewSet(BusinessScopedCatalogViewSet):
     queryset = Product.objects.prefetch_related("packs").order_by("name")
     serializer_class = ProductSerializer
 
     def get_queryset(self):
         queryset = super().get_queryset()
-        location_id = self.get_location_id()
-        if location_id:
-            stock_totals = (
-                StockBalance.objects.filter(
-                    business_id=OuterRef("business_id"),
-                    location_id=location_id,
-                    product_id=OuterRef("pk"),
-                )
-                .values("product_id")
-                .annotate(total=Sum("quantity"))
-                .values("total")
+        location_ids = self.get_location_ids()
+        if location_ids is None:
+            return queryset.none()
+        stock_filter = Q(stock_balances__location_id__in=location_ids)
+        return queryset.annotate(
+            _stock_quantity=Coalesce(
+                Sum("stock_balances__quantity", filter=stock_filter),
+                Value(Decimal("0")),
+                output_field=DecimalField(max_digits=18, decimal_places=3),
             )
-            queryset = queryset.annotate(
-                stock_quantity=Coalesce(
-                    Subquery(
-                        stock_totals,
-                        output_field=DecimalField(max_digits=18, decimal_places=3),
-                    ),
-                    Value(Decimal("0")),
-                    output_field=DecimalField(max_digits=18, decimal_places=3),
-                )
-            )
-        return queryset
+        )
 
 
 class PartyViewSet(BusinessScopedCatalogViewSet):
@@ -149,19 +137,35 @@ class PartyViewSet(BusinessScopedCatalogViewSet):
 
     def get_queryset(self):
         queryset = super().get_queryset()
-        location_id = self.get_location_id()
         membership = self.get_membership()
+        location_ids = self.get_location_ids()
+        if location_ids is None:
+            return queryset.none()
         if membership and membership.role == Membership.Role.CASHIER:
             # A BOTH party is also a supplier. Do not expose its identity or
             # supplier-side balance to a cashier; sales can use CUSTOMER rows.
             queryset = queryset.filter(kind=Party.Kind.CUSTOMER)
         return queryset.annotate(
-            receivable_minor=Coalesce(
-                _ledger_total_subquery(PartyLedgerEntry.Account.RECEIVABLE, location_id),
+            _receivable_minor=Coalesce(
+                Sum(
+                    "ledger_entries__amount_minor",
+                    filter=Q(
+                        ledger_entries__account=PartyLedgerEntry.Account.RECEIVABLE,
+                        ledger_entries__location_id__in=location_ids,
+                    ),
+                ),
                 Value(0),
+                output_field=BigIntegerField(),
             ),
-            payable_minor=Coalesce(
-                _ledger_total_subquery(PartyLedgerEntry.Account.PAYABLE, location_id),
+            _payable_minor=Coalesce(
+                Sum(
+                    "ledger_entries__amount_minor",
+                    filter=Q(
+                        ledger_entries__account=PartyLedgerEntry.Account.PAYABLE,
+                        ledger_entries__location_id__in=location_ids,
+                    ),
+                ),
                 Value(0),
+                output_field=BigIntegerField(),
             ),
         )

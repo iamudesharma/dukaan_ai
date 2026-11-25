@@ -135,6 +135,7 @@ def _record_revision(proposal):
                 "command_type",
                 "payload",
                 "preview",
+                "preview_data",
                 "warnings",
                 "blocking_questions",
                 "status",
@@ -163,6 +164,7 @@ def revise(*, proposal, actor, version, content=None):
     )
     proposal.payload = payload
     proposal.preview = preview
+    proposal.preview_data = _build_preview_data(payload, preview, blockers, proposal.location)
     proposal.warnings = warnings
     proposal.blocking_questions = blockers
     proposal.command_type = command_type
@@ -195,6 +197,54 @@ def _mul_round_half_up(quantity_value: Decimal, minor: int) -> int:
 
 def minor_to_rupees(minor: int) -> str:
     return f"{minor // 100}.{minor % 100:02d}"
+
+
+def _build_preview_data(payload, summary, blockers, location: Location):
+    """Structured, bounded review data for web/mobile proposal cards."""
+    facts = []
+    party_name = ""
+    party_id = payload.get("customer_id") or payload.get("supplier_id") or payload.get("party_id")
+    if party_id:
+        party = Party.objects.filter(pk=party_id).values("name").first()
+        party_name = str(party["name"] or "") if party else party_name
+    if not party_name:
+        party_name = str(
+            payload.get("new_customer_name")
+            or payload.get("new_supplier_name")
+            or payload.get("new_party_name")
+            or ""
+        )
+    if party_name:
+        facts.append({"label": "Party", "value": party_name, "warning": False})
+
+    pack_ids = [line.get("pack_id") for line in payload.get("lines", []) if line.get("pack_id")]
+    packs = {
+        str(pack.id): pack
+        for pack in ProductPack.objects.filter(pk__in=pack_ids).select_related("product")
+    }
+    price_key = "unit_cost_minor" if payload.get("supplier_id") else "unit_price_minor"
+    for line in payload.get("lines", []):
+        pack = packs.get(line.get("pack_id"))
+        product_name = pack.product.name if pack else "Item"
+        quantity = line.get("quantity", "")
+        price = int(line.get(price_key) or 0)
+        facts.append(
+            {
+                "label": product_name,
+                "value": f"{quantity} × ₹{minor_to_rupees(price)}",
+                "warning": False,
+            }
+        )
+
+    paid = int(payload.get("paid_amount_minor") or 0)
+    if paid:
+        facts.append({"label": "Paid", "value": f"₹{minor_to_rupees(paid)}", "warning": False})
+    facts.append({"label": "Location", "value": location.name, "warning": False})
+    return {
+        "summary": summary,
+        "facts": facts,
+        "questions": list(blockers),
+    }
 
 
 def _parse_sale(content: str, business: Business, location: Location):
@@ -873,6 +923,7 @@ def interpret(
         command_type=command_type,
         payload=payload,
         preview=preview,
+        preview_data=_build_preview_data(payload, preview, blockers, location),
         warnings=warnings,
         blocking_questions=blockers,
         status=AssistantProposal.Status.DRAFT if blockers else AssistantProposal.Status.READY,
@@ -883,7 +934,15 @@ def interpret(
 
 
 @transaction.atomic
-def confirm(*, proposal: AssistantProposal, actor, version: int, idempotency_key: str):
+def confirm(
+    *,
+    proposal: AssistantProposal,
+    actor,
+    version: int,
+    idempotency_key: str,
+    negative_stock_acknowledged: bool = False,
+    negative_stock_reason: str = "",
+):
     Business.objects.select_for_update().get(pk=proposal.business_id)
     proposal = AssistantProposal.objects.select_for_update().get(pk=proposal.pk)
     if proposal.actor_id != actor.id:
@@ -941,6 +1000,8 @@ def confirm(*, proposal: AssistantProposal, actor, version: int, idempotency_key
                 kind=Party.Kind.CUSTOMER,
             )
             raw["customer_id"] = str(customer.id)
+        raw["negative_stock_acknowledged"] = bool(negative_stock_acknowledged)
+        raw["negative_stock_reason"] = negative_stock_reason
         raw["idempotency_key"] = idempotency_key
         serializer = SaleCreateSerializer(data=raw)
         serializer.is_valid(raise_exception=True)

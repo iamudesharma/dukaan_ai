@@ -15,9 +15,15 @@ abstract class _$SaleCWProxy {
 
   Sale customer(String? customer);
 
+  Sale customerName(String customerName);
+
   Sale status(SaleStatusEnum? status);
 
   Sale number(String number);
+
+  Sale invoiceNumber(String invoiceNumber);
+
+  Sale occurredAt(DateTime occurredAt);
 
   Sale financialYear(String financialYear);
 
@@ -76,8 +82,11 @@ abstract class _$SaleCWProxy {
     String business,
     String location,
     String? customer,
+    String customerName,
     SaleStatusEnum? status,
     String number,
+    String invoiceNumber,
+    DateTime occurredAt,
     String financialYear,
     DateTime documentDate,
     SalePriceModeEnum? priceMode,
@@ -123,10 +132,20 @@ class _$SaleCWProxyImpl implements _$SaleCWProxy {
   Sale customer(String? customer) => this(customer: customer);
 
   @override
+  Sale customerName(String customerName) => this(customerName: customerName);
+
+  @override
   Sale status(SaleStatusEnum? status) => this(status: status);
 
   @override
   Sale number(String number) => this(number: number);
+
+  @override
+  Sale invoiceNumber(String invoiceNumber) =>
+      this(invoiceNumber: invoiceNumber);
+
+  @override
+  Sale occurredAt(DateTime occurredAt) => this(occurredAt: occurredAt);
 
   @override
   Sale financialYear(String financialYear) =>
@@ -218,8 +237,11 @@ class _$SaleCWProxyImpl implements _$SaleCWProxy {
     Object? business = const $CopyWithPlaceholder(),
     Object? location = const $CopyWithPlaceholder(),
     Object? customer = const $CopyWithPlaceholder(),
+    Object? customerName = const $CopyWithPlaceholder(),
     Object? status = const $CopyWithPlaceholder(),
     Object? number = const $CopyWithPlaceholder(),
+    Object? invoiceNumber = const $CopyWithPlaceholder(),
+    Object? occurredAt = const $CopyWithPlaceholder(),
     Object? financialYear = const $CopyWithPlaceholder(),
     Object? documentDate = const $CopyWithPlaceholder(),
     Object? priceMode = const $CopyWithPlaceholder(),
@@ -261,6 +283,10 @@ class _$SaleCWProxyImpl implements _$SaleCWProxy {
           ? _value.customer
           // ignore: cast_nullable_to_non_nullable
           : customer as String?,
+      customerName: customerName == const $CopyWithPlaceholder()
+          ? _value.customerName
+          // ignore: cast_nullable_to_non_nullable
+          : customerName as String,
       status: status == const $CopyWithPlaceholder()
           ? _value.status
           // ignore: cast_nullable_to_non_nullable
@@ -269,6 +295,14 @@ class _$SaleCWProxyImpl implements _$SaleCWProxy {
           ? _value.number
           // ignore: cast_nullable_to_non_nullable
           : number as String,
+      invoiceNumber: invoiceNumber == const $CopyWithPlaceholder()
+          ? _value.invoiceNumber
+          // ignore: cast_nullable_to_non_nullable
+          : invoiceNumber as String,
+      occurredAt: occurredAt == const $CopyWithPlaceholder()
+          ? _value.occurredAt
+          // ignore: cast_nullable_to_non_nullable
+          : occurredAt as DateTime,
       financialYear: financialYear == const $CopyWithPlaceholder()
           ? _value.financialYear
           // ignore: cast_nullable_to_non_nullable
@@ -386,7 +420,10 @@ Sale _$SaleFromJson(Map<String, dynamic> json) => $checkedCreate(
         'id',
         'business',
         'location',
+        'customer_name',
         'number',
+        'invoice_number',
+        'occurred_at',
         'financial_year',
         'document_date',
         'posted_at',
@@ -398,11 +435,17 @@ Sale _$SaleFromJson(Map<String, dynamic> json) => $checkedCreate(
       business: $checkedConvert('business', (v) => v as String),
       location: $checkedConvert('location', (v) => v as String),
       customer: $checkedConvert('customer', (v) => v as String?),
+      customerName: $checkedConvert('customer_name', (v) => v as String),
       status: $checkedConvert(
         'status',
         (v) => $enumDecodeNullable(_$SaleStatusEnumEnumMap, v),
       ),
       number: $checkedConvert('number', (v) => v as String),
+      invoiceNumber: $checkedConvert('invoice_number', (v) => v as String),
+      occurredAt: $checkedConvert(
+        'occurred_at',
+        (v) => DateTime.parse(v as String),
+      ),
       financialYear: $checkedConvert('financial_year', (v) => v as String),
       documentDate: $checkedConvert(
         'document_date',
@@ -474,6 +517,9 @@ Sale _$SaleFromJson(Map<String, dynamic> json) => $checkedCreate(
     return val;
   },
   fieldKeyMap: const {
+    'customerName': 'customer_name',
+    'invoiceNumber': 'invoice_number',
+    'occurredAt': 'occurred_at',
     'financialYear': 'financial_year',
     'documentDate': 'document_date',
     'priceMode': 'price_mode',
@@ -504,8 +550,11 @@ Map<String, dynamic> _$SaleToJson(Sale instance) => <String, dynamic>{
   'business': instance.business,
   'location': instance.location,
   'customer': ?instance.customer,
+  'customer_name': instance.customerName,
   'status': ?_$SaleStatusEnumEnumMap[instance.status],
   'number': instance.number,
+  'invoice_number': instance.invoiceNumber,
+  'occurred_at': instance.occurredAt.toIso8601String(),
   'financial_year': instance.financialYear,
   'document_date': instance.documentDate.toIso8601String(),
   'price_mode': ?_$SalePriceModeEnumEnumMap[instance.priceMode],

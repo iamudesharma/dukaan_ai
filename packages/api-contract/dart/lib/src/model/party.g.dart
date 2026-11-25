@@ -17,6 +17,8 @@ abstract class _$PartyCWProxy {
 
   Party phoneE164(String? phoneE164);
 
+  Party phone(String phone);
+
   Party gstin(String? gstin);
 
   Party stateCode(String? stateCode);
@@ -41,6 +43,7 @@ abstract class _$PartyCWProxy {
     String name,
     PartyKindEnum kind,
     String? phoneE164,
+    String phone,
     String? gstin,
     String? stateCode,
     String? address,
@@ -70,6 +73,9 @@ class _$PartyCWProxyImpl implements _$PartyCWProxy {
 
   @override
   Party phoneE164(String? phoneE164) => this(phoneE164: phoneE164);
+
+  @override
+  Party phone(String phone) => this(phone: phone);
 
   @override
   Party gstin(String? gstin) => this(gstin: gstin);
@@ -103,6 +109,7 @@ class _$PartyCWProxyImpl implements _$PartyCWProxy {
     Object? name = const $CopyWithPlaceholder(),
     Object? kind = const $CopyWithPlaceholder(),
     Object? phoneE164 = const $CopyWithPlaceholder(),
+    Object? phone = const $CopyWithPlaceholder(),
     Object? gstin = const $CopyWithPlaceholder(),
     Object? stateCode = const $CopyWithPlaceholder(),
     Object? address = const $CopyWithPlaceholder(),
@@ -131,6 +138,10 @@ class _$PartyCWProxyImpl implements _$PartyCWProxy {
           ? _value.phoneE164
           // ignore: cast_nullable_to_non_nullable
           : phoneE164 as String?,
+      phone: phone == const $CopyWithPlaceholder()
+          ? _value.phone
+          // ignore: cast_nullable_to_non_nullable
+          : phone as String,
       gstin: gstin == const $CopyWithPlaceholder()
           ? _value.gstin
           // ignore: cast_nullable_to_non_nullable
@@ -180,6 +191,7 @@ Party _$PartyFromJson(Map<String, dynamic> json) => $checkedCreate(
         'business',
         'name',
         'kind',
+        'phone',
         'receivable_minor',
         'payable_minor',
       ],
@@ -193,18 +205,16 @@ Party _$PartyFromJson(Map<String, dynamic> json) => $checkedCreate(
         (v) => $enumDecode(_$PartyKindEnumEnumMap, v),
       ),
       phoneE164: $checkedConvert('phone_e164', (v) => v as String?),
+      phone: $checkedConvert('phone', (v) => v as String),
       gstin: $checkedConvert('gstin', (v) => v as String?),
       stateCode: $checkedConvert('state_code', (v) => v as String?),
       address: $checkedConvert('address', (v) => v as String?),
       isActive: $checkedConvert('is_active', (v) => v as bool?),
       receivableMinor: $checkedConvert(
         'receivable_minor',
-        (v) => (v as num?)?.toInt() ?? 0,
+        (v) => (v as num).toInt(),
       ),
-      payableMinor: $checkedConvert(
-        'payable_minor',
-        (v) => (v as num?)?.toInt() ?? 0,
-      ),
+      payableMinor: $checkedConvert('payable_minor', (v) => (v as num).toInt()),
     );
     return val;
   },
@@ -223,6 +233,7 @@ Map<String, dynamic> _$PartyToJson(Party instance) => <String, dynamic>{
   'name': instance.name,
   'kind': _$PartyKindEnumEnumMap[instance.kind]!,
   'phone_e164': ?instance.phoneE164,
+  'phone': instance.phone,
   'gstin': ?instance.gstin,
   'state_code': ?instance.stateCode,
   'address': ?instance.address,

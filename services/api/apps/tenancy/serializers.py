@@ -19,6 +19,8 @@ INVITEE_PHONE_REGEX = re.compile(r"^\+[1-9]\d{6,14}$")
 
 
 class LocationSerializer(serializers.ModelSerializer):
+    is_primary = serializers.SerializerMethodField()
+
     class Meta:
         model = Location
         fields = [
@@ -29,9 +31,21 @@ class LocationSerializer(serializers.ModelSerializer):
             "name",
             "address",
             "state_code",
+            "is_primary",
             "is_active",
         ]
         read_only_fields = ["id"]
+
+    def get_is_primary(self, obj) -> bool:
+        if getattr(obj, "_is_primary", None) is not None:
+            return obj._is_primary
+        first_id = (
+            Location.objects.filter(business_id=obj.business_id)
+            .order_by("created_at", "pk")
+            .values_list("pk", flat=True)
+            .first()
+        )
+        return obj.pk == first_id
 
     def validate(self, attrs):
         if (
@@ -193,10 +207,28 @@ class AuditEventSerializer(serializers.ModelSerializer):
 
 
 class MembershipSerializer(serializers.ModelSerializer):
+    user_name = serializers.SerializerMethodField()
+    user_phone = serializers.SerializerMethodField()
+
     class Meta:
         model = Membership
-        fields = ["id", "user", "business", "role", "locations", "is_active"]
+        fields = [
+            "id",
+            "user",
+            "user_name",
+            "user_phone",
+            "business",
+            "role",
+            "locations",
+            "is_active",
+        ]
         read_only_fields = ["id"]
+
+    def get_user_name(self, obj) -> str:
+        return obj.user.display_name or obj.user.username
+
+    def get_user_phone(self, obj) -> str:
+        return obj.user.phone_e164
 
     def validate(self, attrs):
         if (

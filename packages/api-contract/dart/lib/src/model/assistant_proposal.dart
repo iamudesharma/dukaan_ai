@@ -36,6 +36,8 @@ class AssistantProposal {
 
     required this.preview,
 
+    required this.previewData,
+
     required this.warnings,
 
     required this.blockingQuestions,
@@ -83,6 +85,9 @@ class AssistantProposal {
   @JsonKey(name: r'preview', required: true, includeIfNull: false)
   final String preview;
 
+  @JsonKey(name: r'preview_data', required: true, includeIfNull: true)
+  final Object? previewData;
+
   @JsonKey(name: r'warnings', required: true, includeIfNull: true)
   final Object? warnings;
 
@@ -124,6 +129,7 @@ class AssistantProposal {
           other.commandType == commandType &&
           other.payload == payload &&
           other.preview == preview &&
+          other.previewData == previewData &&
           other.warnings == warnings &&
           other.blockingQuestions == blockingQuestions &&
           other.status == status &&
@@ -145,6 +151,7 @@ class AssistantProposal {
       commandType.hashCode +
       (payload == null ? 0 : payload.hashCode) +
       preview.hashCode +
+      (previewData == null ? 0 : previewData.hashCode) +
       (warnings == null ? 0 : warnings.hashCode) +
       (blockingQuestions == null ? 0 : blockingQuestions.hashCode) +
       status.hashCode +

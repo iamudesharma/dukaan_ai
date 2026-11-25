@@ -3025,6 +3025,8 @@ components:
         preview:
           type: string
           readOnly: true
+        preview_data:
+          readOnly: true
         warnings:
           readOnly: true
         blocking_questions:
@@ -3085,6 +3087,7 @@ components:
       - location
       - payload
       - preview
+      - preview_data
       - status
       - version
       - warnings
@@ -3435,9 +3438,12 @@ components:
           type: integer
         expenses_minor:
           type: integer
+        receipts_minor:
+          type: integer
       required:
       - expenses_minor
       - purchases_minor
+      - receipts_minor
       - sales_minor
     Expense:
       type: object
@@ -3469,6 +3475,10 @@ components:
         document_date:
           type: string
           format: date
+        occurred_at:
+          type: string
+          format: date-time
+          readOnly: true
         category:
           type: string
           maxLength: 80
@@ -3529,6 +3539,7 @@ components:
       - id
       - location
       - number
+      - occurred_at
       - payment_method
       - posted_at
       - total_minor
@@ -4134,12 +4145,16 @@ components:
         state_code:
           type: string
           maxLength: 2
+        is_primary:
+          type: boolean
+          readOnly: true
         is_active:
           type: boolean
       required:
       - business
       - code
       - id
+      - is_primary
       - name
     Login:
       type: object
@@ -4188,6 +4203,12 @@ components:
         user:
           type: string
           format: uuid
+        user_name:
+          type: string
+          readOnly: true
+        user_phone:
+          type: string
+          readOnly: true
         business:
           type: string
           format: uuid
@@ -4214,6 +4235,8 @@ components:
       - id
       - role
       - user
+      - user_name
+      - user_phone
     MembershipSummary:
       type: object
       properties:
@@ -4558,6 +4581,9 @@ components:
         phone_e164:
           type: string
           maxLength: 20
+        phone:
+          type: string
+          readOnly: true
         gstin:
           type: string
           maxLength: 15
@@ -4571,17 +4597,16 @@ components:
         receivable_minor:
           type: integer
           readOnly: true
-          default: 0
         payable_minor:
           type: integer
           readOnly: true
-          default: 0
       required:
       - business
       - id
       - kind
       - name
       - payable_minor
+      - phone
       - receivable_minor
     PartyLedgerEntry:
       type: object
@@ -4790,6 +4815,9 @@ components:
         state_code:
           type: string
           maxLength: 2
+        is_primary:
+          type: boolean
+          readOnly: true
         is_active:
           type: boolean
     PatchedMembership:
@@ -4802,6 +4830,12 @@ components:
         user:
           type: string
           format: uuid
+        user_name:
+          type: string
+          readOnly: true
+        user_phone:
+          type: string
+          readOnly: true
         business:
           type: string
           format: uuid
@@ -4850,6 +4884,9 @@ components:
         phone_e164:
           type: string
           maxLength: 20
+        phone:
+          type: string
+          readOnly: true
         gstin:
           type: string
           maxLength: 15
@@ -4863,11 +4900,9 @@ components:
         receivable_minor:
           type: integer
           readOnly: true
-          default: 0
         payable_minor:
           type: integer
           readOnly: true
-          default: 0
     PatchedProduct:
       type: object
       properties:
@@ -4914,10 +4949,15 @@ components:
           pattern: ^-?\d{0,15}(?:\.\d{0,3})?$
         is_active:
           type: boolean
+        default_pack_id:
+          type: string
+          nullable: true
+          readOnly: true
         stock_quantity:
           type: string
-          format: decimal
-          pattern: ^-?\d{0,15}(?:\.\d{0,3})?$
+          readOnly: true
+        is_low_stock:
+          type: boolean
           readOnly: true
         packs:
           type: array
@@ -4952,6 +4992,9 @@ components:
           type: string
           format: uuid
           nullable: true
+        party_name:
+          type: string
+          readOnly: true
         direction:
           enum:
           - RECEIPT
@@ -4990,6 +5033,10 @@ components:
         payment_date:
           type: string
           format: date
+        occurred_at:
+          type: string
+          format: date
+          readOnly: true
         status:
           enum:
           - DRAFT
@@ -5031,6 +5078,8 @@ components:
       - id
       - location
       - method
+      - occurred_at
+      - party_name
       - payment_date
       - unallocated_total_minor
     PaymentAllocation:
@@ -5288,10 +5337,15 @@ components:
           pattern: ^-?\d{0,15}(?:\.\d{0,3})?$
         is_active:
           type: boolean
+        default_pack_id:
+          type: string
+          nullable: true
+          readOnly: true
         stock_quantity:
           type: string
-          format: decimal
-          pattern: ^-?\d{0,15}(?:\.\d{0,3})?$
+          readOnly: true
+        is_low_stock:
+          type: boolean
           readOnly: true
         packs:
           type: array
@@ -5299,7 +5353,9 @@ components:
             $ref: '#/components/schemas/ProductPack'
       required:
       - business
+      - default_pack_id
       - id
+      - is_low_stock
       - name
       - packs
       - stock_quantity
@@ -5351,6 +5407,9 @@ components:
         supplier:
           type: string
           format: uuid
+        supplier_name:
+          type: string
+          readOnly: true
         status:
           enum:
           - DRAFT
@@ -5365,6 +5424,13 @@ components:
         number:
           type: string
           maxLength: 48
+        invoice_number:
+          type: string
+          readOnly: true
+        occurred_at:
+          type: string
+          format: date-time
+          readOnly: true
         financial_year:
           type: string
           maxLength: 7
@@ -5449,11 +5515,14 @@ components:
       - document_date
       - financial_year
       - id
+      - invoice_number
       - lines
       - location
       - number
+      - occurred_at
       - posted_at
       - supplier
+      - supplier_name
     PurchaseCreate:
       type: object
       properties:
@@ -5798,6 +5867,9 @@ components:
           type: string
           format: uuid
           nullable: true
+        customer_name:
+          type: string
+          readOnly: true
         status:
           enum:
           - DRAFT
@@ -5812,6 +5884,13 @@ components:
         number:
           type: string
           maxLength: 48
+        invoice_number:
+          type: string
+          readOnly: true
+        occurred_at:
+          type: string
+          format: date-time
+          readOnly: true
         financial_year:
           type: string
           maxLength: 7
@@ -5904,12 +5983,15 @@ components:
           readOnly: true
       required:
       - business
+      - customer_name
       - document_date
       - financial_year
       - id
+      - invoice_number
       - lines
       - location
       - number
+      - occurred_at
       - posted_at
     SaleCreate:
       type: object

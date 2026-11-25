@@ -23,6 +23,8 @@ class DashboardToday {
     required this.purchasesMinor,
 
     required this.expensesMinor,
+
+    required this.receiptsMinor,
   });
 
   @JsonKey(name: r'sales_minor', required: true, includeIfNull: false)
@@ -34,17 +36,24 @@ class DashboardToday {
   @JsonKey(name: r'expenses_minor', required: true, includeIfNull: false)
   final int expensesMinor;
 
+  @JsonKey(name: r'receipts_minor', required: true, includeIfNull: false)
+  final int receiptsMinor;
+
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
       other is DashboardToday &&
           other.salesMinor == salesMinor &&
           other.purchasesMinor == purchasesMinor &&
-          other.expensesMinor == expensesMinor;
+          other.expensesMinor == expensesMinor &&
+          other.receiptsMinor == receiptsMinor;
 
   @override
   int get hashCode =>
-      salesMinor.hashCode + purchasesMinor.hashCode + expensesMinor.hashCode;
+      salesMinor.hashCode +
+      purchasesMinor.hashCode +
+      expensesMinor.hashCode +
+      receiptsMinor.hashCode;
 
   factory DashboardToday.fromJson(Map<String, dynamic> json) =>
       _$DashboardTodayFromJson(json);

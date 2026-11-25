@@ -28,6 +28,8 @@ class PatchedParty {
 
     this.phoneE164,
 
+    this.phone,
+
     this.gstin,
 
     this.stateCode,
@@ -36,9 +38,9 @@ class PatchedParty {
 
     this.isActive,
 
-    this.receivableMinor = 0,
+    this.receivableMinor,
 
-    this.payableMinor = 0,
+    this.payableMinor,
   });
 
   @JsonKey(name: r'id', required: false, includeIfNull: false)
@@ -57,6 +59,9 @@ class PatchedParty {
   @JsonKey(name: r'phone_e164', required: false, includeIfNull: false)
   final String? phoneE164;
 
+  @JsonKey(name: r'phone', required: false, includeIfNull: false)
+  final String? phone;
+
   @JsonKey(name: r'gstin', required: false, includeIfNull: false)
   final String? gstin;
 
@@ -69,20 +74,10 @@ class PatchedParty {
   @JsonKey(name: r'is_active', required: false, includeIfNull: false)
   final bool? isActive;
 
-  @JsonKey(
-    defaultValue: 0,
-    name: r'receivable_minor',
-    required: false,
-    includeIfNull: false,
-  )
+  @JsonKey(name: r'receivable_minor', required: false, includeIfNull: false)
   final int? receivableMinor;
 
-  @JsonKey(
-    defaultValue: 0,
-    name: r'payable_minor',
-    required: false,
-    includeIfNull: false,
-  )
+  @JsonKey(name: r'payable_minor', required: false, includeIfNull: false)
   final int? payableMinor;
 
   @override
@@ -94,6 +89,7 @@ class PatchedParty {
           other.name == name &&
           other.kind == kind &&
           other.phoneE164 == phoneE164 &&
+          other.phone == phone &&
           other.gstin == gstin &&
           other.stateCode == stateCode &&
           other.address == address &&
@@ -108,6 +104,7 @@ class PatchedParty {
       name.hashCode +
       kind.hashCode +
       phoneE164.hashCode +
+      phone.hashCode +
       gstin.hashCode +
       stateCode.hashCode +
       address.hashCode +

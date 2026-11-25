@@ -19,6 +19,8 @@ abstract class _$ExpenseCWProxy {
 
   Expense documentDate(DateTime documentDate);
 
+  Expense occurredAt(DateTime occurredAt);
+
   Expense category(String category);
 
   Expense payee(String? payee);
@@ -54,6 +56,7 @@ abstract class _$ExpenseCWProxy {
     ExpenseStatusEnum? status,
     String number,
     DateTime documentDate,
+    DateTime occurredAt,
     String category,
     String? payee,
     String? note,
@@ -92,6 +95,9 @@ class _$ExpenseCWProxyImpl implements _$ExpenseCWProxy {
   @override
   Expense documentDate(DateTime documentDate) =>
       this(documentDate: documentDate);
+
+  @override
+  Expense occurredAt(DateTime occurredAt) => this(occurredAt: occurredAt);
 
   @override
   Expense category(String category) => this(category: category);
@@ -143,6 +149,7 @@ class _$ExpenseCWProxyImpl implements _$ExpenseCWProxy {
     Object? status = const $CopyWithPlaceholder(),
     Object? number = const $CopyWithPlaceholder(),
     Object? documentDate = const $CopyWithPlaceholder(),
+    Object? occurredAt = const $CopyWithPlaceholder(),
     Object? category = const $CopyWithPlaceholder(),
     Object? payee = const $CopyWithPlaceholder(),
     Object? note = const $CopyWithPlaceholder(),
@@ -180,6 +187,10 @@ class _$ExpenseCWProxyImpl implements _$ExpenseCWProxy {
           ? _value.documentDate
           // ignore: cast_nullable_to_non_nullable
           : documentDate as DateTime,
+      occurredAt: occurredAt == const $CopyWithPlaceholder()
+          ? _value.occurredAt
+          // ignore: cast_nullable_to_non_nullable
+          : occurredAt as DateTime,
       category: category == const $CopyWithPlaceholder()
           ? _value.category
           // ignore: cast_nullable_to_non_nullable
@@ -250,6 +261,7 @@ Expense _$ExpenseFromJson(Map<String, dynamic> json) => $checkedCreate(
         'location',
         'number',
         'document_date',
+        'occurred_at',
         'category',
         'amount_minor',
         'total_minor',
@@ -268,6 +280,10 @@ Expense _$ExpenseFromJson(Map<String, dynamic> json) => $checkedCreate(
       number: $checkedConvert('number', (v) => v as String),
       documentDate: $checkedConvert(
         'document_date',
+        (v) => DateTime.parse(v as String),
+      ),
+      occurredAt: $checkedConvert(
+        'occurred_at',
         (v) => DateTime.parse(v as String),
       ),
       category: $checkedConvert('category', (v) => v as String),
@@ -298,6 +314,7 @@ Expense _$ExpenseFromJson(Map<String, dynamic> json) => $checkedCreate(
   },
   fieldKeyMap: const {
     'documentDate': 'document_date',
+    'occurredAt': 'occurred_at',
     'amountMinor': 'amount_minor',
     'taxAmountMinor': 'tax_amount_minor',
     'totalMinor': 'total_minor',
@@ -316,6 +333,7 @@ Map<String, dynamic> _$ExpenseToJson(Expense instance) => <String, dynamic>{
   'status': ?_$ExpenseStatusEnumEnumMap[instance.status],
   'number': instance.number,
   'document_date': instance.documentDate.toIso8601String(),
+  'occurred_at': instance.occurredAt.toIso8601String(),
   'category': instance.category,
   'payee': ?instance.payee,
   'note': ?instance.note,

@@ -32,6 +32,8 @@ class PatchedLocation {
 
     this.stateCode,
 
+    this.isPrimary,
+
     this.isActive,
   });
 
@@ -56,6 +58,9 @@ class PatchedLocation {
   @JsonKey(name: r'state_code', required: false, includeIfNull: false)
   final String? stateCode;
 
+  @JsonKey(name: r'is_primary', required: false, includeIfNull: false)
+  final bool? isPrimary;
+
   @JsonKey(name: r'is_active', required: false, includeIfNull: false)
   final bool? isActive;
 
@@ -70,6 +75,7 @@ class PatchedLocation {
           other.name == name &&
           other.address == address &&
           other.stateCode == stateCode &&
+          other.isPrimary == isPrimary &&
           other.isActive == isActive;
 
   @override
@@ -81,6 +87,7 @@ class PatchedLocation {
       name.hashCode +
       address.hashCode +
       stateCode.hashCode +
+      isPrimary.hashCode +
       isActive.hashCode;
 
   factory PatchedLocation.fromJson(Map<String, dynamic> json) =>

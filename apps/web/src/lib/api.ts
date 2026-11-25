@@ -46,7 +46,7 @@ async function refreshAccessToken(): Promise<string | null> {
     if (!res.ok) return null;
     const data = await res.json();
     if (data.access) {
-      setTokens({ access: data.access, refresh });
+      setTokens({ access: data.access, refresh: data.refresh ?? refresh });
       return data.access;
     }
   } catch {
@@ -83,6 +83,9 @@ async function sendRequest(path: string, options: RequestOptions): Promise<Respo
         headers,
         body: requestBody,
       });
+    } else {
+      // The session is no longer refreshable; force a clean sign-in.
+      clearTokens();
     }
   }
   return response;

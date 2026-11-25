@@ -15,9 +15,15 @@ abstract class _$PurchaseCWProxy {
 
   Purchase supplier(String supplier);
 
+  Purchase supplierName(String supplierName);
+
   Purchase status(PurchaseStatusEnum? status);
 
   Purchase number(String number);
+
+  Purchase invoiceNumber(String invoiceNumber);
+
+  Purchase occurredAt(DateTime occurredAt);
 
   Purchase financialYear(String financialYear);
 
@@ -72,8 +78,11 @@ abstract class _$PurchaseCWProxy {
     String business,
     String location,
     String supplier,
+    String supplierName,
     PurchaseStatusEnum? status,
     String number,
+    String invoiceNumber,
+    DateTime occurredAt,
     String financialYear,
     DateTime documentDate,
     String? supplierBillNumber,
@@ -117,10 +126,21 @@ class _$PurchaseCWProxyImpl implements _$PurchaseCWProxy {
   Purchase supplier(String supplier) => this(supplier: supplier);
 
   @override
+  Purchase supplierName(String supplierName) =>
+      this(supplierName: supplierName);
+
+  @override
   Purchase status(PurchaseStatusEnum? status) => this(status: status);
 
   @override
   Purchase number(String number) => this(number: number);
+
+  @override
+  Purchase invoiceNumber(String invoiceNumber) =>
+      this(invoiceNumber: invoiceNumber);
+
+  @override
+  Purchase occurredAt(DateTime occurredAt) => this(occurredAt: occurredAt);
 
   @override
   Purchase financialYear(String financialYear) =>
@@ -209,8 +229,11 @@ class _$PurchaseCWProxyImpl implements _$PurchaseCWProxy {
     Object? business = const $CopyWithPlaceholder(),
     Object? location = const $CopyWithPlaceholder(),
     Object? supplier = const $CopyWithPlaceholder(),
+    Object? supplierName = const $CopyWithPlaceholder(),
     Object? status = const $CopyWithPlaceholder(),
     Object? number = const $CopyWithPlaceholder(),
+    Object? invoiceNumber = const $CopyWithPlaceholder(),
+    Object? occurredAt = const $CopyWithPlaceholder(),
     Object? financialYear = const $CopyWithPlaceholder(),
     Object? documentDate = const $CopyWithPlaceholder(),
     Object? supplierBillNumber = const $CopyWithPlaceholder(),
@@ -250,6 +273,10 @@ class _$PurchaseCWProxyImpl implements _$PurchaseCWProxy {
           ? _value.supplier
           // ignore: cast_nullable_to_non_nullable
           : supplier as String,
+      supplierName: supplierName == const $CopyWithPlaceholder()
+          ? _value.supplierName
+          // ignore: cast_nullable_to_non_nullable
+          : supplierName as String,
       status: status == const $CopyWithPlaceholder()
           ? _value.status
           // ignore: cast_nullable_to_non_nullable
@@ -258,6 +285,14 @@ class _$PurchaseCWProxyImpl implements _$PurchaseCWProxy {
           ? _value.number
           // ignore: cast_nullable_to_non_nullable
           : number as String,
+      invoiceNumber: invoiceNumber == const $CopyWithPlaceholder()
+          ? _value.invoiceNumber
+          // ignore: cast_nullable_to_non_nullable
+          : invoiceNumber as String,
+      occurredAt: occurredAt == const $CopyWithPlaceholder()
+          ? _value.occurredAt
+          // ignore: cast_nullable_to_non_nullable
+          : occurredAt as DateTime,
       financialYear: financialYear == const $CopyWithPlaceholder()
           ? _value.financialYear
           // ignore: cast_nullable_to_non_nullable
@@ -367,7 +402,10 @@ Purchase _$PurchaseFromJson(Map<String, dynamic> json) => $checkedCreate(
         'business',
         'location',
         'supplier',
+        'supplier_name',
         'number',
+        'invoice_number',
+        'occurred_at',
         'financial_year',
         'document_date',
         'posted_at',
@@ -379,11 +417,17 @@ Purchase _$PurchaseFromJson(Map<String, dynamic> json) => $checkedCreate(
       business: $checkedConvert('business', (v) => v as String),
       location: $checkedConvert('location', (v) => v as String),
       supplier: $checkedConvert('supplier', (v) => v as String),
+      supplierName: $checkedConvert('supplier_name', (v) => v as String),
       status: $checkedConvert(
         'status',
         (v) => $enumDecodeNullable(_$PurchaseStatusEnumEnumMap, v),
       ),
       number: $checkedConvert('number', (v) => v as String),
+      invoiceNumber: $checkedConvert('invoice_number', (v) => v as String),
+      occurredAt: $checkedConvert(
+        'occurred_at',
+        (v) => DateTime.parse(v as String),
+      ),
       financialYear: $checkedConvert('financial_year', (v) => v as String),
       documentDate: $checkedConvert(
         'document_date',
@@ -447,6 +491,9 @@ Purchase _$PurchaseFromJson(Map<String, dynamic> json) => $checkedCreate(
     return val;
   },
   fieldKeyMap: const {
+    'supplierName': 'supplier_name',
+    'invoiceNumber': 'invoice_number',
+    'occurredAt': 'occurred_at',
     'financialYear': 'financial_year',
     'documentDate': 'document_date',
     'supplierBillNumber': 'supplier_bill_number',
@@ -475,8 +522,11 @@ Map<String, dynamic> _$PurchaseToJson(Purchase instance) => <String, dynamic>{
   'business': instance.business,
   'location': instance.location,
   'supplier': instance.supplier,
+  'supplier_name': instance.supplierName,
   'status': ?_$PurchaseStatusEnumEnumMap[instance.status],
   'number': instance.number,
+  'invoice_number': instance.invoiceNumber,
+  'occurred_at': instance.occurredAt.toIso8601String(),
   'financial_year': instance.financialYear,
   'document_date': instance.documentDate.toIso8601String(),
   'supplier_bill_number': ?instance.supplierBillNumber,

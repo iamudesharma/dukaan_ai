@@ -13,13 +13,20 @@ abstract class _$DashboardTodayCWProxy {
 
   DashboardToday expensesMinor(int expensesMinor);
 
+  DashboardToday receiptsMinor(int receiptsMinor);
+
   /// This function **does support** nullification of nullable fields. All `null` values passed to `non-nullable` fields will be ignored. You can also use `DashboardToday(...).copyWith.fieldName(...)` to override fields one at a time with nullification support.
   ///
   /// Usage
   /// ```dart
   /// DashboardToday(...).copyWith(id: 12, name: "My name")
   /// ````
-  DashboardToday call({int salesMinor, int purchasesMinor, int expensesMinor});
+  DashboardToday call({
+    int salesMinor,
+    int purchasesMinor,
+    int expensesMinor,
+    int receiptsMinor,
+  });
 }
 
 /// Proxy class for `copyWith` functionality. This is a callable class and can be used as follows: `instanceOfDashboardToday.copyWith(...)`. Additionally contains functions for specific fields e.g. `instanceOfDashboardToday.copyWith.fieldName(...)`
@@ -40,6 +47,10 @@ class _$DashboardTodayCWProxyImpl implements _$DashboardTodayCWProxy {
       this(expensesMinor: expensesMinor);
 
   @override
+  DashboardToday receiptsMinor(int receiptsMinor) =>
+      this(receiptsMinor: receiptsMinor);
+
+  @override
   /// This function **does support** nullification of nullable fields. All `null` values passed to `non-nullable` fields will be ignored. You can also use `DashboardToday(...).copyWith.fieldName(...)` to override fields one at a time with nullification support.
   ///
   /// Usage
@@ -50,6 +61,7 @@ class _$DashboardTodayCWProxyImpl implements _$DashboardTodayCWProxy {
     Object? salesMinor = const $CopyWithPlaceholder(),
     Object? purchasesMinor = const $CopyWithPlaceholder(),
     Object? expensesMinor = const $CopyWithPlaceholder(),
+    Object? receiptsMinor = const $CopyWithPlaceholder(),
   }) {
     return DashboardToday(
       salesMinor: salesMinor == const $CopyWithPlaceholder()
@@ -64,6 +76,10 @@ class _$DashboardTodayCWProxyImpl implements _$DashboardTodayCWProxy {
           ? _value.expensesMinor
           // ignore: cast_nullable_to_non_nullable
           : expensesMinor as int,
+      receiptsMinor: receiptsMinor == const $CopyWithPlaceholder()
+          ? _value.receiptsMinor
+          // ignore: cast_nullable_to_non_nullable
+          : receiptsMinor as int,
     );
   }
 }
@@ -89,6 +105,7 @@ DashboardToday _$DashboardTodayFromJson(Map<String, dynamic> json) =>
             'sales_minor',
             'purchases_minor',
             'expenses_minor',
+            'receipts_minor',
           ],
         );
         final val = DashboardToday(
@@ -101,6 +118,10 @@ DashboardToday _$DashboardTodayFromJson(Map<String, dynamic> json) =>
             'expenses_minor',
             (v) => (v as num).toInt(),
           ),
+          receiptsMinor: $checkedConvert(
+            'receipts_minor',
+            (v) => (v as num).toInt(),
+          ),
         );
         return val;
       },
@@ -108,6 +129,7 @@ DashboardToday _$DashboardTodayFromJson(Map<String, dynamic> json) =>
         'salesMinor': 'sales_minor',
         'purchasesMinor': 'purchases_minor',
         'expensesMinor': 'expenses_minor',
+        'receiptsMinor': 'receipts_minor',
       },
     );
 
@@ -116,4 +138,5 @@ Map<String, dynamic> _$DashboardTodayToJson(DashboardToday instance) =>
       'sales_minor': instance.salesMinor,
       'purchases_minor': instance.purchasesMinor,
       'expenses_minor': instance.expensesMinor,
+      'receipts_minor': instance.receiptsMinor,
     };

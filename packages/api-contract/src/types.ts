@@ -1425,6 +1425,7 @@ export interface components {
             readonly command_type: string;
             readonly payload: unknown;
             readonly preview: string;
+            readonly preview_data: unknown;
             readonly warnings: unknown;
             readonly blocking_questions: unknown;
             /**
@@ -1579,6 +1580,7 @@ export interface components {
             sales_minor: number;
             purchases_minor: number;
             expenses_minor: number;
+            receipts_minor: number;
         };
         Expense: {
             /** Format: uuid */
@@ -1597,6 +1599,8 @@ export interface components {
             number: string;
             /** Format: date */
             document_date: string;
+            /** Format: date-time */
+            readonly occurred_at: string;
             category: string;
             payee?: string;
             note?: string;
@@ -1880,6 +1884,7 @@ export interface components {
             name: string;
             address?: string;
             state_code?: string;
+            readonly is_primary: boolean;
             is_active?: boolean;
         };
         Login: {
@@ -1901,6 +1906,8 @@ export interface components {
             readonly id: string;
             /** Format: uuid */
             user: string;
+            readonly user_name: string;
+            readonly user_phone: string;
             /** Format: uuid */
             business: string;
             /**
@@ -2084,13 +2091,12 @@ export interface components {
              */
             kind: "CUSTOMER" | "SUPPLIER" | "BOTH";
             phone_e164?: string;
+            readonly phone: string;
             gstin?: string;
             state_code?: string;
             address?: string;
             is_active?: boolean;
-            /** @default 0 */
             readonly receivable_minor: number;
-            /** @default 0 */
             readonly payable_minor: number;
         };
         PartyLedgerEntry: {
@@ -2174,6 +2180,7 @@ export interface components {
             name?: string;
             address?: string;
             state_code?: string;
+            readonly is_primary?: boolean;
             is_active?: boolean;
         };
         PatchedMembership: {
@@ -2181,6 +2188,8 @@ export interface components {
             readonly id?: string;
             /** Format: uuid */
             user?: string;
+            readonly user_name?: string;
+            readonly user_phone?: string;
             /** Format: uuid */
             business?: string;
             /**
@@ -2207,14 +2216,13 @@ export interface components {
              */
             kind?: "CUSTOMER" | "SUPPLIER" | "BOTH";
             phone_e164?: string;
+            readonly phone?: string;
             gstin?: string;
             state_code?: string;
             address?: string;
             is_active?: boolean;
-            /** @default 0 */
-            readonly receivable_minor: number;
-            /** @default 0 */
-            readonly payable_minor: number;
+            readonly receivable_minor?: number;
+            readonly payable_minor?: number;
         };
         PatchedProduct: {
             /** Format: uuid */
@@ -2238,8 +2246,9 @@ export interface components {
             /** Format: decimal */
             low_stock_threshold?: string;
             is_active?: boolean;
-            /** Format: decimal */
+            readonly default_pack_id?: string | null;
             readonly stock_quantity?: string;
+            readonly is_low_stock?: boolean;
             packs?: components["schemas"]["ProductPack"][];
         };
         PatchedReminderUpdate: {
@@ -2257,6 +2266,7 @@ export interface components {
             location: string;
             /** Format: uuid */
             party?: string | null;
+            readonly party_name: string;
             /**
              * @description * `RECEIPT` - Customer receipt
              *     * `PAYMENT` - Supplier payment
@@ -2278,6 +2288,8 @@ export interface components {
             note?: string;
             /** Format: date */
             payment_date: string;
+            /** Format: date */
+            readonly occurred_at: string;
             /**
              * @description * `DRAFT` - Draft
              *     * `POSTED` - Posted
@@ -2398,8 +2410,9 @@ export interface components {
             /** Format: decimal */
             low_stock_threshold?: string;
             is_active?: boolean;
-            /** Format: decimal */
+            readonly default_pack_id: string | null;
             readonly stock_quantity: string;
+            readonly is_low_stock: boolean;
             packs: components["schemas"]["ProductPack"][];
         };
         ProductPack: {
@@ -2423,6 +2436,7 @@ export interface components {
             location: string;
             /** Format: uuid */
             supplier: string;
+            readonly supplier_name: string;
             /**
              * @description * `DRAFT` - Draft
              *     * `POSTED` - Posted
@@ -2431,6 +2445,9 @@ export interface components {
              */
             status?: "DRAFT" | "POSTED" | "REVERSED";
             number: string;
+            readonly invoice_number: string;
+            /** Format: date-time */
+            readonly occurred_at: string;
             financial_year: string;
             /** Format: date */
             document_date: string;
@@ -2609,6 +2626,7 @@ export interface components {
             location: string;
             /** Format: uuid */
             customer?: string | null;
+            readonly customer_name: string;
             /**
              * @description * `DRAFT` - Draft
              *     * `POSTED` - Posted
@@ -2617,6 +2635,9 @@ export interface components {
              */
             status?: "DRAFT" | "POSTED" | "REVERSED";
             number: string;
+            readonly invoice_number: string;
+            /** Format: date-time */
+            readonly occurred_at: string;
             financial_year: string;
             /** Format: date */
             document_date: string;

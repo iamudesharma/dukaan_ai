@@ -27,9 +27,15 @@ class Sale {
 
     this.customer,
 
+    required this.customerName,
+
     this.status,
 
     required this.number,
+
+    required this.invoiceNumber,
+
+    required this.occurredAt,
 
     required this.financialYear,
 
@@ -90,12 +96,21 @@ class Sale {
   @JsonKey(name: r'customer', required: false, includeIfNull: false)
   final String? customer;
 
+  @JsonKey(name: r'customer_name', required: true, includeIfNull: false)
+  final String customerName;
+
   /// * `DRAFT` - Draft * `POSTED` - Posted * `REVERSED` - Reversed
   @JsonKey(name: r'status', required: false, includeIfNull: false)
   final SaleStatusEnum? status;
 
   @JsonKey(name: r'number', required: true, includeIfNull: false)
   final String number;
+
+  @JsonKey(name: r'invoice_number', required: true, includeIfNull: false)
+  final String invoiceNumber;
+
+  @JsonKey(name: r'occurred_at', required: true, includeIfNull: false)
+  final DateTime occurredAt;
 
   @JsonKey(name: r'financial_year', required: true, includeIfNull: false)
   final String financialYear;
@@ -197,8 +212,11 @@ class Sale {
           other.business == business &&
           other.location == location &&
           other.customer == customer &&
+          other.customerName == customerName &&
           other.status == status &&
           other.number == number &&
+          other.invoiceNumber == invoiceNumber &&
+          other.occurredAt == occurredAt &&
           other.financialYear == financialYear &&
           other.documentDate == documentDate &&
           other.priceMode == priceMode &&
@@ -229,8 +247,11 @@ class Sale {
       business.hashCode +
       location.hashCode +
       (customer == null ? 0 : customer.hashCode) +
+      customerName.hashCode +
       status.hashCode +
       number.hashCode +
+      invoiceNumber.hashCode +
+      occurredAt.hashCode +
       financialYear.hashCode +
       documentDate.hashCode +
       priceMode.hashCode +

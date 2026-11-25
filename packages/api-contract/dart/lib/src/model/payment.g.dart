@@ -15,6 +15,8 @@ abstract class _$PaymentCWProxy {
 
   Payment party(String? party);
 
+  Payment partyName(String partyName);
+
   Payment direction(PaymentDirectionEnum direction);
 
   Payment method(PaymentMethodEnum method);
@@ -26,6 +28,8 @@ abstract class _$PaymentCWProxy {
   Payment note(String? note);
 
   Payment paymentDate(DateTime paymentDate);
+
+  Payment occurredAt(DateTime occurredAt);
 
   Payment status(PaymentStatusEnum? status);
 
@@ -52,12 +56,14 @@ abstract class _$PaymentCWProxy {
     String business,
     String location,
     String? party,
+    String partyName,
     PaymentDirectionEnum direction,
     PaymentMethodEnum method,
     int amountMinor,
     String? reference,
     String? note,
     DateTime paymentDate,
+    DateTime occurredAt,
     PaymentStatusEnum? status,
     String? source_,
     String? reversalReason,
@@ -87,6 +93,9 @@ class _$PaymentCWProxyImpl implements _$PaymentCWProxy {
   Payment party(String? party) => this(party: party);
 
   @override
+  Payment partyName(String partyName) => this(partyName: partyName);
+
+  @override
   Payment direction(PaymentDirectionEnum direction) =>
       this(direction: direction);
 
@@ -104,6 +113,9 @@ class _$PaymentCWProxyImpl implements _$PaymentCWProxy {
 
   @override
   Payment paymentDate(DateTime paymentDate) => this(paymentDate: paymentDate);
+
+  @override
+  Payment occurredAt(DateTime occurredAt) => this(occurredAt: occurredAt);
 
   @override
   Payment status(PaymentStatusEnum? status) => this(status: status);
@@ -142,12 +154,14 @@ class _$PaymentCWProxyImpl implements _$PaymentCWProxy {
     Object? business = const $CopyWithPlaceholder(),
     Object? location = const $CopyWithPlaceholder(),
     Object? party = const $CopyWithPlaceholder(),
+    Object? partyName = const $CopyWithPlaceholder(),
     Object? direction = const $CopyWithPlaceholder(),
     Object? method = const $CopyWithPlaceholder(),
     Object? amountMinor = const $CopyWithPlaceholder(),
     Object? reference = const $CopyWithPlaceholder(),
     Object? note = const $CopyWithPlaceholder(),
     Object? paymentDate = const $CopyWithPlaceholder(),
+    Object? occurredAt = const $CopyWithPlaceholder(),
     Object? status = const $CopyWithPlaceholder(),
     Object? source_ = const $CopyWithPlaceholder(),
     Object? reversalReason = const $CopyWithPlaceholder(),
@@ -173,6 +187,10 @@ class _$PaymentCWProxyImpl implements _$PaymentCWProxy {
           ? _value.party
           // ignore: cast_nullable_to_non_nullable
           : party as String?,
+      partyName: partyName == const $CopyWithPlaceholder()
+          ? _value.partyName
+          // ignore: cast_nullable_to_non_nullable
+          : partyName as String,
       direction: direction == const $CopyWithPlaceholder()
           ? _value.direction
           // ignore: cast_nullable_to_non_nullable
@@ -197,6 +215,10 @@ class _$PaymentCWProxyImpl implements _$PaymentCWProxy {
           ? _value.paymentDate
           // ignore: cast_nullable_to_non_nullable
           : paymentDate as DateTime,
+      occurredAt: occurredAt == const $CopyWithPlaceholder()
+          ? _value.occurredAt
+          // ignore: cast_nullable_to_non_nullable
+          : occurredAt as DateTime,
       status: status == const $CopyWithPlaceholder()
           ? _value.status
           // ignore: cast_nullable_to_non_nullable
@@ -250,10 +272,12 @@ Payment _$PaymentFromJson(Map<String, dynamic> json) => $checkedCreate(
         'id',
         'business',
         'location',
+        'party_name',
         'direction',
         'method',
         'amount_minor',
         'payment_date',
+        'occurred_at',
         'allocations',
         'allocated_total_minor',
         'unallocated_total_minor',
@@ -264,6 +288,7 @@ Payment _$PaymentFromJson(Map<String, dynamic> json) => $checkedCreate(
       business: $checkedConvert('business', (v) => v as String),
       location: $checkedConvert('location', (v) => v as String),
       party: $checkedConvert('party', (v) => v as String?),
+      partyName: $checkedConvert('party_name', (v) => v as String),
       direction: $checkedConvert(
         'direction',
         (v) => $enumDecode(_$PaymentDirectionEnumEnumMap, v),
@@ -277,6 +302,10 @@ Payment _$PaymentFromJson(Map<String, dynamic> json) => $checkedCreate(
       note: $checkedConvert('note', (v) => v as String?),
       paymentDate: $checkedConvert(
         'payment_date',
+        (v) => DateTime.parse(v as String),
+      ),
+      occurredAt: $checkedConvert(
+        'occurred_at',
         (v) => DateTime.parse(v as String),
       ),
       status: $checkedConvert(
@@ -307,8 +336,10 @@ Payment _$PaymentFromJson(Map<String, dynamic> json) => $checkedCreate(
     return val;
   },
   fieldKeyMap: const {
+    'partyName': 'party_name',
     'amountMinor': 'amount_minor',
     'paymentDate': 'payment_date',
+    'occurredAt': 'occurred_at',
     'source_': 'source',
     'reversalReason': 'reversal_reason',
     'reversedAt': 'reversed_at',
@@ -322,12 +353,14 @@ Map<String, dynamic> _$PaymentToJson(Payment instance) => <String, dynamic>{
   'business': instance.business,
   'location': instance.location,
   'party': ?instance.party,
+  'party_name': instance.partyName,
   'direction': _$PaymentDirectionEnumEnumMap[instance.direction]!,
   'method': _$PaymentMethodEnumEnumMap[instance.method]!,
   'amount_minor': instance.amountMinor,
   'reference': ?instance.reference,
   'note': ?instance.note,
   'payment_date': instance.paymentDate.toIso8601String(),
+  'occurred_at': instance.occurredAt.toIso8601String(),
   'status': ?_$PaymentStatusEnumEnumMap[instance.status],
   'source': ?instance.source_,
   'reversal_reason': ?instance.reversalReason,

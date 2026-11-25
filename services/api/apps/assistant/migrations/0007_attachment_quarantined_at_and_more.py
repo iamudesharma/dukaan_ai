@@ -8,6 +8,7 @@ import apps.assistant.models
 
 class Migration(migrations.Migration):
     dependencies = [
+        ("assistant", "0005_assistantproposal_preview_data"),
         ("assistant", "0006_attachment_rls"),
         ("tenancy", "0004_invitation"),
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),

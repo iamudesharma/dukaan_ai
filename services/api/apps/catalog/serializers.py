@@ -1,6 +1,10 @@
+from decimal import Decimal
+
 from django.db import transaction
+from django.db.models import Sum
 from rest_framework import serializers
 
+from apps.operations.models import PartyLedgerEntry, StockBalance
 from apps.tenancy.access import is_cashier
 from apps.tenancy.models import Membership
 
@@ -51,11 +55,16 @@ class ProductPackSerializer(serializers.ModelSerializer):
         return value
 
 
+def _stock_quantity(product: Product) -> Decimal:
+    total = StockBalance.objects.filter(product=product).aggregate(total=Sum("quantity"))["total"]
+    return total if total is not None else Decimal("0")
+
+
 class ProductSerializer(serializers.ModelSerializer):
     packs = ProductPackSerializer(many=True)
-    stock_quantity = serializers.DecimalField(
-        max_digits=18, decimal_places=3, read_only=True, default=None
-    )
+    default_pack_id = serializers.SerializerMethodField()
+    stock_quantity = serializers.SerializerMethodField()
+    is_low_stock = serializers.SerializerMethodField()
 
     class Meta:
         model = Product
@@ -70,10 +79,29 @@ class ProductSerializer(serializers.ModelSerializer):
             "tax_rate_bps",
             "low_stock_threshold",
             "is_active",
+            "default_pack_id",
             "stock_quantity",
+            "is_low_stock",
             "packs",
         ]
         read_only_fields = ["id"]
+
+    def get_default_pack_id(self, obj) -> str | None:
+        packs = [pack for pack in obj.packs.all() if pack.is_active]
+        if not packs:
+            return None
+        pack = min(packs, key=lambda item: item.conversion_factor)
+        return str(pack.id)
+
+    def get_stock_quantity(self, obj) -> str:
+        annotated = getattr(obj, "_stock_quantity", None)
+        value = annotated if annotated is not None else _stock_quantity(obj)
+        return str(value)
+
+    def get_is_low_stock(self, obj) -> bool:
+        if not obj.track_inventory:
+            return False
+        return Decimal(self.get_stock_quantity(obj)) <= obj.low_stock_threshold
 
     @transaction.atomic
     def create(self, validated_data):
@@ -101,8 +129,9 @@ class ProductSerializer(serializers.ModelSerializer):
 
 
 class PartySerializer(serializers.ModelSerializer):
-    receivable_minor = serializers.IntegerField(read_only=True, default=0)
-    payable_minor = serializers.IntegerField(read_only=True, default=0)
+    phone = serializers.CharField(source="phone_e164", read_only=True)
+    receivable_minor = serializers.SerializerMethodField()
+    payable_minor = serializers.SerializerMethodField()
 
     class Meta:
         model = Party
@@ -112,6 +141,7 @@ class PartySerializer(serializers.ModelSerializer):
             "name",
             "kind",
             "phone_e164",
+            "phone",
             "gstin",
             "state_code",
             "address",
@@ -120,6 +150,21 @@ class PartySerializer(serializers.ModelSerializer):
             "payable_minor",
         ]
         read_only_fields = ["id"]
+
+    def _balance(self, obj, account: str) -> int:
+        annotated = getattr(obj, f"_{account.lower()}_minor", None)
+        if annotated is not None:
+            return int(annotated)
+        total = PartyLedgerEntry.objects.filter(party=obj, account=account).aggregate(
+            total=Sum("amount_minor")
+        )["total"]
+        return int(total or 0)
+
+    def get_receivable_minor(self, obj) -> int:
+        return self._balance(obj, PartyLedgerEntry.Account.RECEIVABLE)
+
+    def get_payable_minor(self, obj) -> int:
+        return self._balance(obj, PartyLedgerEntry.Account.PAYABLE)
 
     def to_representation(self, instance):
         data = super().to_representation(instance)

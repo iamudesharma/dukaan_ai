@@ -27,7 +27,11 @@ abstract class _$ProductCWProxy {
 
   Product isActive(bool? isActive);
 
-  Product stockQuantity(double stockQuantity);
+  Product defaultPackId(String? defaultPackId);
+
+  Product stockQuantity(String stockQuantity);
+
+  Product isLowStock(bool isLowStock);
 
   Product packs(List<ProductPack> packs);
 
@@ -48,7 +52,9 @@ abstract class _$ProductCWProxy {
     int? taxRateBps,
     double? lowStockThreshold,
     bool? isActive,
-    double stockQuantity,
+    String? defaultPackId,
+    String stockQuantity,
+    bool isLowStock,
     List<ProductPack> packs,
   });
 }
@@ -92,8 +98,15 @@ class _$ProductCWProxyImpl implements _$ProductCWProxy {
   Product isActive(bool? isActive) => this(isActive: isActive);
 
   @override
-  Product stockQuantity(double stockQuantity) =>
+  Product defaultPackId(String? defaultPackId) =>
+      this(defaultPackId: defaultPackId);
+
+  @override
+  Product stockQuantity(String stockQuantity) =>
       this(stockQuantity: stockQuantity);
+
+  @override
+  Product isLowStock(bool isLowStock) => this(isLowStock: isLowStock);
 
   @override
   Product packs(List<ProductPack> packs) => this(packs: packs);
@@ -116,7 +129,9 @@ class _$ProductCWProxyImpl implements _$ProductCWProxy {
     Object? taxRateBps = const $CopyWithPlaceholder(),
     Object? lowStockThreshold = const $CopyWithPlaceholder(),
     Object? isActive = const $CopyWithPlaceholder(),
+    Object? defaultPackId = const $CopyWithPlaceholder(),
     Object? stockQuantity = const $CopyWithPlaceholder(),
+    Object? isLowStock = const $CopyWithPlaceholder(),
     Object? packs = const $CopyWithPlaceholder(),
   }) {
     return Product(
@@ -160,10 +175,18 @@ class _$ProductCWProxyImpl implements _$ProductCWProxy {
           ? _value.isActive
           // ignore: cast_nullable_to_non_nullable
           : isActive as bool?,
+      defaultPackId: defaultPackId == const $CopyWithPlaceholder()
+          ? _value.defaultPackId
+          // ignore: cast_nullable_to_non_nullable
+          : defaultPackId as String?,
       stockQuantity: stockQuantity == const $CopyWithPlaceholder()
           ? _value.stockQuantity
           // ignore: cast_nullable_to_non_nullable
-          : stockQuantity as double,
+          : stockQuantity as String,
+      isLowStock: isLowStock == const $CopyWithPlaceholder()
+          ? _value.isLowStock
+          // ignore: cast_nullable_to_non_nullable
+          : isLowStock as bool,
       packs: packs == const $CopyWithPlaceholder()
           ? _value.packs
           // ignore: cast_nullable_to_non_nullable
@@ -188,7 +211,15 @@ Product _$ProductFromJson(Map<String, dynamic> json) => $checkedCreate(
   ($checkedConvert) {
     $checkKeys(
       json,
-      requiredKeys: const ['id', 'business', 'name', 'stock_quantity', 'packs'],
+      requiredKeys: const [
+        'id',
+        'business',
+        'name',
+        'default_pack_id',
+        'stock_quantity',
+        'is_low_stock',
+        'packs',
+      ],
     );
     final val = Product(
       id: $checkedConvert('id', (v) => v as String),
@@ -207,10 +238,9 @@ Product _$ProductFromJson(Map<String, dynamic> json) => $checkedCreate(
         (v) => (v as num?)?.toDouble(),
       ),
       isActive: $checkedConvert('is_active', (v) => v as bool?),
-      stockQuantity: $checkedConvert(
-        'stock_quantity',
-        (v) => (v as num).toDouble(),
-      ),
+      defaultPackId: $checkedConvert('default_pack_id', (v) => v as String?),
+      stockQuantity: $checkedConvert('stock_quantity', (v) => v as String),
+      isLowStock: $checkedConvert('is_low_stock', (v) => v as bool),
       packs: $checkedConvert(
         'packs',
         (v) => (v as List<dynamic>)
@@ -227,7 +257,9 @@ Product _$ProductFromJson(Map<String, dynamic> json) => $checkedCreate(
     'taxRateBps': 'tax_rate_bps',
     'lowStockThreshold': 'low_stock_threshold',
     'isActive': 'is_active',
+    'defaultPackId': 'default_pack_id',
     'stockQuantity': 'stock_quantity',
+    'isLowStock': 'is_low_stock',
   },
 );
 
@@ -242,7 +274,9 @@ Map<String, dynamic> _$ProductToJson(Product instance) => <String, dynamic>{
   'tax_rate_bps': ?instance.taxRateBps,
   'low_stock_threshold': ?instance.lowStockThreshold,
   'is_active': ?instance.isActive,
+  'default_pack_id': instance.defaultPackId,
   'stock_quantity': instance.stockQuantity,
+  'is_low_stock': instance.isLowStock,
   'packs': instance.packs.map((e) => e.toJson()).toList(),
 };
 

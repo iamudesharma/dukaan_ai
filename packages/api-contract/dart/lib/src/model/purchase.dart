@@ -27,9 +27,15 @@ class Purchase {
 
     required this.supplier,
 
+    required this.supplierName,
+
     this.status,
 
     required this.number,
+
+    required this.invoiceNumber,
+
+    required this.occurredAt,
 
     required this.financialYear,
 
@@ -86,12 +92,21 @@ class Purchase {
   @JsonKey(name: r'supplier', required: true, includeIfNull: false)
   final String supplier;
 
+  @JsonKey(name: r'supplier_name', required: true, includeIfNull: false)
+  final String supplierName;
+
   /// * `DRAFT` - Draft * `POSTED` - Posted * `REVERSED` - Reversed
   @JsonKey(name: r'status', required: false, includeIfNull: false)
   final PurchaseStatusEnum? status;
 
   @JsonKey(name: r'number', required: true, includeIfNull: false)
   final String number;
+
+  @JsonKey(name: r'invoice_number', required: true, includeIfNull: false)
+  final String invoiceNumber;
+
+  @JsonKey(name: r'occurred_at', required: true, includeIfNull: false)
+  final DateTime occurredAt;
 
   @JsonKey(name: r'financial_year', required: true, includeIfNull: false)
   final String financialYear;
@@ -178,8 +193,11 @@ class Purchase {
           other.business == business &&
           other.location == location &&
           other.supplier == supplier &&
+          other.supplierName == supplierName &&
           other.status == status &&
           other.number == number &&
+          other.invoiceNumber == invoiceNumber &&
+          other.occurredAt == occurredAt &&
           other.financialYear == financialYear &&
           other.documentDate == documentDate &&
           other.supplierBillNumber == supplierBillNumber &&
@@ -208,8 +226,11 @@ class Purchase {
       business.hashCode +
       location.hashCode +
       supplier.hashCode +
+      supplierName.hashCode +
       status.hashCode +
       number.hashCode +
+      invoiceNumber.hashCode +
+      occurredAt.hashCode +
       financialYear.hashCode +
       documentDate.hashCode +
       supplierBillNumber.hashCode +

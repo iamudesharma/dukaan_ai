@@ -21,6 +21,8 @@ abstract class _$LocationCWProxy {
 
   Location stateCode(String? stateCode);
 
+  Location isPrimary(bool isPrimary);
+
   Location isActive(bool? isActive);
 
   /// This function **does support** nullification of nullable fields. All `null` values passed to `non-nullable` fields will be ignored. You can also use `Location(...).copyWith.fieldName(...)` to override fields one at a time with nullification support.
@@ -37,6 +39,7 @@ abstract class _$LocationCWProxy {
     String name,
     String? address,
     String? stateCode,
+    bool isPrimary,
     bool? isActive,
   });
 }
@@ -70,6 +73,9 @@ class _$LocationCWProxyImpl implements _$LocationCWProxy {
   Location stateCode(String? stateCode) => this(stateCode: stateCode);
 
   @override
+  Location isPrimary(bool isPrimary) => this(isPrimary: isPrimary);
+
+  @override
   Location isActive(bool? isActive) => this(isActive: isActive);
 
   @override
@@ -87,6 +93,7 @@ class _$LocationCWProxyImpl implements _$LocationCWProxy {
     Object? name = const $CopyWithPlaceholder(),
     Object? address = const $CopyWithPlaceholder(),
     Object? stateCode = const $CopyWithPlaceholder(),
+    Object? isPrimary = const $CopyWithPlaceholder(),
     Object? isActive = const $CopyWithPlaceholder(),
   }) {
     return Location(
@@ -118,6 +125,10 @@ class _$LocationCWProxyImpl implements _$LocationCWProxy {
           ? _value.stateCode
           // ignore: cast_nullable_to_non_nullable
           : stateCode as String?,
+      isPrimary: isPrimary == const $CopyWithPlaceholder()
+          ? _value.isPrimary
+          // ignore: cast_nullable_to_non_nullable
+          : isPrimary as bool,
       isActive: isActive == const $CopyWithPlaceholder()
           ? _value.isActive
           // ignore: cast_nullable_to_non_nullable
@@ -140,7 +151,10 @@ Location _$LocationFromJson(Map<String, dynamic> json) => $checkedCreate(
   'Location',
   json,
   ($checkedConvert) {
-    $checkKeys(json, requiredKeys: const ['id', 'business', 'code', 'name']);
+    $checkKeys(
+      json,
+      requiredKeys: const ['id', 'business', 'code', 'name', 'is_primary'],
+    );
     final val = Location(
       id: $checkedConvert('id', (v) => v as String),
       business: $checkedConvert('business', (v) => v as String),
@@ -149,6 +163,7 @@ Location _$LocationFromJson(Map<String, dynamic> json) => $checkedCreate(
       name: $checkedConvert('name', (v) => v as String),
       address: $checkedConvert('address', (v) => v as String?),
       stateCode: $checkedConvert('state_code', (v) => v as String?),
+      isPrimary: $checkedConvert('is_primary', (v) => v as bool),
       isActive: $checkedConvert('is_active', (v) => v as bool?),
     );
     return val;
@@ -156,6 +171,7 @@ Location _$LocationFromJson(Map<String, dynamic> json) => $checkedCreate(
   fieldKeyMap: const {
     'gstRegistration': 'gst_registration',
     'stateCode': 'state_code',
+    'isPrimary': 'is_primary',
     'isActive': 'is_active',
   },
 );
@@ -168,5 +184,6 @@ Map<String, dynamic> _$LocationToJson(Location instance) => <String, dynamic>{
   'name': instance.name,
   'address': ?instance.address,
   'state_code': ?instance.stateCode,
+  'is_primary': instance.isPrimary,
   'is_active': ?instance.isActive,
 };

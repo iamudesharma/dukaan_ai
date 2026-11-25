@@ -27,6 +27,8 @@ class Payment {
 
     this.party,
 
+    required this.partyName,
+
     required this.direction,
 
     required this.method,
@@ -38,6 +40,8 @@ class Payment {
     this.note,
 
     required this.paymentDate,
+
+    required this.occurredAt,
 
     this.status,
 
@@ -66,6 +70,9 @@ class Payment {
   @JsonKey(name: r'party', required: false, includeIfNull: false)
   final String? party;
 
+  @JsonKey(name: r'party_name', required: true, includeIfNull: false)
+  final String partyName;
+
   /// * `RECEIPT` - Customer receipt * `PAYMENT` - Supplier payment
   @JsonKey(name: r'direction', required: true, includeIfNull: false)
   final PaymentDirectionEnum direction;
@@ -87,6 +94,9 @@ class Payment {
 
   @JsonKey(name: r'payment_date', required: true, includeIfNull: false)
   final DateTime paymentDate;
+
+  @JsonKey(name: r'occurred_at', required: true, includeIfNull: false)
+  final DateTime occurredAt;
 
   /// * `DRAFT` - Draft * `POSTED` - Posted * `REVERSED` - Reversed
   @JsonKey(name: r'status', required: false, includeIfNull: false)
@@ -122,12 +132,14 @@ class Payment {
           other.business == business &&
           other.location == location &&
           other.party == party &&
+          other.partyName == partyName &&
           other.direction == direction &&
           other.method == method &&
           other.amountMinor == amountMinor &&
           other.reference == reference &&
           other.note == note &&
           other.paymentDate == paymentDate &&
+          other.occurredAt == occurredAt &&
           other.status == status &&
           other.source_ == source_ &&
           other.reversalReason == reversalReason &&
@@ -142,12 +154,14 @@ class Payment {
       business.hashCode +
       location.hashCode +
       (party == null ? 0 : party.hashCode) +
+      partyName.hashCode +
       direction.hashCode +
       method.hashCode +
       amountMinor.hashCode +
       reference.hashCode +
       note.hashCode +
       paymentDate.hashCode +
+      occurredAt.hashCode +
       status.hashCode +
       source_.hashCode +
       reversalReason.hashCode +

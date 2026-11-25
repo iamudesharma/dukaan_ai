@@ -11,6 +11,10 @@ abstract class _$PatchedMembershipCWProxy {
 
   PatchedMembership user(String? user);
 
+  PatchedMembership userName(String? userName);
+
+  PatchedMembership userPhone(String? userPhone);
+
   PatchedMembership business(String? business);
 
   PatchedMembership role(PatchedMembershipRoleEnum? role);
@@ -28,6 +32,8 @@ abstract class _$PatchedMembershipCWProxy {
   PatchedMembership call({
     String? id,
     String? user,
+    String? userName,
+    String? userPhone,
     String? business,
     PatchedMembershipRoleEnum? role,
     List<String>? locations,
@@ -46,6 +52,12 @@ class _$PatchedMembershipCWProxyImpl implements _$PatchedMembershipCWProxy {
 
   @override
   PatchedMembership user(String? user) => this(user: user);
+
+  @override
+  PatchedMembership userName(String? userName) => this(userName: userName);
+
+  @override
+  PatchedMembership userPhone(String? userPhone) => this(userPhone: userPhone);
 
   @override
   PatchedMembership business(String? business) => this(business: business);
@@ -70,6 +82,8 @@ class _$PatchedMembershipCWProxyImpl implements _$PatchedMembershipCWProxy {
   PatchedMembership call({
     Object? id = const $CopyWithPlaceholder(),
     Object? user = const $CopyWithPlaceholder(),
+    Object? userName = const $CopyWithPlaceholder(),
+    Object? userPhone = const $CopyWithPlaceholder(),
     Object? business = const $CopyWithPlaceholder(),
     Object? role = const $CopyWithPlaceholder(),
     Object? locations = const $CopyWithPlaceholder(),
@@ -84,6 +98,14 @@ class _$PatchedMembershipCWProxyImpl implements _$PatchedMembershipCWProxy {
           ? _value.user
           // ignore: cast_nullable_to_non_nullable
           : user as String?,
+      userName: userName == const $CopyWithPlaceholder()
+          ? _value.userName
+          // ignore: cast_nullable_to_non_nullable
+          : userName as String?,
+      userPhone: userPhone == const $CopyWithPlaceholder()
+          ? _value.userPhone
+          // ignore: cast_nullable_to_non_nullable
+          : userPhone as String?,
       business: business == const $CopyWithPlaceholder()
           ? _value.business
           // ignore: cast_nullable_to_non_nullable
@@ -116,28 +138,41 @@ extension $PatchedMembershipCopyWith on PatchedMembership {
 // **************************************************************************
 
 PatchedMembership _$PatchedMembershipFromJson(Map<String, dynamic> json) =>
-    $checkedCreate('PatchedMembership', json, ($checkedConvert) {
-      final val = PatchedMembership(
-        id: $checkedConvert('id', (v) => v as String?),
-        user: $checkedConvert('user', (v) => v as String?),
-        business: $checkedConvert('business', (v) => v as String?),
-        role: $checkedConvert(
-          'role',
-          (v) => $enumDecodeNullable(_$PatchedMembershipRoleEnumEnumMap, v),
-        ),
-        locations: $checkedConvert(
-          'locations',
-          (v) => (v as List<dynamic>?)?.map((e) => e as String).toList(),
-        ),
-        isActive: $checkedConvert('is_active', (v) => v as bool?),
-      );
-      return val;
-    }, fieldKeyMap: const {'isActive': 'is_active'});
+    $checkedCreate(
+      'PatchedMembership',
+      json,
+      ($checkedConvert) {
+        final val = PatchedMembership(
+          id: $checkedConvert('id', (v) => v as String?),
+          user: $checkedConvert('user', (v) => v as String?),
+          userName: $checkedConvert('user_name', (v) => v as String?),
+          userPhone: $checkedConvert('user_phone', (v) => v as String?),
+          business: $checkedConvert('business', (v) => v as String?),
+          role: $checkedConvert(
+            'role',
+            (v) => $enumDecodeNullable(_$PatchedMembershipRoleEnumEnumMap, v),
+          ),
+          locations: $checkedConvert(
+            'locations',
+            (v) => (v as List<dynamic>?)?.map((e) => e as String).toList(),
+          ),
+          isActive: $checkedConvert('is_active', (v) => v as bool?),
+        );
+        return val;
+      },
+      fieldKeyMap: const {
+        'userName': 'user_name',
+        'userPhone': 'user_phone',
+        'isActive': 'is_active',
+      },
+    );
 
 Map<String, dynamic> _$PatchedMembershipToJson(PatchedMembership instance) =>
     <String, dynamic>{
       'id': ?instance.id,
       'user': ?instance.user,
+      'user_name': ?instance.userName,
+      'user_phone': ?instance.userPhone,
       'business': ?instance.business,
       'role': ?_$PatchedMembershipRoleEnumEnumMap[instance.role],
       'locations': ?instance.locations,

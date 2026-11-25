@@ -748,6 +748,12 @@ class DashboardView(APIView):
         today_purchases = (
             purchases.filter(document_date=today).aggregate(v=Sum("grand_total_minor"))["v"] or 0
         )
+        receipts_today = (
+            payments.filter(direction=Payment.Direction.RECEIPT, payment_date=today).aggregate(
+                v=Sum("amount_minor")
+            )["v"]
+            or 0
+        )
         today_expenses = (
             expenses.filter(document_date=today).aggregate(v=Sum("total_minor"))["v"] or 0
         )
@@ -794,6 +800,7 @@ class DashboardView(APIView):
                     "sales_minor": today_sales,
                     "purchases_minor": today_purchases,
                     "expenses_minor": today_expenses,
+                    "receipts_minor": receipts_today,
                 },
                 "books": {
                     "sales_minor": sales.aggregate(v=Sum("grand_total_minor"))["v"] or 0,

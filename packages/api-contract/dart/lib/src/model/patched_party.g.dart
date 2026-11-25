@@ -17,6 +17,8 @@ abstract class _$PatchedPartyCWProxy {
 
   PatchedParty phoneE164(String? phoneE164);
 
+  PatchedParty phone(String? phone);
+
   PatchedParty gstin(String? gstin);
 
   PatchedParty stateCode(String? stateCode);
@@ -41,6 +43,7 @@ abstract class _$PatchedPartyCWProxy {
     String? name,
     PatchedPartyKindEnum? kind,
     String? phoneE164,
+    String? phone,
     String? gstin,
     String? stateCode,
     String? address,
@@ -70,6 +73,9 @@ class _$PatchedPartyCWProxyImpl implements _$PatchedPartyCWProxy {
 
   @override
   PatchedParty phoneE164(String? phoneE164) => this(phoneE164: phoneE164);
+
+  @override
+  PatchedParty phone(String? phone) => this(phone: phone);
 
   @override
   PatchedParty gstin(String? gstin) => this(gstin: gstin);
@@ -104,6 +110,7 @@ class _$PatchedPartyCWProxyImpl implements _$PatchedPartyCWProxy {
     Object? name = const $CopyWithPlaceholder(),
     Object? kind = const $CopyWithPlaceholder(),
     Object? phoneE164 = const $CopyWithPlaceholder(),
+    Object? phone = const $CopyWithPlaceholder(),
     Object? gstin = const $CopyWithPlaceholder(),
     Object? stateCode = const $CopyWithPlaceholder(),
     Object? address = const $CopyWithPlaceholder(),
@@ -132,6 +139,10 @@ class _$PatchedPartyCWProxyImpl implements _$PatchedPartyCWProxy {
           ? _value.phoneE164
           // ignore: cast_nullable_to_non_nullable
           : phoneE164 as String?,
+      phone: phone == const $CopyWithPlaceholder()
+          ? _value.phone
+          // ignore: cast_nullable_to_non_nullable
+          : phone as String?,
       gstin: gstin == const $CopyWithPlaceholder()
           ? _value.gstin
           // ignore: cast_nullable_to_non_nullable
@@ -184,17 +195,18 @@ PatchedParty _$PatchedPartyFromJson(Map<String, dynamic> json) =>
             (v) => $enumDecodeNullable(_$PatchedPartyKindEnumEnumMap, v),
           ),
           phoneE164: $checkedConvert('phone_e164', (v) => v as String?),
+          phone: $checkedConvert('phone', (v) => v as String?),
           gstin: $checkedConvert('gstin', (v) => v as String?),
           stateCode: $checkedConvert('state_code', (v) => v as String?),
           address: $checkedConvert('address', (v) => v as String?),
           isActive: $checkedConvert('is_active', (v) => v as bool?),
           receivableMinor: $checkedConvert(
             'receivable_minor',
-            (v) => (v as num?)?.toInt() ?? 0,
+            (v) => (v as num?)?.toInt(),
           ),
           payableMinor: $checkedConvert(
             'payable_minor',
-            (v) => (v as num?)?.toInt() ?? 0,
+            (v) => (v as num?)?.toInt(),
           ),
         );
         return val;
@@ -215,6 +227,7 @@ Map<String, dynamic> _$PatchedPartyToJson(PatchedParty instance) =>
       'name': ?instance.name,
       'kind': ?_$PatchedPartyKindEnumEnumMap[instance.kind],
       'phone_e164': ?instance.phoneE164,
+      'phone': ?instance.phone,
       'gstin': ?instance.gstin,
       'state_code': ?instance.stateCode,
       'address': ?instance.address,

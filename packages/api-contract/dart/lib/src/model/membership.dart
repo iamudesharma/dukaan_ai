@@ -22,6 +22,10 @@ class Membership {
 
     required this.user,
 
+    required this.userName,
+
+    required this.userPhone,
+
     required this.business,
 
     required this.role,
@@ -36,6 +40,12 @@ class Membership {
 
   @JsonKey(name: r'user', required: true, includeIfNull: false)
   final String user;
+
+  @JsonKey(name: r'user_name', required: true, includeIfNull: false)
+  final String userName;
+
+  @JsonKey(name: r'user_phone', required: true, includeIfNull: false)
+  final String userPhone;
 
   @JsonKey(name: r'business', required: true, includeIfNull: false)
   final String business;
@@ -56,6 +66,8 @@ class Membership {
       other is Membership &&
           other.id == id &&
           other.user == user &&
+          other.userName == userName &&
+          other.userPhone == userPhone &&
           other.business == business &&
           other.role == role &&
           other.locations == locations &&
@@ -65,6 +77,8 @@ class Membership {
   int get hashCode =>
       id.hashCode +
       user.hashCode +
+      userName.hashCode +
+      userPhone.hashCode +
       business.hashCode +
       role.hashCode +
       locations.hashCode +

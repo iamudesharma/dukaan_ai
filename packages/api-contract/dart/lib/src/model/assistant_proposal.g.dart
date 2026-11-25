@@ -25,6 +25,8 @@ abstract class _$AssistantProposalCWProxy {
 
   AssistantProposal preview(String preview);
 
+  AssistantProposal previewData(Object? previewData);
+
   AssistantProposal warnings(Object? warnings);
 
   AssistantProposal blockingQuestions(Object? blockingQuestions);
@@ -59,6 +61,7 @@ abstract class _$AssistantProposalCWProxy {
     String commandType,
     Object? payload,
     String preview,
+    Object? previewData,
     Object? warnings,
     Object? blockingQuestions,
     AssistantProposalStatusEnum status,
@@ -105,6 +108,10 @@ class _$AssistantProposalCWProxyImpl implements _$AssistantProposalCWProxy {
 
   @override
   AssistantProposal preview(String preview) => this(preview: preview);
+
+  @override
+  AssistantProposal previewData(Object? previewData) =>
+      this(previewData: previewData);
 
   @override
   AssistantProposal warnings(Object? warnings) => this(warnings: warnings);
@@ -155,6 +162,7 @@ class _$AssistantProposalCWProxyImpl implements _$AssistantProposalCWProxy {
     Object? commandType = const $CopyWithPlaceholder(),
     Object? payload = const $CopyWithPlaceholder(),
     Object? preview = const $CopyWithPlaceholder(),
+    Object? previewData = const $CopyWithPlaceholder(),
     Object? warnings = const $CopyWithPlaceholder(),
     Object? blockingQuestions = const $CopyWithPlaceholder(),
     Object? status = const $CopyWithPlaceholder(),
@@ -202,6 +210,10 @@ class _$AssistantProposalCWProxyImpl implements _$AssistantProposalCWProxy {
           ? _value.preview
           // ignore: cast_nullable_to_non_nullable
           : preview as String,
+      previewData: previewData == const $CopyWithPlaceholder()
+          ? _value.previewData
+          // ignore: cast_nullable_to_non_nullable
+          : previewData as Object?,
       warnings: warnings == const $CopyWithPlaceholder()
           ? _value.warnings
           // ignore: cast_nullable_to_non_nullable
@@ -270,6 +282,7 @@ AssistantProposal _$AssistantProposalFromJson(Map<String, dynamic> json) =>
             'command_type',
             'payload',
             'preview',
+            'preview_data',
             'warnings',
             'blocking_questions',
             'status',
@@ -294,6 +307,7 @@ AssistantProposal _$AssistantProposalFromJson(Map<String, dynamic> json) =>
           commandType: $checkedConvert('command_type', (v) => v as String),
           payload: $checkedConvert('payload', (v) => v),
           preview: $checkedConvert('preview', (v) => v as String),
+          previewData: $checkedConvert('preview_data', (v) => v),
           warnings: $checkedConvert('warnings', (v) => v),
           blockingQuestions: $checkedConvert('blocking_questions', (v) => v),
           status: $checkedConvert(
@@ -327,6 +341,7 @@ AssistantProposal _$AssistantProposalFromJson(Map<String, dynamic> json) =>
       fieldKeyMap: const {
         'inputType': 'input_type',
         'commandType': 'command_type',
+        'previewData': 'preview_data',
         'blockingQuestions': 'blocking_questions',
         'expiresAt': 'expires_at',
         'confirmedAt': 'confirmed_at',
@@ -348,6 +363,7 @@ Map<String, dynamic> _$AssistantProposalToJson(
   'command_type': instance.commandType,
   'payload': instance.payload,
   'preview': instance.preview,
+  'preview_data': instance.previewData,
   'warnings': instance.warnings,
   'blocking_questions': instance.blockingQuestions,
   'status': _$AssistantProposalStatusEnumEnumMap[instance.status]!,

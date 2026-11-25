@@ -30,6 +30,8 @@ class Expense {
 
     required this.documentDate,
 
+    required this.occurredAt,
+
     required this.category,
 
     this.payee,
@@ -71,6 +73,9 @@ class Expense {
 
   @JsonKey(name: r'document_date', required: true, includeIfNull: false)
   final DateTime documentDate;
+
+  @JsonKey(name: r'occurred_at', required: true, includeIfNull: false)
+  final DateTime occurredAt;
 
   @JsonKey(name: r'category', required: true, includeIfNull: false)
   final String category;
@@ -122,6 +127,7 @@ class Expense {
           other.status == status &&
           other.number == number &&
           other.documentDate == documentDate &&
+          other.occurredAt == occurredAt &&
           other.category == category &&
           other.payee == payee &&
           other.note == note &&
@@ -142,6 +148,7 @@ class Expense {
       status.hashCode +
       number.hashCode +
       documentDate.hashCode +
+      occurredAt.hashCode +
       category.hashCode +
       payee.hashCode +
       note.hashCode +

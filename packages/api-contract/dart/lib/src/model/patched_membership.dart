@@ -22,6 +22,10 @@ class PatchedMembership {
 
     this.user,
 
+    this.userName,
+
+    this.userPhone,
+
     this.business,
 
     this.role,
@@ -36,6 +40,12 @@ class PatchedMembership {
 
   @JsonKey(name: r'user', required: false, includeIfNull: false)
   final String? user;
+
+  @JsonKey(name: r'user_name', required: false, includeIfNull: false)
+  final String? userName;
+
+  @JsonKey(name: r'user_phone', required: false, includeIfNull: false)
+  final String? userPhone;
 
   @JsonKey(name: r'business', required: false, includeIfNull: false)
   final String? business;
@@ -56,6 +66,8 @@ class PatchedMembership {
       other is PatchedMembership &&
           other.id == id &&
           other.user == user &&
+          other.userName == userName &&
+          other.userPhone == userPhone &&
           other.business == business &&
           other.role == role &&
           other.locations == locations &&
@@ -65,6 +77,8 @@ class PatchedMembership {
   int get hashCode =>
       id.hashCode +
       user.hashCode +
+      userName.hashCode +
+      userPhone.hashCode +
       business.hashCode +
       role.hashCode +
       locations.hashCode +
