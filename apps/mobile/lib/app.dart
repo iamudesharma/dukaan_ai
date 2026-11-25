@@ -34,4 +34,3 @@ class DukaanApp extends ConsumerWidget {
     );
   }
 }
-

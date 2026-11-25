@@ -117,3 +117,56 @@ class PasswordResetConfirmSerializer(serializers.Serializer):
     def validate_new_password(self, value: str) -> str:
         validate_password(value)
         return value
+
+
+class AuthCapabilitiesSerializer(serializers.Serializer):
+    password = serializers.BooleanField()
+    otp = serializers.BooleanField()
+    dev_otp = serializers.BooleanField()
+
+
+class AuthUserSerializer(serializers.Serializer):
+    id = serializers.UUIDField()
+    phone = serializers.CharField(allow_blank=True)
+    display_name = serializers.CharField(allow_blank=True)
+
+
+class AuthTokenResponseSerializer(serializers.Serializer):
+    user = AuthUserSerializer()
+    onboarding_required = serializers.BooleanField()
+    access = serializers.CharField()
+    refresh = serializers.CharField()
+
+
+class OtpResponseSerializer(serializers.Serializer):
+    detail = serializers.CharField()
+    phone = serializers.CharField()
+    # Present only when local development explicitly exposes generated codes.
+    dev_otp = serializers.CharField(required=False, help_text="Local-development code only.")
+
+
+class RefreshRequestSerializer(serializers.Serializer):
+    refresh = serializers.CharField(write_only=True)
+
+
+class RefreshResponseSerializer(serializers.Serializer):
+    access = serializers.CharField()
+
+
+class LogoutRequestSerializer(serializers.Serializer):
+    refresh = serializers.CharField(required=False, allow_blank=True, write_only=True)
+
+
+class SessionRevokeAllRequestSerializer(serializers.Serializer):
+    password = serializers.CharField(required=False, allow_blank=True, write_only=True)
+    current_password = serializers.CharField(required=False, allow_blank=True, write_only=True)
+    otp = serializers.CharField(required=False, allow_blank=True, write_only=True)
+
+
+class SessionRevokeAllResponseSerializer(serializers.Serializer):
+    detail = serializers.CharField()
+    token_version = serializers.IntegerField()
+
+
+class MessageResponseSerializer(serializers.Serializer):
+    detail = serializers.CharField()

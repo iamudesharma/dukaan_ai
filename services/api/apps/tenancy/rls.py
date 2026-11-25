@@ -53,6 +53,8 @@ CHILD_TABLES = [
 
 # Tables with a direct business_id column (tenancy_outboxevent included;
 # its policy additionally hides business-less system rows from tenants).
+# tenancy_invitation is intentionally registered by its own migration: it
+# needs the phone-scoped bootstrap policy below and did not exist in 0002.
 DIRECT_TABLES = [
     "tenancy_gstregistration",
     "tenancy_location",
@@ -124,6 +126,23 @@ def child_policy(parent_table: str, parent_fk: str) -> tuple[str, str]:
         f"WHERE parent.id = {parent_fk} AND {_in_scope('parent.business_id')})"
     )
     return expr, expr
+
+
+def invitation_policy() -> tuple[str, str]:
+    """Let an invited phone bootstrap acceptance before it has membership.
+
+    The self-read is tied to the verified database user and grants no writes.
+    After token, phone, role, business and membership validation, the view adds
+    only the invitation's server-resolved business to the connection scope.
+    """
+    invited_user = (
+        "EXISTS (SELECT 1 FROM common_user AS invitee "
+        f"WHERE invitee.id::text = {_setting(USER_ID_SETTING)} "
+        "AND invitee.phone_e164 <> '' AND invitee.phone_e164 = invitee_phone)"
+    )
+    using = f"{_wildcard()} OR {_in_scope()} OR ({invited_user})"
+    check = f"{_wildcard()} OR {_in_scope()}"
+    return using, check
 
 
 def outbox_policy() -> tuple[str, str]:

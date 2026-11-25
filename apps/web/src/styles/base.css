@@ -1,0 +1,192 @@
+/* Reset and document-level defaults. */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+:root {
+  color-scheme: light;
+  background: var(--color-canvas);
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+}
+
+html {
+  min-width: 320px;
+  background: var(--color-canvas);
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+  background: var(--color-canvas);
+  color: var(--color-ink);
+  font-family: var(--font-sans-stack);
+  font-size: var(--type-body-size);
+  font-weight: var(--type-body-weight);
+  line-height: var(--type-body-line);
+}
+
+h1,
+h2,
+h3,
+h4,
+p,
+figure,
+dl,
+dd {
+  margin: 0;
+}
+
+ul,
+ol {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* A single global default; anything denser overrides it locally. */
+svg {
+  width: 20px;
+  height: 20px;
+  flex: 0 0 auto;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+  color: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+code,
+kbd {
+  font-family: var(--font-mono-stack);
+}
+
+/* One focus ring for the whole app, offset so it lands on the surrounding
+   surface rather than on the control it belongs to. */
+:focus-visible {
+  outline: 3px solid var(--color-focus-ring);
+  outline-offset: 2px;
+  border-radius: var(--radius-xs);
+}
+
+.sidebar :focus-visible {
+  outline-color: var(--color-focus-ring-on-hero);
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+::selection {
+  background: var(--color-primary-wash);
+}
+
+/* Shared typographic roles. Every one of these maps to a token. */
+.folio-kicker {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--type-caption-size);
+  font-weight: var(--type-caption-weight);
+  letter-spacing: var(--type-caption-tracking);
+  line-height: var(--type-caption-line);
+  text-transform: uppercase;
+  color: var(--color-ink-muted);
+}
+
+.folio-kicker::before {
+  content: "";
+  width: var(--space-6);
+  height: 2px;
+  flex: 0 0 auto;
+  background: var(--color-primary);
+}
+
+.folio-rule {
+  border: 0;
+  border-top: 2px solid var(--color-ink);
+  margin: 0;
+}
+
+.ledger-section {
+  border-top: 2px solid var(--color-ink);
+  padding-top: var(--space-3);
+}
+
+.prose-measure {
+  max-width: 68ch;
+}
+
+.eyebrow {
+  font-size: var(--type-caption-size);
+  font-weight: var(--type-caption-weight);
+  letter-spacing: var(--type-caption-tracking);
+  line-height: var(--type-caption-line);
+  text-transform: uppercase;
+  color: var(--color-ink-muted);
+}
+
+.section-label {
+  font-size: var(--type-caption-size);
+  font-weight: var(--type-caption-weight);
+  letter-spacing: var(--type-caption-tracking);
+  line-height: var(--type-caption-line);
+  text-transform: uppercase;
+  color: var(--color-ink-muted);
+}
+
+.muted-copy {
+  color: var(--color-ink-muted);
+  font-size: var(--type-label-size);
+}
+
+.spin {
+  animation: spin var(--motion-slow) linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

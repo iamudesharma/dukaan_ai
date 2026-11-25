@@ -9,17 +9,25 @@ description = "DukaanAI modular Django API"
 requires-python = ">=3.13,<3.14"
 dependencies = [
   "Django>=5.2,<5.3",
-  "djangorestframework>=3.16,<3.17",
+  "djangorestframework>=3.18.2,<3.19",
   "djangorestframework-simplejwt>=5.5,<6",
   "drf-spectacular>=0.28,<0.29",
   "django-cors-headers>=4.7,<5",
   "dj-database-url>=2.3,<3",
   "psycopg[binary]>=3.2,<4",
-  "PyJWT[crypto]>=2.10,<3",
+  "pyjwt[crypto]>=2.15,<3",
   "celery[redis]>=5.5,<6",
   "gunicorn>=23,<24",
   "whitenoise>=6.9,<7",
   "sentry-sdk[django]>=2.29,<3",
+  "google-auth>=2.63.1",
+  "google-auth-oauthlib>=1.5.0",
+  "google-api-python-client>=2.202.0",
+  "cryptography>=50.0.1",
+  "django-redis>=5.4,<6",
+  "reportlab>=5.1.0",
+  "certifi>=2026.10.18",
+  "urllib3>=2.8,<3",
 ]
 
 [dependency-groups]
@@ -49,7 +57,15 @@ packages = [
   "apps.operations",
   "apps.operations.migrations",
   "apps.assistant",
+  "apps.assistant.management",
+  "apps.assistant.management.commands",
   "apps.assistant.migrations",
+  "apps.integrations",
+  "apps.integrations.migrations",
+  "apps.invoices",
+  "apps.invoices.migrations",
+  "apps.imports",
+  "apps.imports.migrations",
 ]
 
 [tool.pytest.ini_options]
@@ -68,6 +84,9 @@ ignore = ["DJ001"]
 
 [tool.ruff.lint.per-file-ignores]
 "**/migrations/*.py" = ["E501"]
+
+[tool.setuptools.package-data]
+"apps.invoices" = ["fonts/*.ttf", "fonts/LICENSE.txt"]
 
 [tool.uv]
 required-version = "==0.9.17"

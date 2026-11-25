@@ -5,8 +5,21 @@ from django.db.models import Sum
 from rest_framework import serializers
 
 from apps.operations.models import PartyLedgerEntry, StockBalance
+from apps.tenancy.access import is_cashier
+from apps.tenancy.models import Membership
 
 from .models import Party, Product, ProductPack
+
+
+def _cashier_context(context, business_id) -> bool:
+    if business_id is None:
+        return False
+    membership = context.get("membership")
+    if membership is not None and str(membership.business_id) == str(business_id):
+        return membership.role == Membership.Role.CASHIER
+    request = context.get("request")
+    user = getattr(request, "user", None)
+    return bool(user and user.is_authenticated and is_cashier(user, business_id))
 
 
 class ProductPackSerializer(serializers.ModelSerializer):
@@ -21,6 +34,13 @@ class ProductPackSerializer(serializers.ModelSerializer):
             "is_active",
         ]
         read_only_fields = ["id"]
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        business_id = self.context.get("business_id") or instance.product.business_id
+        if _cashier_context(self.context, business_id):
+            data.pop("wholesale_price_minor", None)
+        return data
 
     def validate_conversion_factor(self, value):
         if self.instance and value != self.instance.conversion_factor:
@@ -66,19 +86,19 @@ class ProductSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ["id"]
 
-    def get_default_pack_id(self, obj):
+    def get_default_pack_id(self, obj) -> str | None:
         packs = [pack for pack in obj.packs.all() if pack.is_active]
         if not packs:
             return None
         pack = min(packs, key=lambda item: item.conversion_factor)
         return str(pack.id)
 
-    def get_stock_quantity(self, obj):
+    def get_stock_quantity(self, obj) -> str:
         annotated = getattr(obj, "_stock_quantity", None)
         value = annotated if annotated is not None else _stock_quantity(obj)
         return str(value)
 
-    def get_is_low_stock(self, obj):
+    def get_is_low_stock(self, obj) -> bool:
         if not obj.track_inventory:
             return False
         return Decimal(self.get_stock_quantity(obj)) <= obj.low_stock_threshold
@@ -140,8 +160,14 @@ class PartySerializer(serializers.ModelSerializer):
         )["total"]
         return int(total or 0)
 
-    def get_receivable_minor(self, obj):
+    def get_receivable_minor(self, obj) -> int:
         return self._balance(obj, PartyLedgerEntry.Account.RECEIVABLE)
 
-    def get_payable_minor(self, obj):
+    def get_payable_minor(self, obj) -> int:
         return self._balance(obj, PartyLedgerEntry.Account.PAYABLE)
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        if _cashier_context(self.context, instance.business_id):
+            data.pop("payable_minor", None)
+        return data

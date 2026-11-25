@@ -1,10 +1,11 @@
-import random
+import secrets
 from datetime import timedelta
 
 from django.conf import settings
 from django.utils import timezone
 
 from .models import PhoneOTP
+from .sms import get_sms_provider
 
 
 class OTPService:
@@ -14,7 +15,8 @@ class OTPService:
     RESEND_SECONDS = 60
 
     def generate(self) -> str:
-        return str(random.randint(10 ** (self.CODE_LENGTH - 1), 10**self.CODE_LENGTH - 1))
+        lower = 10 ** (self.CODE_LENGTH - 1)
+        return str(lower + secrets.randbelow(10**self.CODE_LENGTH - lower))
 
     def create(self, phone: str) -> tuple[str, PhoneOTP]:
         last = (
@@ -56,8 +58,12 @@ class OTPService:
         return False
 
     def send(self, phone: str, otp: str) -> bool:
-        if settings.DEBUG:
+        """Deliver a Django-created code through the configured SMS provider."""
+        if settings.OTP_EXPOSE_DEV_CODE and not settings.SMS_ENABLED:
             return True
+        if not settings.SMS_ENABLED:
+            return False
+        get_sms_provider().send_otp(phone, otp)
         return True
 
 

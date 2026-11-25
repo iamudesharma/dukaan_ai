@@ -27,6 +27,21 @@ def require_membership(user, business_id, *, roles=None, location_id=None) -> Me
     return membership
 
 
+def is_cashier(user, business_id) -> bool:
+    """Whether the verified user has an active cashier membership.
+
+    Serializers use this as a fallback when they are invoked outside a scoped
+    viewset. ViewSets pass their already-loaded membership in serializer context
+    to avoid one role lookup per product/pack.
+    """
+    return Membership.objects.filter(
+        user=user,
+        business_id=business_id,
+        role=Membership.Role.CASHIER,
+        is_active=True,
+    ).exists()
+
+
 def accessible_location_ids(membership: Membership):
     if membership.role == Membership.Role.OWNER:
         return Location.objects.filter(business=membership.business, is_active=True).values_list(

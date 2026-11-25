@@ -1,7 +1,13 @@
 import 'dart:convert';
 
 import 'package:decimal/decimal.dart';
+import 'package:dukaan_ai_mobile/core/formatters.dart';
 import 'package:flutter/foundation.dart';
+
+/// Maximum attachment size accepted by the API for voice and image uploads.
+const maxAttachmentBytes = 8 * 1024 * 1024;
+
+const voiceMimeType = 'audio/m4a';
 
 /// Money is exchanged and stored as integer paise (minor units). Quantities
 /// stay exact with the decimal package; prices and totals never use doubles.
@@ -18,7 +24,8 @@ int minorFrom(Object? value, {int fallback = 0}) {
 
 /// Legacy server payloads may still carry rupee decimals. Prefer the
 /// `<name>Minor` field and convert only as a fallback.
-int minorFromRecord(Map<String, dynamic> json, String minorKey, String majorKey) {
+int minorFromRecord(
+    Map<String, dynamic> json, String minorKey, String majorKey) {
   final minor = json[minorKey];
   if (minor != null) return minorFrom(minor);
   final major = json[majorKey];
@@ -32,7 +39,8 @@ Decimal decimalFrom(Object? value, [String fallback = '0']) {
 /// Convert integer paise to whole rupees for display. Fractional paise are
 /// not representable in this contract and round half away from zero.
 Decimal rupeesFromMinor(int minor) =>
-    (Decimal.fromInt(minor) / Decimal.fromInt(100)).toDecimal(scaleOnInfinitePrecision: 2);
+    (Decimal.fromInt(minor) / Decimal.fromInt(100))
+        .toDecimal(scaleOnInfinitePrecision: 2);
 
 @immutable
 class BusinessLocation {
@@ -58,6 +66,115 @@ class BusinessLocation {
   }
 }
 
+enum BusinessRole {
+  owner,
+  manager,
+  cashier;
+
+  /// Unknown or unavailable roles fail closed to the cashier surface. The
+  /// server remains the authority for every write.
+  factory BusinessRole.fromJson(Object? value) =>
+      switch (value?.toString().trim().toUpperCase()) {
+        'OWNER' => BusinessRole.owner,
+        'MANAGER' => BusinessRole.manager,
+        _ => BusinessRole.cashier,
+      };
+
+  bool get canManageOperations => this != BusinessRole.cashier;
+  bool get canViewSuppliers => canManageOperations;
+  bool get canUseWholesalePrices => canManageOperations;
+
+  bool canUsePriceMode(PriceMode mode) =>
+      mode == PriceMode.retail || canUseWholesalePrices;
+
+  bool canConfirmAssistantCommand(String commandType) {
+    if (canManageOperations) {
+      return const {'SALE', 'PURCHASE', 'EXPENSE'}.contains(commandType);
+    }
+    return commandType == 'SALE';
+  }
+}
+
+@immutable
+class CurrentMembership {
+  const CurrentMembership({
+    required this.businessId,
+    required this.businessName,
+    required this.role,
+  });
+
+  final String businessId;
+  final String businessName;
+  final BusinessRole role;
+
+  factory CurrentMembership.fromJson(Map<String, dynamic> json) =>
+      CurrentMembership(
+        businessId: (json['business_id'] ?? json['business'] ?? '').toString(),
+        businessName: (json['business_name'] ?? '').toString(),
+        role: BusinessRole.fromJson(json['role']),
+      );
+}
+
+@immutable
+class CurrentUser {
+  const CurrentUser({
+    required this.id,
+    this.phone = '',
+    this.displayName = '',
+    this.memberships = const [],
+  });
+
+  final String id;
+  final String phone;
+  final String displayName;
+  final List<CurrentMembership> memberships;
+
+  factory CurrentUser.fromJson(Map<String, dynamic> json) {
+    final memberships = json['memberships'];
+    return CurrentUser(
+      id: (json['id'] ?? json['user_id'] ?? '').toString(),
+      phone: (json['phone'] ?? json['phone_e164'] ?? '').toString(),
+      displayName: (json['display_name'] ?? json['name'] ?? '').toString(),
+      memberships: memberships is List
+          ? memberships
+              .whereType<Map>()
+              .map((row) =>
+                  CurrentMembership.fromJson(Map<String, dynamic>.from(row)))
+              .toList(growable: false)
+          : const [],
+    );
+  }
+}
+
+@immutable
+class BusinessBootstrap {
+  const BusinessBootstrap({
+    required this.userId,
+    required this.businessId,
+    required this.role,
+    this.permissions = const [],
+  });
+
+  final String userId;
+  final String businessId;
+  final BusinessRole role;
+  final List<String> permissions;
+
+  factory BusinessBootstrap.fromJson(Map<String, dynamic> json) {
+    final user = _record(json['user']) ?? const <String, dynamic>{};
+    final business = _record(json['business']) ?? const <String, dynamic>{};
+    final permissions = json['permissions'];
+    return BusinessBootstrap(
+      userId: (user['id'] ?? user['user_id'] ?? '').toString(),
+      businessId: (business['id'] ?? business['business_id'] ?? '').toString(),
+      role: BusinessRole.fromJson(user['role'] ?? json['role']),
+      permissions: permissions is List
+          ? permissions.map((permission) => permission.toString()).toList()
+          : const [],
+    );
+  }
+}
+
 @immutable
 class DashboardSummary {
   const DashboardSummary({
@@ -79,46 +196,92 @@ class DashboardSummary {
   final String summary;
 
   factory DashboardSummary.fromJson(Map<String, dynamic> json) {
-    final today = json['today'] is Map
-        ? Map<String, dynamic>.from(json['today'] as Map)
-        : <String, dynamic>{};
-    final books = json['books'] is Map
-        ? Map<String, dynamic>.from(json['books'] as Map)
-        : <String, dynamic>{};
+    final today = _record(json['today']);
+    final books = _record(json['books']);
     return DashboardSummary(
-      salesMinor: minorFrom(
-        today['sales'] ??
-            json['sales_today'] ??
-            json['sales'] ??
-            json['salesMinor'] ??
-            json['sales_minor'],
+      salesMinor: _nestedMinor(
+        json,
+        today,
+        'sales_minor',
+        legacyNestedKeys: const ['sales'],
+        legacyKeys: const ['sales_today', 'sales', 'salesMinor', 'sales_minor'],
       ),
-      expensesMinor: minorFrom(
-        today['expenses'] ??
-            json['expenses_today'] ??
-            json['expenses'] ??
-            json['expensesMinor'] ??
-            json['expenses_minor'],
+      expensesMinor: _nestedMinor(
+        json,
+        today,
+        'expenses_minor',
+        legacyNestedKeys: const ['expenses'],
+        legacyKeys: const [
+          'expenses_today',
+          'expenses',
+          'expensesMinor',
+          'expenses_minor'
+        ],
       ),
-      toReceiveMinor: minorFrom(
-        books['receivable'] ??
-            json['receivables'] ??
-            json['to_receive'] ??
-            json['receivable'] ??
-            json['receivableMinor'],
+      toReceiveMinor: _nestedMinor(
+        json,
+        books,
+        'receivable_minor',
+        legacyNestedKeys: const ['receivable'],
+        legacyKeys: const [
+          'receivables',
+          'to_receive',
+          'receivable',
+          'receivableMinor',
+          'receivable_minor',
+        ],
       ),
-      toPayMinor: minorFrom(
-        books['payable'] ??
-            json['payables'] ??
-            json['to_pay'] ??
-            json['payable'] ??
-            json['payableMinor'],
+      toPayMinor: _nestedMinor(
+        json,
+        books,
+        'payable_minor',
+        legacyNestedKeys: const ['payable'],
+        legacyKeys: const [
+          'payables',
+          'to_pay',
+          'payable',
+          'payableMinor',
+          'payable_minor',
+        ],
       ),
-      lowStockCount: (json['low_stock_count'] as num?)?.toInt() ?? 0,
-      asOf: DateTime.tryParse((json['as_of'] ?? '').toString()) ?? DateTime.now(),
-      summary: (json['summary'] ?? json['ai_summary'] ?? '').toString(),
+      lowStockCount: _intFrom(json['low_stock_count']),
+      asOf:
+          DateTime.tryParse((json['as_of'] ?? '').toString()) ?? DateTime.now(),
+      summary: json.containsKey('summary')
+          ? (json['summary'] ?? '').toString()
+          : (json['ai_summary'] ?? '').toString(),
     );
   }
+}
+
+Map<String, dynamic>? _record(Object? value) =>
+    value is Map ? Map<String, dynamic>.from(value) : null;
+
+/// Explicit nested minor-unit fields win. Legacy values are consulted only
+/// when the canonical key is absent; a present null value stays explicit.
+int _nestedMinor(
+  Map<String, dynamic> json,
+  Map<String, dynamic>? nested,
+  String key, {
+  required List<String> legacyNestedKeys,
+  required List<String> legacyKeys,
+}) {
+  if (nested != null && nested.containsKey(key)) return minorFrom(nested[key]);
+  for (final legacyKey in legacyNestedKeys) {
+    if (nested != null && nested.containsKey(legacyKey)) {
+      return minorFrom(nested[legacyKey]);
+    }
+  }
+  for (final legacyKey in legacyKeys) {
+    if (json.containsKey(legacyKey)) return minorFrom(json[legacyKey]);
+  }
+  return 0;
+}
+
+int _intFrom(Object? value) {
+  if (value is int) return value;
+  if (value is num) return value.toInt();
+  return int.tryParse(value?.toString() ?? '') ?? 0;
 }
 
 enum EntryType { sale, purchase, expense, payment }
@@ -179,15 +342,19 @@ class Product {
         : <String, dynamic>{};
     return Product(
       id: json['id'].toString(),
-      packId: (json['default_pack_id'] ?? firstPack['id'] ?? json['pack_id'] ?? json['id'])
+      packId: (json['default_pack_id'] ??
+              firstPack['id'] ??
+              json['pack_id'] ??
+              json['id'])
           .toString(),
       name: (json['name'] ?? 'Product').toString(),
       sku: (json['sku'] ?? '').toString(),
       unit: (json['unit'] ?? firstPack['unit_name'] ?? 'pcs').toString(),
-      stock: decimalFrom(
-        json['stock_quantity'] ?? json['stock'] ?? json['quantity_on_hand'],
-      ),
-      lowStockAt: decimalFrom(json['low_stock_threshold'] ?? json['reorder_level']),
+      stock: json.containsKey('stock_quantity')
+          ? decimalFrom(json['stock_quantity'])
+          : decimalFrom(json['stock'] ?? json['quantity_on_hand']),
+      lowStockAt:
+          decimalFrom(json['low_stock_threshold'] ?? json['reorder_level']),
       retailPriceMinor: minorFromRecord(
         firstPack.isNotEmpty ? firstPack : json,
         'retail_price_minor',
@@ -229,18 +396,22 @@ class Party {
     return Party(
       id: json['id'].toString(),
       name: (json['name'] ?? 'Party').toString(),
-      phone: (json['phone'] ?? json['phone_e164'] ?? '').toString(),
+      phone: (json['phone_e164'] ?? json['phone'] ?? '').toString(),
       kind: switch (rawKind) {
         'SUPPLIER' => PartyKind.supplier,
         'BOTH' => PartyKind.both,
         _ => PartyKind.customer,
       },
-      toReceiveMinor: json['receivable_minor'] != null
-          ? minorFrom(json['receivable_minor'])
-          : minorFromRecord(json, 'to_receive_minor', 'receivable_balance'),
-      toPayMinor: json['payable_minor'] != null
-          ? minorFrom(json['payable_minor'])
-          : minorFromRecord(json, 'to_pay_minor', 'payable_balance'),
+      toReceiveMinor: minorFrom(
+        json['receivable_minor'] ??
+            json['to_receive_minor'] ??
+            json['receivable_balance'],
+      ),
+      toPayMinor: minorFrom(
+        json['payable_minor'] ??
+            json['to_pay_minor'] ??
+            json['payable_balance'],
+      ),
     );
   }
 }
@@ -273,7 +444,8 @@ class SaleLineDraft {
   final Decimal quantity;
   final int unitPriceMinor;
 
-  int get totalMinor => (quantity * Decimal.fromInt(unitPriceMinor)).round().toBigInt().toInt();
+  int get totalMinor =>
+      (quantity * Decimal.fromInt(unitPriceMinor)).round().toBigInt().toInt();
 
   Map<String, dynamic> toJson() => {
         'product_id': productId,
@@ -288,7 +460,8 @@ class SaleLineDraft {
         packId: (json['pack_id'] ?? '').toString(),
         productName: (json['product_name'] ?? 'Product').toString(),
         quantity: decimalFrom(json['quantity'], '1'),
-        unitPriceMinor: minorFrom(json['unit_price_minor'] ?? json['unit_price']),
+        unitPriceMinor:
+            minorFrom(json['unit_price_minor'] ?? json['unit_price']),
       );
 }
 
@@ -372,12 +545,15 @@ class SaleDraft {
         customerId: json['customer_id']?.toString(),
         customerName: json['customer_name']?.toString(),
         lines: (json['lines'] as List? ?? const [])
-            .map((line) => SaleLineDraft.fromJson(Map<String, dynamic>.from(line as Map)))
+            .map((line) =>
+                SaleLineDraft.fromJson(Map<String, dynamic>.from(line as Map)))
             .toList(),
-        paidAmountMinor: minorFrom(json['paid_amount_minor'] ?? json['paid_amount']),
-        priceMode: PriceMode.values.byName((json['price_mode'] ?? 'retail').toString()),
-        paymentMethod:
-            PaymentMethod.values.byName((json['payment_method'] ?? 'cash').toString()),
+        paidAmountMinor:
+            minorFrom(json['paid_amount_minor'] ?? json['paid_amount']),
+        priceMode: PriceMode.values
+            .byName((json['price_mode'] ?? 'retail').toString()),
+        paymentMethod: PaymentMethod.values
+            .byName((json['payment_method'] ?? 'cash').toString()),
         paymentReference: json['payment_reference']?.toString(),
         createdAt: DateTime.tryParse((json['created_at'] ?? '').toString()),
       );
@@ -406,6 +582,12 @@ class AssistantInput {
         'content': content,
         'display_text': displayText,
       };
+
+  factory AssistantInput.fromJson(Map<String, dynamic> json) => AssistantInput(
+        type: AssistantInputType.values.byName(json['type'].toString()),
+        content: (json['content'] ?? '').toString(),
+        displayText: (json['display_text'] ?? json['content'] ?? '').toString(),
+      );
 }
 
 @immutable
@@ -418,32 +600,85 @@ class ReviewFact {
 }
 
 @immutable
+class AttachmentUploadTicket {
+  const AttachmentUploadTicket({
+    required this.attachmentId,
+    required this.uploadUrl,
+    required this.uploadHeaders,
+    this.expiresAt,
+  });
+
+  final String attachmentId;
+  final String uploadUrl;
+  final Map<String, String> uploadHeaders;
+  final DateTime? expiresAt;
+
+  factory AttachmentUploadTicket.fromJson(Map<String, dynamic> json) {
+    final attachment = _record(json['attachment']);
+    final id = attachment?['id']?.toString() ?? '';
+    final uploadUrl = json['upload_url']?.toString() ?? '';
+    if (id.isEmpty || uploadUrl.isEmpty) {
+      throw const FormatException('Invalid attachment upload ticket.');
+    }
+    final uri = Uri.tryParse(uploadUrl);
+    if (uri == null || !uri.hasScheme || uri.host.isEmpty) {
+      throw const FormatException('Invalid attachment upload URL.');
+    }
+    final rawHeaders =
+        _record(json['upload_headers']) ?? const <String, dynamic>{};
+    return AttachmentUploadTicket(
+      attachmentId: id,
+      uploadUrl: uploadUrl,
+      uploadHeaders:
+          rawHeaders.map((key, value) => MapEntry(key, value.toString())),
+      expiresAt: DateTime.tryParse((json['expires_at'] ?? '').toString()),
+    );
+  }
+}
+
+@immutable
 class AssistantProposal {
   const AssistantProposal({
     required this.id,
     required this.version,
+    required this.status,
     required this.commandType,
     required this.title,
     required this.facts,
     required this.warnings,
     required this.blockingQuestions,
     required this.rawPayload,
+    this.transcript = '',
   });
+
+  static const _confirmableCommands = {'SALE', 'PURCHASE', 'EXPENSE'};
 
   final String id;
   final int version;
+  final String status;
   final String commandType;
   final String title;
   final List<ReviewFact> facts;
   final List<String> warnings;
   final List<String> blockingQuestions;
   final Map<String, dynamic> rawPayload;
+  final String transcript;
 
-  bool get canConfirm => blockingQuestions.isEmpty;
+  bool get canConfirm =>
+      status == 'READY' &&
+      _confirmableCommands.contains(commandType) &&
+      blockingQuestions.isEmpty;
+
+  bool canBeRecordedBy(BusinessRole role) {
+    if (!role.canConfirmAssistantCommand(commandType)) return false;
+    if (role.canUseWholesalePrices || commandType != 'SALE') return true;
+    return rawPayload['price_mode']?.toString().toUpperCase() != 'WHOLESALE';
+  }
 
   Map<String, dynamic> toJson() => {
         'id': id,
         'version': version,
+        'status': status,
         'command_type': commandType,
         'title': title,
         'facts': facts
@@ -456,37 +691,278 @@ class AssistantProposal {
         'warnings': warnings,
         'blocking_questions': blockingQuestions,
         'payload': rawPayload,
+        'content': transcript,
       };
+
+  factory AssistantProposal.fromJson(Map<String, dynamic> json) {
+    final preview = _record(json['preview']) ?? const <String, dynamic>{};
+    final rawPayload = _record(json['payload']) ?? const <String, dynamic>{};
+    final commandType = (json['command_type'] ?? '').toString().toUpperCase();
+    final facts =
+        _reviewFacts(json['facts'] ?? preview['facts'] ?? preview['fields']);
+    if (facts.isEmpty) {
+      for (final entry in preview.entries) {
+        if (const {'title', 'summary', 'facts', 'fields'}.contains(entry.key)) {
+          continue;
+        }
+        final value = entry.value;
+        if (value is String || value is num || value is bool) {
+          facts.add(ReviewFact(_humanize(entry.key), value.toString()));
+        }
+      }
+    }
+    final previewText =
+        json['preview'] is String ? (json['preview'] as String).trim() : '';
+    final explicitTitle =
+        (json['title'] ?? preview['title'] ?? preview['summary'] ?? '')
+            .toString()
+            .trim();
+    return AssistantProposal(
+      id: json['id'].toString(),
+      version: (json['version'] as num?)?.toInt() ?? 1,
+      status: (json['status'] ?? '').toString().toUpperCase(),
+      commandType: commandType,
+      title: explicitTitle.isNotEmpty
+          ? explicitTitle
+          : previewText.isNotEmpty
+              ? previewText
+              : 'Proposed entry',
+      facts: facts.isEmpty ? _factsFromPayload(rawPayload, commandType) : facts,
+      warnings: _stringList(json['warnings']),
+      blockingQuestions: _stringList(json['blocking_questions']),
+      rawPayload: rawPayload,
+      transcript: (json['content'] ?? '').toString(),
+    );
+  }
+}
+
+List<ReviewFact> _reviewFacts(Object? value) {
+  if (value is! List) return [];
+  return value.whereType<Map>().map((fact) {
+    return ReviewFact(
+      (fact['label'] ?? fact['name'] ?? '').toString(),
+      (fact['value'] ?? '').toString(),
+      warning: fact['warning'] == true,
+    );
+  }).toList(growable: false);
+}
+
+List<String> _stringList(Object? value) {
+  if (value is! List) return const [];
+  return value.map((item) => item.toString()).toList(growable: false);
+}
+
+String _humanize(String key) {
+  final spaced = key.replaceAll('_', ' ');
+  return spaced.isEmpty
+      ? spaced
+      : '${spaced[0].toUpperCase()}${spaced.substring(1)}';
+}
+
+String _paymentMethodLabel(Object? value) {
+  final normalized = value?.toString().trim().toLowerCase() ?? '';
+  if (normalized.isEmpty) return '';
+  if (normalized == 'upi') return 'UPI';
+  return _humanize(normalized);
+}
+
+String _decimalLabel(Decimal value) {
+  final text = value.toString();
+  if (!text.contains('.')) return text;
+  return text.replaceFirst(RegExp(r'\.?0+$'), '');
+}
+
+/// The API currently returns a human-readable preview string. Build a
+/// structured review from the postable payload so the user still sees the
+/// important amounts before confirming.
+List<ReviewFact> _factsFromPayload(
+    Map<String, dynamic> payload, String commandType) {
+  final facts = <ReviewFact>[];
+  void text(String label, Object? value) {
+    final rendered = value?.toString().trim() ?? '';
+    if (rendered.isNotEmpty) facts.add(ReviewFact(label, rendered));
+  }
+
+  if (commandType == 'EXPENSE') {
+    text('Category', payload['category']);
+    text('Payee', payload['payee']);
+    if (payload.containsKey('amount_minor')) {
+      facts.add(ReviewFact('Amount',
+          formatExactMoney(minorFrom(payload['amount_minor']), 'en')));
+    }
+    text('Payment method', _paymentMethodLabel(payload['payment_method']));
+    text('Date', payload['expense_date']);
+    return facts;
+  }
+
+  if (commandType != 'SALE' && commandType != 'PURCHASE') return facts;
+
+  final isSale = commandType == 'SALE';
+  text(isSale ? 'Customer' : 'Supplier',
+      payload[isSale ? 'new_customer_name' : 'new_supplier_name']);
+  final rawLines = payload['lines'];
+  final lines =
+      rawLines is List ? rawLines.whereType<Map>().toList() : const <Map>[];
+  if (lines.isNotEmpty) {
+    final quantity = lines.fold<Decimal>(
+      Decimal.zero,
+      (sum, line) => sum + decimalFrom(line['quantity']),
+    );
+    facts.add(ReviewFact('Items', _decimalLabel(quantity)));
+  }
+  final total = _payloadTotalMinor(payload, commandType);
+  if (total != null) {
+    facts.add(ReviewFact('Total', formatExactMoney(total, 'en')));
+  }
+  if (payload.containsKey('paid_amount_minor')) {
+    final paid = minorFrom(payload['paid_amount_minor']);
+    facts.add(ReviewFact('Paid', formatExactMoney(paid, 'en')));
+    if (total != null) {
+      final pending = total - paid;
+      facts.add(ReviewFact(
+        'Pending',
+        formatExactMoney(pending < 0 ? 0 : pending, 'en'),
+        warning: pending < 0,
+      ));
+    }
+  }
+  text('Payment method', _paymentMethodLabel(payload['payment_method']));
+  text('Date', payload[isSale ? 'invoice_date' : 'purchase_date']);
+  return facts;
+}
+
+int? _payloadTotalMinor(Map<String, dynamic> payload, String commandType) {
+  final explicitTotal = payload['total_minor'] ?? payload['grand_total_minor'];
+  if (explicitTotal != null) return minorFrom(explicitTotal);
+  final rawLines = payload['lines'];
+  if (rawLines is! List || rawLines.isEmpty) return null;
+  final priceKey =
+      commandType == 'SALE' ? 'unit_price_minor' : 'unit_cost_minor';
+  var total = 0;
+  for (final rawLine in rawLines.whereType<Map>()) {
+    final line = Map<String, dynamic>.from(rawLine);
+    if (!line.containsKey(priceKey)) return null;
+    final lineTotal = (decimalFrom(line['quantity']) *
+            Decimal.fromInt(minorFrom(line[priceKey])))
+        .round()
+        .toBigInt()
+        .toInt();
+    total += lineTotal - minorFrom(line['discount_minor']);
+  }
+  total -= minorFrom(payload['discount_total_minor']);
+  return total < 0 ? 0 : total;
 }
 
 @immutable
 class PostedResult {
-  const PostedResult({required this.id, required this.reference, required this.message});
+  const PostedResult(
+      {required this.id, required this.reference, required this.message});
 
   final String id;
   final String reference;
   final String message;
 }
 
-enum DraftKind { assistant, sale }
+enum DraftKind { assistant, sale, purchase, expense, payment, transfer }
+
+enum OperationKind { purchase, expense, payment, transfer }
+
+extension OperationKindDraft on OperationKind {
+  DraftKind get draftKind => switch (this) {
+        OperationKind.purchase => DraftKind.purchase,
+        OperationKind.expense => DraftKind.expense,
+        OperationKind.payment => DraftKind.payment,
+        OperationKind.transfer => DraftKind.transfer,
+      };
+}
+
+/// A reviewed operations form payload. It stays local until the user explicitly
+/// sends it; [toApiJson] always re-applies the current business/location scope
+/// and a stable idempotency key.
+@immutable
+class OperationDraft {
+  const OperationDraft({
+    required this.id,
+    required this.kind,
+    required this.businessId,
+    required this.locationId,
+    required this.payload,
+    required this.createdAt,
+  });
+
+  final String id;
+  final OperationKind kind;
+  final String businessId;
+  final String locationId;
+  final Map<String, dynamic> payload;
+  final DateTime createdAt;
+
+  bool get isReceipt =>
+      kind == OperationKind.payment && payload['direction'] == 'RECEIPT';
+
+  bool canBeRecordedBy(BusinessRole role) {
+    if (role.canManageOperations) return true;
+    return kind == OperationKind.payment && isReceipt;
+  }
+
+  Map<String, dynamic> toApiJson(String idempotencyKey) => {
+        ...payload,
+        'business_id': businessId,
+        'location_id': locationId,
+        'idempotency_key': idempotencyKey,
+      };
+
+  Map<String, dynamic> toLocalJson() => {
+        'id': id,
+        'operation': kind.name,
+        'business_id': businessId,
+        'location_id': locationId,
+        'payload': payload,
+        'created_at': createdAt.toIso8601String(),
+      };
+
+  factory OperationDraft.fromLocalJson(Map<String, dynamic> json) {
+    final kind = OperationKind.values.byName(json['operation'].toString());
+    final payload = json['payload'];
+    return OperationDraft(
+      id: (json['id'] ?? '').toString(),
+      kind: kind,
+      businessId: (json['business_id'] ?? '').toString(),
+      locationId: (json['location_id'] ?? '').toString(),
+      payload: payload is Map
+          ? Map<String, dynamic>.from(payload)
+          : const <String, dynamic>{},
+      createdAt: DateTime.tryParse(json['created_at']?.toString() ?? '') ??
+          DateTime.fromMillisecondsSinceEpoch(0),
+    );
+  }
+}
 
 @immutable
 class LocalDraft {
   const LocalDraft({
     required this.id,
     required this.kind,
+    required this.userId,
+    required this.businessId,
     required this.locationId,
     required this.label,
     required this.payload,
     required this.createdAt,
-  });
+  })  : assert(userId.length > 0),
+        assert(businessId.length > 0);
 
   final String id;
   final DraftKind kind;
+  final String userId;
+  final String businessId;
   final String locationId;
   final String label;
   final Map<String, dynamic> payload;
   final DateTime createdAt;
+
+  bool belongsTo({required String userId, required String businessId}) =>
+      this.userId == userId && this.businessId == businessId;
 
   String get encodedPayload => jsonEncode(payload);
 }
@@ -564,7 +1040,8 @@ class GstRegistration {
   final String stateCode;
   final String invoicePrefix;
 
-  factory GstRegistration.fromJson(Map<String, dynamic> json) => GstRegistration(
+  factory GstRegistration.fromJson(Map<String, dynamic> json) =>
+      GstRegistration(
         id: json['id'].toString(),
         businessId: (json['business'] ?? json['business_id'] ?? '').toString(),
         gstin: (json['gstin'] ?? '').toString(),
@@ -642,7 +1119,8 @@ class ProposalSummary {
   final int version;
   final String status;
 
-  factory ProposalSummary.fromJson(Map<String, dynamic> json) => ProposalSummary(
+  factory ProposalSummary.fromJson(Map<String, dynamic> json) =>
+      ProposalSummary(
         id: json['id'].toString(),
         version: (json['version'] as num?)?.toInt() ?? 1,
         status: (json['status'] ?? '').toString(),
@@ -661,7 +1139,8 @@ class ProposalRevision {
   final Map<String, dynamic> snapshot;
   final DateTime? createdAt;
 
-  factory ProposalRevision.fromJson(Map<String, dynamic> json) => ProposalRevision(
+  factory ProposalRevision.fromJson(Map<String, dynamic> json) =>
+      ProposalRevision(
         version: (json['version'] as num?)?.toInt() ?? 1,
         snapshot: json['snapshot'] is Map
             ? Map<String, dynamic>.from(json['snapshot'] as Map)

@@ -135,11 +135,11 @@ def test_dashboard_includes_receipts_profit_low_stock_and_summary(shop):
     )
     assert response.status_code == 200
     data = response.data
-    assert data["today"]["sales"] == 240000
-    assert data["today"]["receipts"] == 150000
-    assert data["books"]["receipts"] == 150000
-    assert data["receipts_minor"] == 150000
-    assert data["books"]["gross_profit_minor"] == 240000
+    assert data["today"]["sales_minor"] == 240000
+    assert data["today"]["receipts_minor"] == 150000
+    assert data["books"]["receipts_minor"] == 150000
+    # No cost layer exists yet; unknown costs must not imply a full margin.
+    assert data["gross_profit_minor"] is None
     assert data["low_stock_count"] == 1
     assert "2,400" in data["summary"]
 

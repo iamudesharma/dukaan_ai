@@ -1,9 +1,11 @@
-import 'dart:convert';
+import 'dart:async';
 import 'dart:io';
 
+import 'package:dukaan_ai_mobile/core/generated/dukaan_tokens.dart';
 import 'package:dukaan_ai_mobile/domain/models.dart';
 import 'package:dukaan_ai_mobile/l10n/app_strings.dart';
 import 'package:dukaan_ai_mobile/state/app_providers.dart';
+import 'package:dukaan_ai_mobile/ui/components/dukaan_widgets.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -23,9 +25,19 @@ class _AssistantPageState extends ConsumerState<AssistantPage> {
   final _speech = SpeechToText();
   final _imagePicker = ImagePicker();
   AssistantInputType _typedInputType = AssistantInputType.text;
+  late final AssistantController _assistantController;
+
+  @override
+  void initState() {
+    super.initState();
+    _assistantController = ref.read(assistantControllerProvider.notifier);
+  }
 
   @override
   void dispose() {
+    if (_assistantController.currentStage == AssistantStage.recording) {
+      unawaited(_assistantController.cancelVoiceRecording());
+    }
     _speech.cancel();
     _controller.dispose();
     super.dispose();
@@ -34,15 +46,30 @@ class _AssistantPageState extends ConsumerState<AssistantPage> {
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(assistantControllerProvider);
+    final role = ref.watch(currentBusinessRoleProvider);
     return SafeArea(
       top: false,
       child: AnimatedSwitcher(
         duration: const Duration(milliseconds: 220),
         child: switch (state.stage) {
-          AssistantStage.parsing || AssistantStage.confirming =>
-            _WorkingState(confirming: state.stage == AssistantStage.confirming),
+          AssistantStage.recording => _RecordingState(
+              duration: state.recordingDuration,
+              onStop: ref
+                  .read(assistantControllerProvider.notifier)
+                  .stopVoiceRecordingAndUpload,
+              onCancel: ref
+                  .read(assistantControllerProvider.notifier)
+                  .cancelVoiceRecording,
+            ),
+          AssistantStage.parsing ||
+          AssistantStage.transcribing ||
+          AssistantStage.processingDocument ||
+          AssistantStage.confirming =>
+            _WorkingState(stage: state.stage),
           AssistantStage.ready || AssistantStage.needsDetails => _ProposalState(
               state: state,
+              canConfirm: state.proposal?.canConfirm == true &&
+                  state.proposal!.canBeRecordedBy(role),
               onConfirm: ref.read(assistantControllerProvider.notifier).confirm,
               onEdit: _editRequest,
               onAddDetails: (details) => _addDetails(state, details),
@@ -54,7 +81,8 @@ class _AssistantPageState extends ConsumerState<AssistantPage> {
             ),
           AssistantStage.offlineDraft => _OfflineDraftState(onAnother: _reset),
           AssistantStage.failed => _FailedState(
-              message: state.error,
+              message: state.error ??
+                  context.strings.t(state.errorKey ?? 'loadFailed'),
               onRetry: state.input == null
                   ? _reset
                   : ref.read(assistantControllerProvider.notifier).retry,
@@ -64,10 +92,12 @@ class _AssistantPageState extends ConsumerState<AssistantPage> {
               controller: _controller,
               listening: state.stage == AssistantStage.listening,
               onSubmit: _submitText,
-              onListen: _toggleListening,
+              onRecord: _toggleVoiceRecording,
+              onDeviceSpeech: _toggleListening,
               onScan: _scanBill,
               onUpload: _uploadBill,
               onExample: _useExample,
+              salesOnly: !role.canManageOperations,
             ),
         },
       ),
@@ -83,7 +113,10 @@ class _AssistantPageState extends ConsumerState<AssistantPage> {
   void _editRequest() {
     ref.read(assistantControllerProvider.notifier).reset();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) _controller.selection = TextSelection.collapsed(offset: _controller.text.length);
+      if (mounted) {
+        _controller.selection =
+            TextSelection.collapsed(offset: _controller.text.length);
+      }
     });
   }
 
@@ -91,7 +124,8 @@ class _AssistantPageState extends ConsumerState<AssistantPage> {
     final text = _controller.text.trim();
     if (text.isEmpty) return;
     await ref.read(assistantControllerProvider.notifier).interpret(
-          AssistantInput(type: _typedInputType, content: text, displayText: text),
+          AssistantInput(
+              type: _typedInputType, content: text, displayText: text),
         );
   }
 
@@ -109,9 +143,20 @@ class _AssistantPageState extends ConsumerState<AssistantPage> {
     _typedInputType = AssistantInputType.text;
   }
 
+  Future<void> _toggleVoiceRecording() {
+    final controller = ref.read(assistantControllerProvider.notifier);
+    if (ref.read(assistantControllerProvider).stage ==
+        AssistantStage.recording) {
+      return controller.stopVoiceRecordingAndUpload();
+    }
+    return controller.startVoiceRecording();
+  }
+
   Future<void> _toggleListening() async {
     final notifier = ref.read(assistantControllerProvider.notifier);
-    final localeId = Localizations.localeOf(context).languageCode == 'hi' ? 'hi_IN' : 'en_IN';
+    final localeId = Localizations.localeOf(context).languageCode == 'hi'
+        ? 'hi_IN'
+        : 'en_IN';
     if (_speech.isListening) {
       await _speech.stop();
       notifier.setListening(false);
@@ -122,7 +167,9 @@ class _AssistantPageState extends ConsumerState<AssistantPage> {
         if (mounted) notifier.setListening(false);
       },
       onStatus: (status) {
-        if (status == SpeechToText.doneStatus && mounted) notifier.setListening(false);
+        if (status == SpeechToText.doneStatus && mounted) {
+          notifier.setListening(false);
+        }
       },
     );
     if (!available) {
@@ -134,7 +181,8 @@ class _AssistantPageState extends ConsumerState<AssistantPage> {
     await _speech.listen(
       onResult: (result) {
         _controller.text = result.recognizedWords;
-        _controller.selection = TextSelection.collapsed(offset: _controller.text.length);
+        _controller.selection =
+            TextSelection.collapsed(offset: _controller.text.length);
         if (result.finalResult) notifier.setListening(false);
       },
       listenOptions: SpeechListenOptions(
@@ -156,7 +204,7 @@ class _AssistantPageState extends ConsumerState<AssistantPage> {
       );
       if (file == null) return;
       final bytes = await file.readAsBytes();
-      await _interpretFile(
+      await _interpretDocument(
         bytes: bytes,
         mimeType: 'image/jpeg',
         label: 'Photo: ${file.name}',
@@ -175,9 +223,14 @@ class _AssistantPageState extends ConsumerState<AssistantPage> {
       );
       final file = result?.files.single;
       if (file == null) return;
-      final bytes = file.bytes ?? (file.path == null ? null : await File(file.path!).readAsBytes());
-      if (bytes == null || bytes.length > 8 * 1024 * 1024) {
+      final bytes = file.bytes ??
+          (file.path == null ? null : await File(file.path!).readAsBytes());
+      if (bytes == null) {
         if (mounted) _showMessage(context.strings.t('captureFailed'));
+        return;
+      }
+      if (bytes.length > maxAttachmentBytes) {
+        if (mounted) _showMessage(context.strings.t('documentTooLarge'));
         return;
       }
       final extension = (file.extension ?? '').toLowerCase();
@@ -186,28 +239,27 @@ class _AssistantPageState extends ConsumerState<AssistantPage> {
           : extension == 'png'
               ? 'image/png'
               : 'image/jpeg';
-      await _interpretFile(bytes: bytes, mimeType: mime, label: file.name);
+      await _interpretDocument(bytes: bytes, mimeType: mime, label: file.name);
     } on Object {
       if (mounted) _showMessage(context.strings.t('captureFailed'));
     }
   }
 
-  Future<void> _interpretFile({
+  Future<void> _interpretDocument({
     required List<int> bytes,
     required String mimeType,
     required String label,
   }) {
-    return ref.read(assistantControllerProvider.notifier).interpret(
-          AssistantInput(
-            type: AssistantInputType.image,
-            content: 'data:$mimeType;base64,${base64Encode(bytes)}',
-            displayText: label,
-          ),
+    return ref.read(assistantControllerProvider.notifier).interpretImage(
+          bytes: bytes,
+          mimeType: mimeType,
+          label: label,
         );
   }
 
   void _showMessage(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(message)));
   }
 }
 
@@ -216,45 +268,56 @@ class _CaptureState extends StatelessWidget {
     required this.controller,
     required this.listening,
     required this.onSubmit,
-    required this.onListen,
+    required this.onRecord,
+    required this.onDeviceSpeech,
     required this.onScan,
     required this.onUpload,
     required this.onExample,
+    this.salesOnly = false,
   });
 
   final TextEditingController controller;
   final bool listening;
   final VoidCallback onSubmit;
-  final VoidCallback onListen;
+  final VoidCallback onRecord;
+  final VoidCallback onDeviceSpeech;
   final VoidCallback onScan;
   final VoidCallback onUpload;
   final VoidCallback onExample;
+  final bool salesOnly;
 
   @override
   Widget build(BuildContext context) {
     final strings = context.strings;
+    final scheme = Theme.of(context).colorScheme;
+
     return ListView(
       key: const ValueKey('capture'),
-      padding: const EdgeInsets.fromLTRB(16, 18, 16, 28),
+      padding: const EdgeInsets.fromLTRB(
+        DukaanTokens.space4,
+        DukaanTokens.space5,
+        DukaanTokens.space4,
+        DukaanTokens.space6,
+      ),
       children: [
-        Icon(
-          Icons.auto_awesome_rounded,
-          size: 42,
-          color: Theme.of(context).colorScheme.primary,
-        ),
-        const SizedBox(height: 10),
+        DukaanKicker('01 · ${strings.t('ask')}'),
+        const SizedBox(height: DukaanTokens.space1),
         Text(
           strings.t('assistantPrompt'),
           textAlign: TextAlign.center,
-          style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w900),
+          style: DukaanTokens.textTitle.copyWith(
+            color: scheme.onSurface,
+          ),
         ),
-        const SizedBox(height: 6),
+        const SizedBox(height: DukaanTokens.space2),
         Text(
           strings.t('assistantExample'),
           textAlign: TextAlign.center,
-          style: Theme.of(context).textTheme.bodyLarge,
+          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: scheme.onSurfaceVariant,
+              ),
         ),
-        const SizedBox(height: 22),
+        const SizedBox(height: DukaanTokens.space5),
         TextField(
           key: const Key('assistant-input'),
           controller: controller,
@@ -268,17 +331,17 @@ class _CaptureState extends StatelessWidget {
           ),
           onSubmitted: (_) => onSubmit(),
         ),
-        const SizedBox(height: 12),
+        const SizedBox(height: DukaanTokens.space3),
         Wrap(
           alignment: WrapAlignment.center,
-          spacing: 8,
-          runSpacing: 8,
+          spacing: DukaanTokens.space2,
+          runSpacing: DukaanTokens.space2,
           children: [
             _CaptureButton(
-              icon: listening ? Icons.stop_circle_outlined : Icons.mic_none_rounded,
-              label: listening ? strings.t('stopListening') : strings.t('speak'),
-              selected: listening,
-              onPressed: onListen,
+              key: const Key('assistant-record'),
+              icon: Icons.mic_none_rounded,
+              label: strings.t('recordVoice'),
+              onPressed: onRecord,
             ),
             _CaptureButton(
               icon: Icons.document_scanner_outlined,
@@ -292,32 +355,59 @@ class _CaptureState extends StatelessWidget {
             ),
           ],
         ),
+        if (salesOnly) ...[
+          const SizedBox(height: DukaanTokens.space2),
+          Text(
+            strings.t('cashierScanHint'),
+            textAlign: TextAlign.center,
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: scheme.onSurfaceVariant,
+                ),
+          ),
+        ],
+        const SizedBox(height: DukaanTokens.space2),
+        TextButton.icon(
+          key: const Key('assistant-device-speech'),
+          onPressed: onDeviceSpeech,
+          icon: Icon(
+            listening
+                ? Icons.stop_circle_outlined
+                : Icons.record_voice_over_outlined,
+            size: 18,
+          ),
+          label: Text(
+            listening
+                ? strings.t('stopListening')
+                : strings.t('deviceSpeechFallback'),
+          ),
+        ),
         if (listening) ...[
-          const SizedBox(height: 12),
+          const SizedBox(height: DukaanTokens.space3),
           Semantics(
             liveRegion: true,
             child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(Icons.graphic_eq_rounded, color: Theme.of(context).colorScheme.error),
-                const SizedBox(width: 8),
-                Text(
-                  strings.t('listening'),
-                  style: const TextStyle(fontWeight: FontWeight.w800),
+                const Icon(
+                  Icons.graphic_eq_rounded,
+                  color: DukaanTokens.colorPrimary,
+                  size: 20,
                 ),
+                const SizedBox(width: DukaanTokens.space2),
+                Text(strings.t('listening'), style: DukaanTokens.textLabel),
               ],
             ),
           ),
         ],
-        const SizedBox(height: 18),
+        const SizedBox(height: DukaanTokens.space5),
         FilledButton.icon(
           key: const Key('assistant-submit'),
           onPressed: onSubmit,
-          icon: const Icon(Icons.arrow_forward_rounded),
+          icon: const Icon(Icons.arrow_forward_rounded, size: 18),
           label: Text(strings.t('reviewTitle')),
         ),
         TextButton(onPressed: onExample, child: Text(strings.t('tryExample'))),
-        const SizedBox(height: 18),
+        const SizedBox(height: DukaanTokens.space5),
         _NoMoneyCard(),
       ],
     );
@@ -329,18 +419,16 @@ class _CaptureButton extends StatelessWidget {
     required this.icon,
     required this.label,
     required this.onPressed,
-    this.selected = false,
+    super.key,
   });
 
   final IconData icon;
   final String label;
   final VoidCallback onPressed;
-  final bool selected;
 
   @override
   Widget build(BuildContext context) => Semantics(
         button: true,
-        selected: selected,
         child: OutlinedButton.icon(
           onPressed: onPressed,
           icon: Icon(icon),
@@ -349,41 +437,131 @@ class _CaptureButton extends StatelessWidget {
       );
 }
 
-class _WorkingState extends StatelessWidget {
-  const _WorkingState({required this.confirming});
+class _RecordingState extends StatelessWidget {
+  const _RecordingState({
+    required this.duration,
+    required this.onStop,
+    required this.onCancel,
+  });
 
-  final bool confirming;
+  final Duration duration;
+  final VoidCallback onStop;
+  final VoidCallback onCancel;
 
   @override
-  Widget build(BuildContext context) => Center(
-        key: const ValueKey('working'),
+  Widget build(BuildContext context) {
+    final strings = context.strings;
+    final minutes = duration.inMinutes.toString().padLeft(2, '0');
+    final seconds = (duration.inSeconds % 60).toString().padLeft(2, '0');
+    return Center(
+      key: const ValueKey('recording'),
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.all(DukaanTokens.space6),
         child: Semantics(
           liveRegion: true,
-          label: confirming ? context.strings.t('confirm') : context.strings.t('parsing'),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const CircularProgressIndicator(),
-              const SizedBox(height: 18),
+              Container(
+                width: 72,
+                height: 72,
+                decoration: BoxDecoration(
+                  color: Theme.of(context).colorScheme.errorContainer,
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  Icons.mic_rounded,
+                  size: 34,
+                  color: Theme.of(context).colorScheme.onErrorContainer,
+                ),
+              ),
+              const SizedBox(height: DukaanTokens.space4),
               Text(
-                confirming ? context.strings.t('confirm') : context.strings.t('parsing'),
-                style: Theme.of(context).textTheme.titleMedium,
+                strings.t('recording'),
+                style: Theme.of(context).textTheme.headlineSmall,
+              ),
+              const SizedBox(height: DukaanTokens.space2),
+              Text(
+                '$minutes:$seconds',
+                style: DukaanTokens.textAmountLarge,
+              ),
+              const SizedBox(height: DukaanTokens.space2),
+              Text(
+                strings.t('recordingHint'),
+                textAlign: TextAlign.center,
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
+              ),
+              const SizedBox(height: DukaanTokens.space5),
+              FilledButton.icon(
+                key: const Key('assistant-stop-recording'),
+                onPressed: onStop,
+                icon: const Icon(Icons.stop_rounded, size: 18),
+                label: Text(strings.t('stopRecording')),
+              ),
+              TextButton(
+                key: const Key('assistant-cancel-recording'),
+                onPressed: onCancel,
+                child: Text(strings.t('cancelRecording')),
               ),
             ],
           ),
         ),
-      );
+      ),
+    );
+  }
+}
+
+class _WorkingState extends StatelessWidget {
+  const _WorkingState({required this.stage});
+
+  final AssistantStage stage;
+
+  @override
+  Widget build(BuildContext context) {
+    final label = context.strings.t(switch (stage) {
+      AssistantStage.transcribing => 'transcribing',
+      AssistantStage.processingDocument => 'scanningDocument',
+      AssistantStage.confirming => 'confirm',
+      _ => 'parsing',
+    });
+    return Center(
+      key: const ValueKey('working'),
+      child: Semantics(
+        liveRegion: true,
+        label: label,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const SizedBox(
+              width: 28,
+              height: 28,
+              child: CircularProgressIndicator(strokeWidth: 3),
+            ),
+            const SizedBox(height: DukaanTokens.space4),
+            Text(
+              label,
+              style: Theme.of(context).textTheme.titleLarge,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 class _ProposalState extends StatefulWidget {
   const _ProposalState({
     required this.state,
+    required this.canConfirm,
     required this.onConfirm,
     required this.onEdit,
     required this.onAddDetails,
   });
 
   final AssistantState state;
+  final bool canConfirm;
   final VoidCallback onConfirm;
   final VoidCallback onEdit;
   final ValueChanged<String> onAddDetails;
@@ -404,108 +582,187 @@ class _ProposalStateState extends State<_ProposalState> {
   @override
   Widget build(BuildContext context) {
     final proposal = widget.state.proposal!;
+    final scheme = Theme.of(context).colorScheme;
+
     return ListView(
       key: const ValueKey('proposal'),
-      padding: const EdgeInsets.fromLTRB(16, 18, 16, 28),
+      padding: const EdgeInsets.fromLTRB(
+        DukaanTokens.space4,
+        DukaanTokens.space5,
+        DukaanTokens.space4,
+        DukaanTokens.space6,
+      ),
       children: [
+        DukaanKicker('02 · ${context.strings.t('ask')}'),
+        const SizedBox(height: DukaanTokens.space1),
         Text(
           context.strings.t('reviewTitle'),
-          style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w900),
+          style: DukaanTokens.textTitle.copyWith(
+            color: Theme.of(context).colorScheme.onSurface,
+          ),
         ),
-        const SizedBox(height: 4),
-        Text(context.strings.t('reviewDetail')),
-        const SizedBox(height: 16),
-        Card(
-          child: Padding(
-            padding: const EdgeInsets.all(18),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  proposal.title,
-                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                        fontWeight: FontWeight.w900,
-                      ),
-                ),
-                const SizedBox(height: 14),
-                ...proposal.facts.map(
-                  (fact) => Padding(
-                    padding: const EdgeInsets.only(bottom: 11),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Expanded(child: Text(fact.label)),
-                        const SizedBox(width: 12),
-                        Flexible(
-                          child: Text(
-                            fact.value,
-                            textAlign: TextAlign.end,
-                            style: TextStyle(
-                              fontWeight: FontWeight.w800,
-                              color: fact.warning ? Theme.of(context).colorScheme.error : null,
-                            ),
+        const SizedBox(height: DukaanTokens.space1),
+        Text(
+          context.strings.t('reviewDetail'),
+          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: scheme.onSurfaceVariant,
+              ),
+        ),
+        const SizedBox(height: DukaanTokens.space4),
+        DukaanCard(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(proposal.title, style: DukaanTokens.textHeading),
+              const SizedBox(height: DukaanTokens.space3),
+              ...proposal.facts.map(
+                (fact) => Padding(
+                  padding: const EdgeInsets.only(bottom: DukaanTokens.space3),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        child: Text(
+                          fact.label,
+                          style: DukaanTokens.textLabel.copyWith(
+                            color: scheme.onSurfaceVariant,
                           ),
                         ),
-                      ],
-                    ),
+                      ),
+                      const SizedBox(width: DukaanTokens.space3),
+                      Flexible(
+                        child: Text(
+                          fact.value,
+                          textAlign: TextAlign.end,
+                          style: DukaanTokens.textAmount.copyWith(
+                            color: fact.warning
+                                ? scheme.onTertiaryContainer
+                                : scheme.onSurface,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
         if (proposal.warnings.isNotEmpty) ...[
-          const SizedBox(height: 10),
+          const SizedBox(height: DukaanTokens.space3),
           ...proposal.warnings.map(
-            (warning) => Card(
-              color: Theme.of(context).colorScheme.tertiaryContainer,
-              child: ListTile(
-                leading: const Icon(Icons.warning_amber_rounded),
-                title: Text(warning),
+            (warning) => Padding(
+              padding: const EdgeInsets.only(bottom: DukaanTokens.space2),
+              child: Container(
+                padding: const EdgeInsets.all(DukaanTokens.space3),
+                decoration: BoxDecoration(
+                  color: scheme.tertiaryContainer,
+                  borderRadius:
+                      BorderRadius.circular(DukaanTokens.radiusControl),
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Icon(
+                      Icons.warning_amber_rounded,
+                      size: 17,
+                      color: DukaanTokens.colorAttentionInk,
+                    ),
+                    const SizedBox(width: DukaanTokens.space2),
+                    Expanded(
+                      child: Text(
+                        warning,
+                        style: DukaanTokens.textLabel.copyWith(
+                          color: scheme.onTertiaryContainer,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
           ),
         ],
         if (proposal.blockingQuestions.isNotEmpty) ...[
-          const SizedBox(height: 12),
+          const SizedBox(height: DukaanTokens.space3),
           Text(
             context.strings.t('couldNotUnderstand'),
-            style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
+            style: Theme.of(context).textTheme.titleSmall,
           ),
-          const SizedBox(height: 8),
-          ...proposal.blockingQuestions.map((question) => Text('• $question')),
-          const SizedBox(height: 12),
+          const SizedBox(height: DukaanTokens.space2),
+          ...proposal.blockingQuestions.map(
+            (question) => Padding(
+              padding: const EdgeInsets.only(bottom: DukaanTokens.space1),
+              child: Text(
+                '• $question',
+                style: DukaanTokens.textLabel.copyWith(
+                  color: scheme.onSurfaceVariant,
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: DukaanTokens.space3),
           TextField(
             controller: _details,
             minLines: 2,
             maxLines: 4,
             decoration: InputDecoration(labelText: context.strings.t('type')),
           ),
-          const SizedBox(height: 10),
+          const SizedBox(height: DukaanTokens.space3),
           FilledButton(
             onPressed: () {
-              if (_details.text.trim().isNotEmpty) widget.onAddDetails(_details.text.trim());
+              if (_details.text.trim().isNotEmpty) {
+                widget.onAddDetails(_details.text.trim());
+              }
             },
             child: Text(context.strings.t('reviewTitle')),
           ),
+        ] else if (!widget.canConfirm) ...[
+          const SizedBox(height: DukaanTokens.space3),
+          Container(
+            padding: const EdgeInsets.all(DukaanTokens.space3),
+            decoration: BoxDecoration(
+              color: scheme.surfaceContainer,
+              borderRadius: BorderRadius.circular(DukaanTokens.radiusControl),
+            ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Icon(Icons.info_outline_rounded, size: 17),
+                const SizedBox(width: DukaanTokens.space2),
+                Expanded(
+                  child: Text(
+                    widget.state.errorKey == 'cashierSalesOnly'
+                        ? context.strings.t('cashierSalesOnly')
+                        : context.strings.t('proposalNotReady'),
+                    style: DukaanTokens.textLabel,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: DukaanTokens.space4),
         ] else ...[
-          const SizedBox(height: 18),
+          const SizedBox(height: DukaanTokens.space5),
           FilledButton.icon(
             key: const Key('proposal-confirm'),
             onPressed: widget.onConfirm,
-            icon: const Icon(Icons.check_circle_outline_rounded),
+            icon: const Icon(Icons.check_circle_outline_rounded, size: 18),
             label: Text(context.strings.t('confirm')),
           ),
         ],
-        const SizedBox(height: 6),
-        TextButton(onPressed: widget.onEdit, child: Text(context.strings.t('editRequest'))),
+        const SizedBox(height: DukaanTokens.space1),
+        TextButton(
+            onPressed: widget.onEdit,
+            child: Text(context.strings.t('editRequest'))),
       ],
     );
   }
 }
 
 class _SavedState extends StatelessWidget {
-  const _SavedState({required this.result, required this.onAnother, required this.onEntries});
+  const _SavedState(
+      {required this.result, required this.onAnother, required this.onEntries});
 
   final PostedResult result;
   final VoidCallback onAnother;
@@ -545,7 +802,8 @@ class _OfflineDraftState extends StatelessWidget {
 }
 
 class _FailedState extends StatelessWidget {
-  const _FailedState({required this.message, required this.onRetry, required this.onEdit});
+  const _FailedState(
+      {required this.message, required this.onRetry, required this.onEdit});
 
   final String? message;
   final VoidCallback onRetry;
@@ -588,51 +846,78 @@ class _CenteredStatus extends StatelessWidget {
   final VoidCallback onSecondary;
 
   @override
-  Widget build(BuildContext context) => Center(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(28),
-          child: Semantics(
-            liveRegion: true,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(icon, size: 64, color: color),
-                const SizedBox(height: 14),
-                Text(
-                  title,
-                  textAlign: TextAlign.center,
-                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                        fontWeight: FontWeight.w900,
-                      ),
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+
+    return Center(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.all(DukaanTokens.space6),
+        child: Semantics(
+          liveRegion: true,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 58,
+                height: 58,
+                decoration: BoxDecoration(
+                  color: color,
+                  shape: BoxShape.circle,
                 ),
-                const SizedBox(height: 8),
-                Text(detail, textAlign: TextAlign.center),
-                const SizedBox(height: 22),
-                SizedBox(
-                  width: double.infinity,
-                  child: FilledButton(onPressed: onPrimary, child: Text(primaryLabel)),
-                ),
-                TextButton(onPressed: onSecondary, child: Text(secondaryLabel)),
-              ],
-            ),
+                child: Icon(icon, size: 28, color: DukaanTokens.colorOnPrimary),
+              ),
+              const SizedBox(height: DukaanTokens.space4),
+              Text(
+                title,
+                textAlign: TextAlign.center,
+                style: Theme.of(context).textTheme.headlineSmall,
+              ),
+              const SizedBox(height: DukaanTokens.space2),
+              Text(
+                detail,
+                textAlign: TextAlign.center,
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: scheme.onSurfaceVariant,
+                    ),
+              ),
+              const SizedBox(height: DukaanTokens.space5),
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton(
+                    onPressed: onPrimary, child: Text(primaryLabel)),
+              ),
+              TextButton(onPressed: onSecondary, child: Text(secondaryLabel)),
+            ],
           ),
         ),
-      );
+      ),
+    );
+  }
 }
 
 class _NoMoneyCard extends StatelessWidget {
   @override
-  Widget build(BuildContext context) => Card(
-        child: Padding(
-          padding: const EdgeInsets.all(14),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Icon(Icons.shield_outlined, size: 20),
-              const SizedBox(width: 10),
-              Expanded(child: Text(context.strings.t('noMoneyMovement'))),
-            ],
-          ),
+  Widget build(BuildContext context) => DukaanCard(
+        padding: const EdgeInsets.all(DukaanTokens.space4),
+        color: Theme.of(context).colorScheme.surfaceContainer,
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(
+              Icons.shield_outlined,
+              size: 18,
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
+            const SizedBox(width: DukaanTokens.space3),
+            Expanded(
+              child: Text(
+                context.strings.t('noMoneyMovement'),
+                style: DukaanTokens.textCaption.copyWith(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ),
+          ],
         ),
       );
 }

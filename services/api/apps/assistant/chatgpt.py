@@ -1,56 +1,40 @@
+"""Legacy ChatGPT provider, now one :class:`AssistantAdapter` implementation.
+
+Kept for deployments that still set ``AI_PROVIDER=chatgpt``. New deployments
+should use ``AI_PROVIDER=openai_compatible`` with a server-only ``AI_API_KEY``.
+"""
+
 from __future__ import annotations
 
 import json
 import logging
 import re
-from dataclasses import dataclass, field
 
 from django.conf import settings
 
+from .adapter import (
+    AssistantAdapter,
+    Extraction,
+    parse_extraction_payload,
+    redact_for_log,
+)
+
 logger = logging.getLogger(__name__)
 
-SYSTEM_PROMPT = """You are DukaanAI, a business assistant for Indian shop owners.
-Extract structured sale, purchase, payment, or expense information from natural
-language input in Hindi, Hinglish, or English.
+# Back-compat: SYSTEM_PROMPT lives on the adapter boundary now.
+from .adapter import SYSTEM_PROMPT  # noqa: E402,F401
 
-Respond ONLY with valid JSON in this exact format:
-{
-  "command_type": "SALE|PURCHASE|PAYMENT|EXPENSE",
-  "customer_name": "string or null",
-  "items": [{"product": "string", "quantity": number, "unit_price_minor": number}],
-  "total_minor": number,
-  "paid_minor": number,
-  "warnings": ["string"],
-  "blocking_questions": ["string"]
-}
-
-Rules:
-- All amounts are in paise (1 rupee = 100 paise). Convert ₹2,400 to 240000.
-- If information is missing, use blocking_questions to ask for it.
-- If the input is unclear, set command_type to "UNKNOWN" and explain in blocking_questions.
-- quantity should be a number (can be decimal for weights like 2.5).
-- unit_price_minor is price per unit in paise."""
+# Back-compat alias: historical name for an extraction result.
+Interpretation = Extraction
 
 
-@dataclass
-class Interpretation:
-    command_type: str = "UNKNOWN"
-    customer_name: str | None = None
-    items: list[dict] = field(default_factory=list)
-    total_minor: int = 0
-    paid_minor: int = 0
-    warnings: list[str] = field(default_factory=list)
-    blocking_questions: list[str] = field(default_factory=list)
-    raw_response: str = ""
+class ChatGPTService(AssistantAdapter):
+    name = "chatgpt"
 
-    @property
-    def is_valid(self) -> bool:
-        return self.command_type != "UNKNOWN" and not self.blocking_questions
-
-
-class ChatGPTService:
     def __init__(self, session_token: str | None = None):
-        self.session_token = session_token or settings.CHATGPT_SESSION_TOKEN
+        # getattr: older settings files lack this key; fail to "unavailable"
+        # rather than crashing the request path with AttributeError.
+        self.session_token = session_token or getattr(settings, "CHATGPT_SESSION_TOKEN", "")
         self._client = None
 
     def _get_client(self):
@@ -65,48 +49,38 @@ class ChatGPTService:
             return None
         return self._client
 
-    def interpret(self, user_message: str, locale: str = "en-IN") -> Interpretation:
+    def interpret(self, user_message: str, locale: str = "en-IN") -> Extraction | None:
         client = self._get_client()
         if client is None:
-            return Interpretation(blocking_questions=["AI interpreter is not available"])
+            return Extraction(blocking_questions=["AI interpreter is not available"])
 
         prompt = f"{SYSTEM_PROMPT}\n\nUser input ({locale}): {user_message}"
         try:
             response = client.ask(prompt)
-        except Exception as exc:
+        except Exception:
             logger.exception("ChatGPT request failed")
-            return Interpretation(blocking_questions=[f"AI request failed: {exc}"])
+            return Extraction(blocking_questions=["The AI service is unavailable."])
 
         return self._parse_response(response)
 
-    def _parse_response(self, response: str) -> Interpretation:
+    def _parse_response(self, response: str) -> Extraction:
         text = response.strip()
         match = re.search(r"\{[\s\S]*\}", text)
         if match:
             text = match.group(0)
-
         try:
             data = json.loads(text)
         except json.JSONDecodeError:
-            logger.warning("ChatGPT returned non-JSON: %s", response[:200])
-            return Interpretation(
-                raw_response=response,
+            logger.warning("ChatGPT returned non-JSON: %s", redact_for_log(response))
+            return Extraction(
                 blocking_questions=["AI returned an unparseable response"],
+                raw_response=redact_for_log(response, limit=500),
+                model=self.name,
             )
-
-        return Interpretation(
-            command_type=data.get("command_type", "UNKNOWN"),
-            customer_name=data.get("customer_name"),
-            items=data.get("items", []),
-            total_minor=int(data.get("total_minor", 0)),
-            paid_minor=int(data.get("paid_minor", 0)),
-            warnings=data.get("warnings", []),
-            blocking_questions=data.get("blocking_questions", []),
-            raw_response=response,
-        )
+        return parse_extraction_payload(data, raw_response="", model=self.name)
 
 
-def interpret_with_ai(user_message: str, locale: str = "en-IN") -> Interpretation | None:
+def interpret_with_ai(user_message: str, locale: str = "en-IN") -> Extraction | None:
     if not settings.USE_AI_INTERPRETER:
         return None
     service = ChatGPTService()

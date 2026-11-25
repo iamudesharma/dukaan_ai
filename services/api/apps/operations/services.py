@@ -7,8 +7,9 @@ from decimal import ROUND_HALF_UP, Decimal
 from typing import Any
 
 from django.db import transaction
+from django.db.models import Sum
 from django.utils import timezone
-from rest_framework.exceptions import APIException, ValidationError
+from rest_framework.exceptions import APIException, PermissionDenied, ValidationError
 
 from apps.catalog.models import Party, Product, ProductPack
 from apps.tenancy.access import require_membership
@@ -25,6 +26,7 @@ from .models import (
     DocumentSequence,
     DocumentStatus,
     Expense,
+    InventoryCostLayer,
     PartyLedgerEntry,
     Payment,
     PaymentAllocation,
@@ -331,6 +333,233 @@ def product_tax_rate_bps(product, business) -> int:
     return product.tax_rate_bps if business.gst_enabled else 0
 
 
+def weighted_average_unit_cost(total_value_minor: int, total_quantity: Decimal) -> int | None:
+    """Return moving weighted-average cost in paise, never binary float.
+
+    Quantities remain Decimal. The stored average is rounded half-up only for
+    display/issue costing; valuation value itself is never reconstructed from
+    the rounded average, avoiding cumulative drift.
+    """
+    if total_quantity <= ZERO:
+        return None
+    return _round_half_up(Decimal(total_value_minor) / total_quantity)
+
+
+def _cost_layer(
+    *,
+    business,
+    location,
+    product,
+    layer_type,
+    source_type,
+    source_id,
+    source_line_id,
+    quantity_delta,
+    costed_quantity_delta,
+    unknown_cost_quantity_delta,
+    unit_cost_minor,
+    value_delta_minor,
+    occurred_at,
+    reversal_of=None,
+):
+    return InventoryCostLayer.objects.create(
+        business=business,
+        location=location,
+        product=product,
+        layer_type=layer_type,
+        source_type=source_type,
+        source_id=source_id,
+        source_line_id=source_line_id,
+        quantity_delta=quantity(quantity_delta),
+        costed_quantity_delta=quantity(costed_quantity_delta),
+        unknown_cost_quantity_delta=quantity(unknown_cost_quantity_delta),
+        unit_cost_minor=unit_cost_minor,
+        value_delta_minor=value_delta_minor,
+        reversal_of=reversal_of,
+        occurred_at=occurred_at,
+    )
+
+
+def _apply_valuation_deltas(
+    balance: StockBalance,
+    *,
+    costed_quantity_delta: Decimal,
+    unknown_cost_quantity_delta: Decimal,
+    value_delta_minor: int,
+):
+    balance.costed_quantity = quantity(balance.costed_quantity + costed_quantity_delta)
+    balance.unknown_cost_quantity = quantity(
+        balance.unknown_cost_quantity + unknown_cost_quantity_delta
+    )
+    balance.inventory_value_minor += value_delta_minor
+    if balance.costed_quantity > ZERO:
+        balance.average_cost_minor = weighted_average_unit_cost(
+            balance.inventory_value_minor, balance.costed_quantity
+        )
+    # At zero/negative stock retain the last known issue cost. This permits the
+    # existing acknowledged-negative-stock policy without inventing a cost for
+    # products that have never had a known-cost receipt.
+    balance.save(
+        update_fields=[
+            "costed_quantity",
+            "unknown_cost_quantity",
+            "inventory_value_minor",
+            "average_cost_minor",
+            "updated_at",
+        ]
+    )
+
+
+def _add_known_valuation(
+    balance: StockBalance,
+    *,
+    amount: Decimal,
+    value_minor: int,
+    layer_type: str,
+    source_type: str,
+    source_id,
+    source_line_id,
+    occurred_at,
+):
+    unit_cost = weighted_average_unit_cost(value_minor, amount)
+    _cost_layer(
+        business=balance.business,
+        location=balance.location,
+        product=balance.product,
+        layer_type=layer_type,
+        source_type=source_type,
+        source_id=source_id,
+        source_line_id=source_line_id,
+        quantity_delta=amount,
+        costed_quantity_delta=amount,
+        unknown_cost_quantity_delta=ZERO,
+        unit_cost_minor=unit_cost,
+        value_delta_minor=value_minor,
+        occurred_at=occurred_at,
+    )
+    _apply_valuation_deltas(
+        balance,
+        costed_quantity_delta=amount,
+        unknown_cost_quantity_delta=ZERO,
+        value_delta_minor=value_minor,
+    )
+
+
+def _add_unknown_valuation(
+    balance: StockBalance,
+    *,
+    amount: Decimal,
+    layer_type: str,
+    source_type: str,
+    source_id,
+    source_line_id,
+    occurred_at,
+):
+    _cost_layer(
+        business=balance.business,
+        location=balance.location,
+        product=balance.product,
+        layer_type=layer_type,
+        source_type=source_type,
+        source_id=source_id,
+        source_line_id=source_line_id,
+        quantity_delta=amount,
+        costed_quantity_delta=ZERO,
+        unknown_cost_quantity_delta=amount,
+        unit_cost_minor=None,
+        value_delta_minor=0,
+        occurred_at=occurred_at,
+    )
+    _apply_valuation_deltas(
+        balance,
+        costed_quantity_delta=ZERO,
+        unknown_cost_quantity_delta=amount,
+        value_delta_minor=0,
+    )
+
+
+def _calculate_outbound_valuation(balance: StockBalance, amount: Decimal):
+    """Consume unknown stock first, then issue known stock at moving average."""
+    unknown_quantity = quantity(min(max(balance.unknown_cost_quantity, ZERO), amount))
+    known_quantity = quantity(amount - unknown_quantity)
+    unit_cost = balance.average_cost_minor
+    value_minor = (
+        _mul_round_half_up(known_quantity, unit_cost) if unit_cost is not None else ZERO_MINOR
+    )
+    return {
+        "quantity": amount,
+        "costed_quantity": known_quantity,
+        "unknown_cost_quantity": unknown_quantity,
+        "unit_cost_minor": unit_cost,
+        "value_minor": value_minor,
+        "complete": unit_cost is not None,
+    }
+
+
+def _post_outbound_valuation(
+    balance: StockBalance,
+    effect: dict[str, Any],
+    *,
+    layer_type: str,
+    source_type: str,
+    source_id,
+    source_line_id,
+    occurred_at,
+):
+    _cost_layer(
+        business=balance.business,
+        location=balance.location,
+        product=balance.product,
+        layer_type=layer_type,
+        source_type=source_type,
+        source_id=source_id,
+        source_line_id=source_line_id,
+        quantity_delta=-effect["quantity"],
+        costed_quantity_delta=-effect["costed_quantity"],
+        unknown_cost_quantity_delta=-effect["unknown_cost_quantity"],
+        unit_cost_minor=effect["unit_cost_minor"],
+        value_delta_minor=-effect["value_minor"],
+        occurred_at=occurred_at,
+    )
+    _apply_valuation_deltas(
+        balance,
+        costed_quantity_delta=-effect["costed_quantity"],
+        unknown_cost_quantity_delta=-effect["unknown_cost_quantity"],
+        value_delta_minor=-effect["value_minor"],
+    )
+
+
+def _reverse_cost_layer(
+    balance: StockBalance,
+    layer: InventoryCostLayer,
+    *,
+    layer_type,
+    occurred_at,
+):
+    _cost_layer(
+        business=balance.business,
+        location=balance.location,
+        product=balance.product,
+        layer_type=layer_type,
+        source_type=layer.source_type,
+        source_id=layer.source_id,
+        source_line_id=layer.source_line_id,
+        quantity_delta=-layer.quantity_delta,
+        costed_quantity_delta=-layer.costed_quantity_delta,
+        unknown_cost_quantity_delta=-layer.unknown_cost_quantity_delta,
+        unit_cost_minor=layer.unit_cost_minor,
+        value_delta_minor=-layer.value_delta_minor,
+        occurred_at=occurred_at,
+        reversal_of=layer,
+    )
+    _apply_valuation_deltas(
+        balance,
+        costed_quantity_delta=-layer.costed_quantity_delta,
+        unknown_cost_quantity_delta=-layer.unknown_cost_quantity_delta,
+        value_delta_minor=-layer.value_delta_minor,
+    )
+
+
 def _locked_balance(business, location, product):
     balance = (
         StockBalance.objects.select_for_update()
@@ -343,6 +572,30 @@ def _locked_balance(business, location, product):
     )
     if balance is None:
         balance = StockBalance.objects.create(business=business, location=location, product=product)
+        return balance
+    # Legacy/direct stock imports predate valuation fields. Reconcile them as
+    # unknown cost once, before the stock movement is applied, rather than
+    # misclassifying the movement itself as unknown stock.
+    expected = quantity(balance.costed_quantity + balance.unknown_cost_quantity)
+    if expected != balance.quantity:
+        difference = quantity(balance.quantity - expected)
+        _cost_layer(
+            business=balance.business,
+            location=balance.location,
+            product=balance.product,
+            layer_type=InventoryCostLayer.Type.OPENING,
+            source_type="STOCK_IMPORT",
+            source_id=balance.id,
+            source_line_id=None,
+            quantity_delta=difference,
+            costed_quantity_delta=ZERO,
+            unknown_cost_quantity_delta=difference,
+            unit_cost_minor=None,
+            value_delta_minor=0,
+            occurred_at=timezone.now(),
+        )
+        balance.unknown_cost_quantity = quantity(balance.unknown_cost_quantity + difference)
+        balance.save(update_fields=["unknown_cost_quantity", "updated_at"])
     return balance
 
 
@@ -409,6 +662,100 @@ def _check_and_apply_stock(
             note=reason,
             occurred_at=occurred_at,
         )
+    return {product_id: values[0] for product_id, values in balances.items()}
+
+
+def _prepare_sale_costing(lines, balances):
+    """Cost all lines for a product at one average, with exact paise remainder."""
+    groups = defaultdict(list)
+    for index, line in enumerate(lines):
+        if line["product"].track_inventory:
+            groups[line["product"].id].append(index)
+    plan = {}
+    effects = {}
+    for product_id, indexes in groups.items():
+        total_quantity = sum((lines[index]["base_quantity"] for index in indexes), ZERO)
+        effect = _calculate_outbound_valuation(balances[product_id], total_quantity)
+        effects[product_id] = effect
+        known_left = effect["costed_quantity"]
+        known_by_line = {}
+        for index in indexes:
+            known = quantity(min(known_left, lines[index]["base_quantity"]))
+            known_by_line[index] = known
+            known_left = quantity(known_left - known)
+        known_indexes = [index for index in indexes if known_by_line[index] > ZERO]
+        value_left = effect["value_minor"]
+        for position, index in enumerate(known_indexes):
+            if position == len(known_indexes) - 1:
+                value = value_left
+            else:
+                value = _round_half_up(
+                    Decimal(effect["value_minor"])
+                    * known_by_line[index]
+                    / effect["costed_quantity"]
+                )
+            value_left -= value
+            known = known_by_line[index]
+            unknown = quantity(lines[index]["base_quantity"] - known)
+            plan[index] = {
+                "quantity": lines[index]["base_quantity"],
+                "costed_quantity": known,
+                "unknown_cost_quantity": unknown,
+                "unit_cost_minor": effect["unit_cost_minor"],
+                "value_minor": value,
+                "complete": effect["unit_cost_minor"] is not None and unknown == ZERO,
+            }
+        for index in indexes:
+            plan.setdefault(
+                index,
+                {
+                    "quantity": lines[index]["base_quantity"],
+                    "costed_quantity": ZERO,
+                    "unknown_cost_quantity": lines[index]["base_quantity"],
+                    "unit_cost_minor": None,
+                    "value_minor": ZERO_MINOR,
+                    "complete": False,
+                },
+            )
+    return plan, effects
+
+
+def _record_outbound_costing(
+    document,
+    lines,
+    plan,
+    effects,
+    balances,
+    *,
+    source_type,
+    layer_type,
+):
+    for index, line in enumerate(lines):
+        if not line["product"].track_inventory:
+            continue
+        cost = plan[index]
+        _cost_layer(
+            business=document.business,
+            location=document.location,
+            product=line["product"],
+            layer_type=layer_type,
+            source_type=source_type,
+            source_id=document.id,
+            source_line_id=line["source_line"].id,
+            quantity_delta=-cost["quantity"],
+            costed_quantity_delta=-cost["costed_quantity"],
+            unknown_cost_quantity_delta=-cost["unknown_cost_quantity"],
+            unit_cost_minor=cost["unit_cost_minor"],
+            value_delta_minor=-cost["value_minor"],
+            occurred_at=document.posted_at,
+        )
+    for product_id, effect in effects.items():
+        _apply_valuation_deltas(
+            balances[product_id],
+            costed_quantity_delta=-effect["costed_quantity"],
+            unknown_cost_quantity_delta=-effect["unknown_cost_quantity"],
+            value_delta_minor=-effect["value_minor"],
+        )
 
 
 def _create_payment_locked(
@@ -470,6 +817,11 @@ def post_sale(data: dict[str, Any], actor, *, source="API"):
     location = data["location"]
     _validate_common(business, location)
     membership = require_membership(actor, business.id, location_id=location.id)
+    if (
+        membership.role == Membership.Role.CASHIER
+        and data.get("price_mode", Sale.PriceMode.RETAIL) == Sale.PriceMode.WHOLESALE
+    ):
+        raise PermissionDenied("Your role cannot use wholesale pricing")
     key = data["idempotency_key"]
     if existing := _existing(business, actor, "sale.post", key, Sale):
         return existing, True
@@ -530,7 +882,7 @@ def post_sale(data: dict[str, Any], actor, *, source="API"):
             ]
         },
     )
-    _check_and_apply_stock(
+    balances = _check_and_apply_stock(
         business=business,
         location=location,
         deltas=deltas,
@@ -543,8 +895,10 @@ def post_sale(data: dict[str, Any], actor, *, source="API"):
         reason=sale.negative_stock_reason,
         packs=packs,
     )
-    for line in totals["lines"]:
-        SaleLine.objects.create(
+    cost_plan, cost_effects = _prepare_sale_costing(totals["lines"], balances)
+    for index, line in enumerate(totals["lines"]):
+        cost = cost_plan.get(index, {})
+        line["source_line"] = SaleLine.objects.create(
             sale=sale,
             product=line["product"],
             pack=line["pack"],
@@ -561,7 +915,24 @@ def post_sale(data: dict[str, Any], actor, *, source="API"):
             sgst_amount_minor=line["sgst_amount_minor"],
             igst_amount_minor=line["igst_amount_minor"],
             line_total_minor=line["line_total_minor"],
+            unit_cost_minor=cost.get("unit_cost_minor"),
+            cogs_minor=(
+                cost["value_minor"]
+                if cost.get("unit_cost_minor") is not None
+                and cost.get("costed_quantity", ZERO) > ZERO
+                else None
+            ),
+            costing_complete=cost.get("complete", False),
         )
+    _record_outbound_costing(
+        sale,
+        totals["lines"],
+        cost_plan,
+        cost_effects,
+        balances,
+        source_type="SALE",
+        layer_type=InventoryCostLayer.Type.SALE,
+    )
     if customer:
         PartyLedgerEntry.objects.create(
             business=business,
@@ -657,7 +1028,7 @@ def post_purchase(data: dict[str, Any], actor, *, source="API"):
     deltas = defaultdict(lambda: ZERO)
     packs = {}
     for line in totals["lines"]:
-        PurchaseLine.objects.create(
+        line["purchase_line"] = PurchaseLine.objects.create(
             purchase=purchase,
             product=line["product"],
             pack=line["pack"],
@@ -678,7 +1049,7 @@ def post_purchase(data: dict[str, Any], actor, *, source="API"):
         if line["product"].track_inventory:
             deltas[line["product"].id] += line["base_quantity"]
             packs[line["product"].id] = line["pack"]
-    _check_and_apply_stock(
+    balances = _check_and_apply_stock(
         business=business,
         location=location,
         deltas=deltas,
@@ -689,6 +1060,20 @@ def post_purchase(data: dict[str, Any], actor, *, source="API"):
         actor_role=Membership.Role.MANAGER,
         packs=packs,
     )
+    for line in totals["lines"]:
+        if line["product"].track_inventory:
+            _add_known_valuation(
+                balances[line["product"].id],
+                amount=line["base_quantity"],
+                # Recoverable GST is not inventory cost; discounts are already
+                # allocated into the line's taxable merchandise value.
+                value_minor=line["taxable_value_minor"],
+                layer_type=InventoryCostLayer.Type.PURCHASE,
+                source_type="PURCHASE",
+                source_id=purchase.id,
+                source_line_id=line["purchase_line"].id,
+                occurred_at=purchase.posted_at,
+            )
     PartyLedgerEntry.objects.create(
         business=business,
         location=location,
@@ -798,6 +1183,195 @@ def post_payment(data: dict[str, Any], actor, *, source="API"):
     return payment, False
 
 
+def _refresh_document_payment_totals(document):
+    allocation_filter = {"sale": document} if isinstance(document, Sale) else {"purchase": document}
+    allocated = (
+        PaymentAllocation.objects.filter(
+            **allocation_filter, payment__status=DocumentStatus.POSTED
+        ).aggregate(total=Sum("amount_minor"))["total"]
+        or 0
+    )
+    if allocated > document.grand_total_minor:
+        raise DomainConflict(
+            "Allocated payments exceed the document total", "payment_exceeds_document_total"
+        )
+    document.paid_total_minor = allocated
+    document.due_total_minor = document.grand_total_minor - allocated
+    document.save(update_fields=["paid_total_minor", "due_total_minor", "updated_at"])
+
+
+@transaction.atomic
+def reallocate_payment(
+    payment: Payment,
+    allocations: list[dict[str, Any]],
+    actor,
+    *,
+    reason: str,
+    idempotency_key: str,
+    source="API",
+):
+    """Replace a posted payment's allocations as one audited transaction."""
+    business = Business.objects.select_for_update().get(pk=payment.business_id)
+    payment = Payment.objects.select_for_update().get(pk=payment.pk, business=business)
+    require_membership(
+        actor,
+        business.id,
+        roles=[Membership.Role.OWNER, Membership.Role.MANAGER],
+        location_id=payment.location_id,
+    )
+    if existing := _existing(business, actor, "payment.reallocate", idempotency_key, Payment):
+        return existing, True
+    if payment.status != DocumentStatus.POSTED:
+        raise DomainConflict("Only a posted payment can be reallocated", "payment_not_posted")
+    if not reason.strip():
+        raise ValidationError("A reallocation reason is required")
+
+    normalized = []
+    seen = set()
+    for item in allocations:
+        sale_id = item.get("sale_id")
+        purchase_id = item.get("purchase_id")
+        if item.get("document_type") and item.get("document_id"):
+            if sale_id or purchase_id:
+                raise ValidationError("Supply only one allocation document identifier")
+            if item["document_type"] == "SALE":
+                sale_id = item["document_id"]
+            elif item["document_type"] == "PURCHASE":
+                purchase_id = item["document_id"]
+            else:
+                raise ValidationError("Invalid allocation document type")
+        if bool(sale_id) == bool(purchase_id):
+            raise ValidationError("Each allocation must target exactly one document")
+        document_type = "SALE" if sale_id else "PURCHASE"
+        document_id = sale_id or purchase_id
+        expected_type = "SALE" if payment.direction == Payment.Direction.RECEIPT else "PURCHASE"
+        if document_type != expected_type:
+            raise ValidationError("Allocation document type does not match the payment direction")
+        key = (document_type, str(document_id))
+        if key in seen:
+            raise ValidationError("A document can appear only once in a reallocation")
+        seen.add(key)
+        amount = as_minor(item["amount_minor"])
+        if amount <= 0:
+            raise ValidationError("Allocation amounts must be greater than zero")
+        normalized.append(
+            {
+                "document_type": document_type,
+                "document_id": str(document_id),
+                "amount_minor": amount,
+            }
+        )
+    requested_total = sum(item["amount_minor"] for item in normalized)
+    if requested_total > payment.amount_minor:
+        raise DomainConflict(
+            "Allocations exceed the payment amount", "payment_allocation_exceeds_payment"
+        )
+    if requested_total != payment.amount_minor:
+        raise ValidationError("A reallocation must allocate the full payment amount")
+
+    previous = [
+        {
+            "document_type": "SALE" if allocation.sale_id else "PURCHASE",
+            "document_id": str(allocation.sale_id or allocation.purchase_id),
+            "amount_minor": allocation.amount_minor,
+        }
+        for allocation in payment.allocations.select_related("sale", "purchase")
+    ]
+    if payment.direction == Payment.Direction.RECEIPT:
+        documents = {
+            str(document.pk): document
+            for document in Sale.objects.select_for_update().filter(
+                business=business,
+                location=payment.location,
+                customer=payment.party,
+                pk__in=[item["document_id"] for item in normalized],
+            )
+        }
+    else:
+        documents = {
+            str(document.pk): document
+            for document in Purchase.objects.select_for_update().filter(
+                business=business,
+                location=payment.location,
+                supplier=payment.party,
+                pk__in=[item["document_id"] for item in normalized],
+            )
+        }
+    # Lock legacy/current targets too; all are refreshed after replacement.
+    old_sale_ids = [item["document_id"] for item in previous if item["document_type"] == "SALE"]
+    old_purchase_ids = [
+        item["document_id"] for item in previous if item["document_type"] == "PURCHASE"
+    ]
+    if old_sale_ids:
+        for document in Sale.objects.select_for_update().filter(
+            business=business, pk__in=old_sale_ids
+        ):
+            documents[str(document.pk)] = document
+    if old_purchase_ids:
+        for document in Purchase.objects.select_for_update().filter(
+            business=business, pk__in=old_purchase_ids
+        ):
+            documents[str(document.pk)] = document
+
+    for item in normalized:
+        document = documents.get(item["document_id"])
+        if document is None:
+            raise ValidationError(
+                "Every allocation must target a document in this tenant and location"
+            )
+        if document.status != DocumentStatus.POSTED:
+            raise ValidationError("Only posted documents can receive an allocation")
+        if payment.direction == Payment.Direction.RECEIPT:
+            if document.customer_id != payment.party_id:
+                raise ValidationError("The sale customer must match the payment party")
+            other_allocated = (
+                PaymentAllocation.objects.filter(sale=document)
+                .exclude(payment=payment)
+                .filter(payment__status=DocumentStatus.POSTED)
+                .aggregate(total=Sum("amount_minor"))["total"]
+                or 0
+            )
+        else:
+            if document.supplier_id != payment.party_id:
+                raise ValidationError("The purchase supplier must match the payment party")
+            other_allocated = (
+                PaymentAllocation.objects.filter(purchase=document)
+                .exclude(payment=payment)
+                .filter(payment__status=DocumentStatus.POSTED)
+                .aggregate(total=Sum("amount_minor"))["total"]
+                or 0
+            )
+        available = document.grand_total_minor - other_allocated
+        if item["amount_minor"] > available:
+            raise DomainConflict(
+                "Allocation exceeds the document outstanding amount", "payment_exceeds_due"
+            )
+
+    payment.allocations.all().delete()
+    for item in normalized:
+        PaymentAllocation.objects.create(
+            payment=payment,
+            sale=documents[item["document_id"]] if item["document_type"] == "SALE" else None,
+            purchase=documents[item["document_id"]]
+            if item["document_type"] == "PURCHASE"
+            else None,
+            amount_minor=item["amount_minor"],
+        )
+    for key in {item["document_id"] for item in previous} | {
+        item["document_id"] for item in normalized
+    }:
+        _refresh_document_payment_totals(documents[key])
+    _remember(business, actor, "payment.reallocate", idempotency_key, payment)
+    _audit(
+        payment,
+        actor,
+        "payment.reallocated",
+        source=source,
+        metadata={"reason": reason, "previous": previous, "allocations": normalized},
+    )
+    return payment, False
+
+
 @transaction.atomic
 def post_expense(data: dict[str, Any], actor, *, source="API"):
     business = Business.objects.select_for_update().get(pk=data["business"].pk)
@@ -904,7 +1478,20 @@ def post_transfer(data: dict[str, Any], actor, *, source="API"):
         negative_stock_acknowledged=data.get("negative_stock_acknowledged", False),
         negative_stock_reason=data.get("negative_stock_reason", ""),
     )
-    _check_and_apply_stock(
+    transfer_lines = []
+    for pack, product, count, base in prepared:
+        source_line = StockTransferLine.objects.create(
+            transfer=transfer,
+            product=product,
+            pack=pack,
+            quantity=count,
+            conversion_factor=pack.conversion_factor,
+            base_quantity=base,
+        )
+        transfer_lines.append(
+            {"product": product, "base_quantity": base, "source_line": source_line}
+        )
+    outgoing_balances = _check_and_apply_stock(
         business=business,
         location=from_location,
         deltas=deltas,
@@ -918,7 +1505,7 @@ def post_transfer(data: dict[str, Any], actor, *, source="API"):
         packs=packs,
     )
     incoming = {product_id: -delta for product_id, delta in deltas.items()}
-    _check_and_apply_stock(
+    incoming_balances = _check_and_apply_stock(
         business=business,
         location=to_location,
         deltas=incoming,
@@ -929,15 +1516,40 @@ def post_transfer(data: dict[str, Any], actor, *, source="API"):
         actor_role=membership.role,
         packs=packs,
     )
-    for pack, product, count, base in prepared:
-        StockTransferLine.objects.create(
-            transfer=transfer,
-            product=product,
-            pack=pack,
-            quantity=count,
-            conversion_factor=pack.conversion_factor,
-            base_quantity=base,
-        )
+    cost_plan, cost_effects = _prepare_sale_costing(transfer_lines, outgoing_balances)
+    _record_outbound_costing(
+        transfer,
+        transfer_lines,
+        cost_plan,
+        cost_effects,
+        outgoing_balances,
+        source_type="TRANSFER",
+        layer_type=InventoryCostLayer.Type.TRANSFER,
+    )
+    for index, line in enumerate(transfer_lines):
+        cost = cost_plan[index]
+        balance = incoming_balances[line["product"].id]
+        if cost["costed_quantity"] > ZERO:
+            _add_known_valuation(
+                balance,
+                amount=cost["costed_quantity"],
+                value_minor=cost["value_minor"],
+                layer_type=InventoryCostLayer.Type.TRANSFER,
+                source_type="TRANSFER",
+                source_id=transfer.id,
+                source_line_id=line["source_line"].id,
+                occurred_at=transfer.posted_at,
+            )
+        if cost["unknown_cost_quantity"] > ZERO:
+            _add_unknown_valuation(
+                balance,
+                amount=cost["unknown_cost_quantity"],
+                layer_type=InventoryCostLayer.Type.TRANSFER,
+                source_type="TRANSFER",
+                source_id=transfer.id,
+                source_line_id=line["source_line"].id,
+                occurred_at=transfer.posted_at,
+            )
     _remember(business, actor, "transfer.post", key, transfer)
     _audit(transfer, actor, "transfer.posted", source=source)
     _outbox(transfer, "transfer.posted")
@@ -965,18 +1577,41 @@ def post_stock_adjustment(data: dict[str, Any], actor, *, source="API"):
     if not delta:
         raise ValidationError("Stock adjustment cannot be zero")
     source_id = data.get("source_id") or uuid.uuid4()
-    _check_and_apply_stock(
+    occurred_at = timezone.now()
+    balances = _check_and_apply_stock(
         business=business,
         location=location,
         deltas={product.id: delta},
         source_type="STOCK_ADJUSTMENT",
         source_id=source_id,
         movement_type=data.get("movement_type", StockMovement.Type.ADJUSTMENT),
-        occurred_at=timezone.now(),
+        occurred_at=occurred_at,
         actor_role=membership.role,
         acknowledged=data.get("negative_stock_acknowledged", False),
         reason=data["reason"],
     )
+    balance = balances[product.id]
+    if delta > ZERO:
+        _add_unknown_valuation(
+            balance,
+            amount=delta,
+            layer_type=InventoryCostLayer.Type.ADJUSTMENT,
+            source_type="STOCK_ADJUSTMENT",
+            source_id=source_id,
+            source_line_id=None,
+            occurred_at=occurred_at,
+        )
+    else:
+        effect = _calculate_outbound_valuation(balance, -delta)
+        _post_outbound_valuation(
+            balance,
+            effect,
+            layer_type=InventoryCostLayer.Type.ADJUSTMENT,
+            source_type="STOCK_ADJUSTMENT",
+            source_id=source_id,
+            source_line_id=None,
+            occurred_at=occurred_at,
+        )
     movement = StockMovement.objects.get(
         source_type="STOCK_ADJUSTMENT", source_id=source_id, product=product, location=location
     )
@@ -1111,18 +1746,48 @@ def reverse_sale(sale: Sale, actor, *, reason: str, idempotency_key: str, source
         if line.product.track_inventory:
             deltas[line.product_id] += line.base_quantity
             packs[line.product_id] = line.pack
-    _check_and_apply_stock(
+    occurred_at = timezone.now()
+    balances = _check_and_apply_stock(
         business=business,
         location=sale.location,
         deltas=deltas,
         source_type="SALE_REVERSAL",
         source_id=sale.id,
         movement_type=StockMovement.Type.SALE_REVERSAL,
-        occurred_at=timezone.now(),
+        occurred_at=occurred_at,
         actor_role=Membership.Role.MANAGER,
         reason=reason,
         packs=packs,
     )
+    for line in sale.lines.all():
+        if not line.product.track_inventory:
+            continue
+        balance = balances[line.product_id]
+        original = InventoryCostLayer.objects.filter(
+            source_type="SALE",
+            source_id=sale.id,
+            source_line_id=line.id,
+            reversal_of__isnull=True,
+        ).first()
+        if original:
+            _reverse_cost_layer(
+                balance,
+                original,
+                layer_type=InventoryCostLayer.Type.SALE_REVERSAL,
+                occurred_at=occurred_at,
+            )
+        else:
+            # A legacy sale has no reliable historical cost. Restore its stock
+            # as unknown rather than deriving COGS from today's average.
+            _add_unknown_valuation(
+                balance,
+                amount=line.base_quantity,
+                layer_type=InventoryCostLayer.Type.SALE_REVERSAL,
+                source_type="SALE_REVERSAL",
+                source_id=sale.id,
+                source_line_id=line.id,
+                occurred_at=occurred_at,
+            )
     if sale.customer:
         PartyLedgerEntry.objects.create(
             business=business,
@@ -1192,19 +1857,48 @@ def reverse_purchase(
         if line.product.track_inventory:
             deltas[line.product_id] -= line.base_quantity
             packs[line.product_id] = line.pack
-    _check_and_apply_stock(
+    occurred_at = timezone.now()
+    balances = _check_and_apply_stock(
         business=business,
         location=purchase.location,
         deltas=deltas,
         source_type="PURCHASE_REVERSAL",
         source_id=purchase.id,
         movement_type=StockMovement.Type.PURCHASE_REVERSAL,
-        occurred_at=timezone.now(),
+        occurred_at=occurred_at,
         actor_role=membership.role,
         acknowledged=negative_stock_acknowledged,
         reason=reason,
         packs=packs,
     )
+    for line in purchase.lines.all():
+        if not line.product.track_inventory:
+            continue
+        balance = balances[line.product_id]
+        original = InventoryCostLayer.objects.filter(
+            source_type="PURCHASE",
+            source_id=purchase.id,
+            source_line_id=line.id,
+            reversal_of__isnull=True,
+        ).first()
+        if original:
+            _reverse_cost_layer(
+                balance,
+                original,
+                layer_type=InventoryCostLayer.Type.PURCHASE_REVERSAL,
+                occurred_at=occurred_at,
+            )
+        else:
+            effect = _calculate_outbound_valuation(balance, line.base_quantity)
+            _post_outbound_valuation(
+                balance,
+                effect,
+                layer_type=InventoryCostLayer.Type.PURCHASE_REVERSAL,
+                source_type="PURCHASE",
+                source_id=purchase.id,
+                source_line_id=line.id,
+                occurred_at=occurred_at,
+            )
     PartyLedgerEntry.objects.create(
         business=business,
         location=purchase.location,
@@ -1288,31 +1982,86 @@ def reverse_transfer(
         incoming_to_source[line.product_id] += line.base_quantity
         outgoing_from_destination[line.product_id] -= line.base_quantity
         packs[line.product_id] = line.pack
-    _check_and_apply_stock(
+    occurred_at = timezone.now()
+    destination_balances = _check_and_apply_stock(
         business=business,
         location=transfer.to_location,
         deltas=outgoing_from_destination,
         source_type="TRANSFER_REVERSAL",
         source_id=transfer.id,
         movement_type=StockMovement.Type.TRANSFER_REVERSAL,
-        occurred_at=timezone.now(),
+        occurred_at=occurred_at,
         actor_role=membership.role,
         acknowledged=negative_stock_acknowledged,
         reason=reason,
         packs=packs,
     )
-    _check_and_apply_stock(
+    source_balances = _check_and_apply_stock(
         business=business,
         location=transfer.from_location,
         deltas=incoming_to_source,
         source_type="TRANSFER_REVERSAL",
         source_id=transfer.id,
         movement_type=StockMovement.Type.TRANSFER_REVERSAL,
-        occurred_at=timezone.now(),
+        occurred_at=occurred_at,
         actor_role=membership.role,
         reason=reason,
         packs=packs,
     )
+    for line in transfer.lines.all():
+        destination_balance = destination_balances[line.product_id]
+        source_balance = source_balances[line.product_id]
+        incoming_layers = list(
+            InventoryCostLayer.objects.filter(
+                source_type="TRANSFER",
+                source_id=transfer.id,
+                source_line_id=line.id,
+                location=transfer.to_location,
+                reversal_of__isnull=True,
+            )
+        )
+        outgoing = InventoryCostLayer.objects.filter(
+            source_type="TRANSFER",
+            source_id=transfer.id,
+            source_line_id=line.id,
+            location=transfer.from_location,
+            reversal_of__isnull=True,
+        ).first()
+        for incoming in incoming_layers:
+            _reverse_cost_layer(
+                destination_balance,
+                incoming,
+                layer_type=InventoryCostLayer.Type.TRANSFER,
+                occurred_at=occurred_at,
+            )
+        if not incoming_layers:
+            effect = _calculate_outbound_valuation(destination_balance, line.base_quantity)
+            _post_outbound_valuation(
+                destination_balance,
+                effect,
+                layer_type=InventoryCostLayer.Type.TRANSFER,
+                source_type="TRANSFER_REVERSAL",
+                source_id=transfer.id,
+                source_line_id=line.id,
+                occurred_at=occurred_at,
+            )
+        if outgoing:
+            _reverse_cost_layer(
+                source_balance,
+                outgoing,
+                layer_type=InventoryCostLayer.Type.TRANSFER,
+                occurred_at=occurred_at,
+            )
+        else:
+            _add_unknown_valuation(
+                source_balance,
+                amount=line.base_quantity,
+                layer_type=InventoryCostLayer.Type.TRANSFER,
+                source_type="TRANSFER_REVERSAL",
+                source_id=transfer.id,
+                source_line_id=line.id,
+                occurred_at=occurred_at,
+            )
     transfer.status = DocumentStatus.REVERSED
     transfer.reversal_reason = reason
     transfer.reversed_at = timezone.now()

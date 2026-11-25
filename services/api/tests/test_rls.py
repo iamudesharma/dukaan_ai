@@ -20,6 +20,7 @@ import os
 import uuid
 
 import pytest
+from conftest import rls_is_enforced
 from django.conf import settings
 from django.db import DatabaseError, connection
 from django.db.utils import load_backend
@@ -39,6 +40,16 @@ requires_postgres = pytest.mark.skipif(
 
 def _app_role() -> str:
     return getattr(settings, "DUKAAN_APP_DB_ROLE", rls.DEFAULT_APP_ROLE)
+
+
+def _current_role_bypasses_rls() -> bool:
+    """Superusers and roles with BYPASSRLS skip row-level security entirely.
+
+    ``FORCE ROW LEVEL SECURITY`` binds table *owners*, but it does not bind a
+    superuser or a role granted BYPASSRLS: PostgreSQL exempts those before any
+    policy is consulted.
+    """
+    return not rls_is_enforced(connection)
 
 
 @pytest.fixture
@@ -72,6 +83,36 @@ def app_connection():
         yield wrapper
     finally:
         wrapper.close()
+
+
+@requires_postgres
+def test_app_role_has_runtime_identity_and_auth_grants(app_connection):
+    expected = {
+        "common_user": {"SELECT", "INSERT", "UPDATE"},
+        "authentication_phoneotp": {"SELECT", "INSERT", "UPDATE", "DELETE"},
+        "authentication_blacklistedtoken": {"SELECT", "INSERT"},
+        "authentication_sessionversion": {"SELECT", "INSERT", "UPDATE"},
+        "django_migrations": {"SELECT"},
+        "integrations_gmailconnection": {"SELECT", "INSERT", "UPDATE", "DELETE"},
+    }
+    with app_connection.cursor() as cursor:
+        for table, privileges in expected.items():
+            for privilege in privileges:
+                cursor.execute(
+                    "SELECT has_table_privilege(current_user, %s, %s)",
+                    [table, privilege],
+                )
+                assert cursor.fetchone()[0], f"{table} needs {privilege}"
+        for sequence in (
+            "authentication_phoneotp_id_seq",
+            "authentication_blacklistedtoken_id_seq",
+            "authentication_sessionversion_id_seq",
+        ):
+            cursor.execute(
+                "SELECT has_sequence_privilege(current_user, %s, 'USAGE')",
+                [sequence],
+            )
+            assert cursor.fetchone()[0], f"{sequence} needs USAGE"
 
 
 @requires_postgres
@@ -113,8 +154,20 @@ def test_cross_tenant_write_is_rejected(two_tenants, app_connection):
 
 @requires_postgres
 def test_owner_writes_outside_scope_are_rejected(two_tenants):
-    """FORCE RLS binds table owners too: the migration role cannot smuggle
-    rows into a business outside its connection scope."""
+    """FORCE RLS binds table owners too: a table-owning migration role cannot
+    smuggle rows into a business outside its connection scope.
+
+    The guarantee only holds for an owner that is neither a superuser nor
+    granted BYPASSRLS, so the test states that precondition instead of failing
+    where the environment cannot satisfy it.
+    """
+    if _current_role_bypasses_rls():
+        pytest.skip(
+            "connected role is SUPERUSER or has BYPASSRLS, which PostgreSQL "
+            "exempts from row-level security before any policy applies; run "
+            "against a table-owning non-superuser role to exercise this "
+            "(see docs/runbooks/database-roles.md)"
+        )
     _, businesses = two_tenants
     params = dict(connection.settings_dict)
     wrapper = load_backend(params["ENGINE"]).DatabaseWrapper(params, "rls_owner_probe")
@@ -124,9 +177,10 @@ def test_owner_writes_outside_scope_are_rejected(two_tenants):
             with pytest.raises(DatabaseError, match="row-level security policy"):
                 cursor.execute(
                     "INSERT INTO catalog_product "
-                    "(id, created_at, updated_at, business_id, name, base_unit, "
-                    "track_inventory, tax_rate_bps, low_stock_threshold, is_active) "
-                    "VALUES (%s, now(), now(), %s, 'owner-smuggled', 'PIECE', true, 0, 0, true)",
+                    "(id, created_at, updated_at, business_id, name, sku, base_unit, "
+                    "track_inventory, hsn_sac, tax_rate_bps, low_stock_threshold, is_active) "
+                    "VALUES (%s, now(), now(), %s, 'owner-smuggled', '', 'PIECE', "
+                    "true, '', 0, 0, true)",
                     [str(uuid.uuid4()), str(businesses[1].pk)],
                 )
     finally:

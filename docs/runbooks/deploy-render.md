@@ -1,28 +1,33 @@
 # Render deployment runbook
 
-The [`render.yaml`](../../render.yaml) Blueprint creates the React static console, Django web service, Celery worker, one-minute scheduled dispatcher, and private persistent Key Value service in Singapore. Supabase remains the durable database, Auth, and receipt storage provider.
+The [`render.yaml`](../../render.yaml) Blueprint creates the React static console, Django web service, Celery worker, one-minute scheduled dispatcher, and private persistent Key Value service in Singapore. Neon or Supabase remains the durable Postgres provider; private receipt storage is configured separately. Django owns authentication.
 
 ## One-time prerequisites
 
-1. Create separate staging and production Supabase projects in the closest appropriate Southeast Asia region.
+1. Create separate staging and production Postgres projects (Neon or Supabase) in the closest appropriate Southeast Asia region.
 2. In production, enable SSL enforcement, automated backups, point-in-time recovery, MFA for administrators, and the recovery controls in [backups and recovery](../backups-and-recovery.md).
-3. Create a private `receipts` bucket. Confirm that no public policy grants object access.
+3. Create a private `business-documents` bucket. Confirm that no public policy grants object access.
 4. Choose the persistent/session database connection appropriate for a long-running Django service. If direct IPv6 is unavailable, use the Supavisor session pooler rather than transaction mode. Require TLS with `sslmode=require`. Transaction-mode pooling is not supported: request tenant scope uses connection-local settings that transaction mode discards (see [database roles](database-roles.md)).
 5. Connect the repository to Render and create a Blueprint from `render.yaml`. Review the proposed paid resources before applying it.
 
 The Blueprint prompts for service-level values during initial creation. Render does not support secret prompts inside Blueprint-defined environment groups, so copy the same project/connection values carefully where repeated:
 
 - `DJANGO_ALLOWED_HOSTS`: the exact Render API hostname and later the custom API hostname, comma-separated without schemes;
-- `DATABASE_URL`: the production Supabase connection string, URL-encoded and with TLS required;
+- `DATABASE_URL`: the production Supabase **operator** connection string, URL-encoded and with TLS required;
+- `DUKAAN_APP_DATABASE_URL`: the separate least-privilege `dukaan_app` runtime connection string, also URL-encoded and TLS-required; `DUKAAN_USE_APP_DB_ROLE=true` is supplied by the shared runtime group;
 - `CORS_ALLOWED_ORIGINS`: the exact production and staging web origins;
-- `SUPABASE_URL`, `SUPABASE_JWKS_URL`, and `SUPABASE_JWT_ISSUER` from the same production project;
-- `SUPABASE_SERVICE_ROLE_KEY`: server-only, never the publishable/anon key;
-- `OPENAI_API_KEY`: server-only assistant access; leave AI feature flags off until configured and evaluated;
-- `FCM_SERVICE_ACCOUNT_JSON`: server-only notification credentials.
+- `AI_API_KEY`: server-only assistant access; leave AI feature flags off until configured and evaluated;
+- `FCM_PROJECT_ID` and `FCM_SERVICE_ACCOUNT_JSON`: server-only notification credentials; keep `FCM_ENABLED=false` until real device delivery is tested.
+- `ATTACHMENT_SCANNER`: dotted scanner implementation path on API/worker; production quarantine is required and fails closed without it.
+- `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, and `SUPABASE_STORAGE_BUCKET`: also required on the scheduler because its bounded retention pass deletes expired objects.
 
-For `dukaan-web`, provide the public `VITE_API_URL`, `VITE_SUPABASE_URL`, and `VITE_SUPABASE_ANON_KEY`. Keep `VITE_DEMO_MODE=false`; `VITE_SENTRY_DSN` is optional but recommended. No server secret may use a `VITE_*` name.
+For `dukaan-web`, provide the public `VITE_API_URL`; `VITE_SENTRY_DSN` is optional but recommended. No server secret may use a `VITE_*` name.
 
-The API needs all values above plus `DUKAAN_APP_DB_ROLE`/`DUKAAN_APP_DB_PASSWORD` (the least-privilege runtime role; see [database roles](database-roles.md)). The worker needs the same `DATABASE_URL`, `SUPABASE_URL`, and service-role key. The scheduler needs the same `DATABASE_URL`. The shared `dukaan-runtime` environment group generates one Django secret for all three Python services and holds only non-secret constants. Render injects the private Key Value connection into `REDIS_URL` and `CELERY_BROKER_URL`.
+SMS and Gmail are optional server-side integrations. To enable MSG91 OTP delivery, set `SMS_ENABLED=true`, `MSG91_AUTH_KEY`, and the approved `MSG91_OTP_TEMPLATE_ID`; keep `OTP_EXPOSE_DEV_CODE=false`. To enable Gmail receipt reading, set `GMAIL_ENABLED=true`, Google OAuth client values, the exact callback URI, web return URL, and a Fernet token-encryption key. See [SMS, Gmail receipts, and local transcription](sms-and-gmail.md).
+
+The API needs all values above plus `DUKAAN_APP_DB_ROLE` (the least-privilege runtime role name; see [database roles](database-roles.md)). The worker and scheduler need both database URLs and the same runtime role flag. The shared `dukaan-runtime` environment group generates one Django secret for all three Python services, sets `DUKAAN_USE_APP_DB_ROLE=true`, and holds only non-secret constants, including `SMS_ENABLED=false` and `OTP_EXPOSE_DEV_CODE=false` (see below). Render injects the private Key Value connection into `REDIS_URL` and `CELERY_BROKER_URL`; production uses that Redis for shared DRF throttle counters. Optional `DUKAAN_THROTTLE_*_RATE` values can tighten the default per-user/per-IP limits.
+
+Password sign-in always works. OTP sign-in appears in both clients only when the API reports it enabled. Without MSG91 credentials, keep `SMS_ENABLED=false` and `OTP_EXPOSE_DEV_CODE=false`; OTP endpoints then answer `503 sms_not_configured`. `OTP_EXPOSE_DEV_CODE=true` returns the code in the API response and is only ever acceptable for local development.
 
 After Blueprint creation, add `SENTRY_DSN` manually to `dukaan-runtime` when an error-tracking project and alert owner exist. Render preserves manually added environment-group values that the Blueprint omits.
 
@@ -30,8 +35,8 @@ After Blueprint creation, add `SENTRY_DSN` manually to `dukaan-runtime` when an 
 
 1. Keep Supabase network restrictions open only long enough to discover the Render services' documented outbound IP ranges. Then allow the required ranges and retest before launch.
 2. Confirm CI is green for the exact commit.
-3. Apply the Blueprint. Python services install using `uv sync --locked --no-dev`. The API collects static files and its pre-deploy phase runs `uv run --locked --no-dev python manage.py migrate --noinput` once before traffic switches. `UV_VERSION` and `PYTHON_VERSION` are pinned in the shared runtime group.
-4. Confirm the worker is connected and the scheduler completes without overlapping or duplicating due work.
+3. Apply the Blueprint. The API, worker, and scheduler build from `services/api/Dockerfile`. OCR is delegated to the Rust `doc-extractor` service using OCRia-nano-1; configure `OCR_API_URL` and optional `OCR_API_TOKEN` on the worker. The API collects static files during the image build and its pre-deploy phase runs `DUKAAN_USE_APP_DB_ROLE=false uv run --locked --no-dev python manage.py migrate --noinput` once before traffic switches, forcing the operator URL. The running API, worker, and scheduler use `DUKAAN_APP_DATABASE_URL`.
+4. Confirm the worker is connected and the scheduler completes `run_scheduled` without overlapping or duplicating due work. Verify due reminders retry idempotently and `purge_expired_attachments --dry-run` reports only policy-eligible objects before enabling deletion.
 5. Add custom API and web domains and certificates in Render. Update `DJANGO_ALLOWED_HOSTS`, mobile build configuration, `VITE_API_URL`, and the exact web CORS origin.
 6. Confirm the web console's SPA rewrite works on a directly loaded nested route such as `/reports`.
 

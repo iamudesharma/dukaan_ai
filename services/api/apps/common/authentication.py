@@ -7,7 +7,7 @@ from rest_framework import exceptions
 from rest_framework_simplejwt.authentication import JWTAuthentication
 from rest_framework_simplejwt.exceptions import TokenError
 
-from apps.authentication.models import BlacklistedToken
+from apps.authentication.models import BlacklistedToken, SessionVersion
 
 User = get_user_model()
 
@@ -38,6 +38,8 @@ class CustomJWTAuthentication(JWTAuthentication):
         user = self.get_user(validated_token)
         if not user.is_active:
             raise exceptions.AuthenticationFailed("User is disabled")
+        if not SessionVersion.matches(user, validated_token):
+            raise exceptions.AuthenticationFailed("Token has been revoked")
 
         from apps.tenancy import rls
 

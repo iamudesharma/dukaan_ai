@@ -1,15 +1,17 @@
 import 'dart:async';
 
-import 'package:decimal/decimal.dart';
 import 'package:dio/dio.dart';
-import 'package:dukaan_ai_mobile/core/config.dart';
+import 'package:dukaan_ai_mobile/domain/backend_models.dart';
 import 'package:dukaan_ai_mobile/domain/models.dart';
 import 'package:uuid/uuid.dart';
 
 abstract interface class DukaanRepository {
   Future<List<BusinessLocation>> fetchLocations();
   Future<DashboardSummary> fetchDashboard(String locationId);
-  Future<List<BusinessEntry>> fetchEntries(String locationId);
+  Future<List<BusinessEntry>> fetchEntries(
+    String locationId, {
+    BusinessRole? role,
+  });
   Future<List<Product>> fetchProducts(String locationId);
   Future<List<Party>> fetchParties(String locationId);
   Future<AssistantProposal> interpret({
@@ -17,13 +19,53 @@ abstract interface class DukaanRepository {
     required String locationId,
     required String locale,
   });
+  Future<String> uploadVoiceRecording({
+    required String businessId,
+    required List<int> bytes,
+  });
+  Future<AttachmentUploadTicket> presignVoiceUpload({
+    required String businessId,
+    required int sizeBytes,
+  });
+  Future<void> uploadPresignedVoiceRecording({
+    required AttachmentUploadTicket ticket,
+    required List<int> bytes,
+  });
+  Future<AssistantProposal> createProposalFromAudio({
+    required String attachmentId,
+    required String businessId,
+    required String locationId,
+    required String locale,
+  });
+  Future<String> uploadImageAttachment({
+    required String businessId,
+    required String mime,
+    required List<int> bytes,
+  });
+  Future<AssistantProposal> createProposalFromImage({
+    required String attachmentId,
+    required String businessId,
+    required String locationId,
+    required String locale,
+  });
+  Future<AssistantProposal> pollProposal(
+    String id, {
+    Duration timeout = const Duration(seconds: 90),
+    Duration pollInterval = const Duration(seconds: 1),
+  });
   Future<AssistantProposal> refreshProposal(AssistantProposal proposal);
   Future<PostedResult> confirmProposal(AssistantProposal proposal);
-  Future<PostedResult> createSale(SaleDraft draft);
+  // [idempotencyKey] defaults to a fresh UUID. Pass a stable key derived
+  // from the offline draft id when syncing, so a timeout retry replays
+  // instead of posting a duplicate sale.
+  Future<PostedResult> createSale(SaleDraft draft, {String? idempotencyKey});
 
   // Common: current user + bootstrap.
   Future<Map<String, dynamic>> fetchMe();
   Future<Map<String, dynamic>> fetchBootstrap({String? businessId});
+
+  // Security. The backend revokes every token only after password verification.
+  Future<void> revokeAllSessions({required String currentPassword});
 
   // Tenancy.
   Future<List<Business>> listBusinesses();
@@ -31,7 +73,8 @@ abstract interface class DukaanRepository {
   Future<Business> fetchBusiness(String id);
   Future<List<BusinessLocation>> listLocations({String? businessId});
   Future<BusinessLocation> createLocation(Map<String, dynamic> payload);
-  Future<BusinessLocation> updateLocation(String id, Map<String, dynamic> payload);
+  Future<BusinessLocation> updateLocation(
+      String id, Map<String, dynamic> payload);
   Future<void> deleteLocation(String id);
   Future<List<GstRegistration>> listGst({String? businessId});
   Future<GstRegistration> createGst(Map<String, dynamic> payload);
@@ -40,6 +83,12 @@ abstract interface class DukaanRepository {
   Future<Membership> createMembership(Map<String, dynamic> payload);
   Future<Membership> updateMembership(String id, Map<String, dynamic> payload);
   Future<void> deleteMembership(String id);
+
+  // Owner-only invitations. A raw token exists only in the create response.
+  Future<List<Invitation>> listInvitations({required String businessId});
+  Future<Invitation> createInvitation(Map<String, dynamic> payload);
+  Future<Invitation> revokeInvitation(String id);
+  Future<Invitation> acceptInvitation({required String token});
 
   // Catalog detail + write.
   Future<Product> fetchProduct(String id);
@@ -57,6 +106,7 @@ abstract interface class DukaanRepository {
   Future<Map<String, dynamic>> fetchPayment(String id);
   Future<Map<String, dynamic>> fetchExpense(String id);
   Future<Map<String, dynamic>> fetchTransfer(String id);
+  Future<SaleInvoicePdf> fetchSaleInvoicePdf(String saleId);
 
   // Operations writes (payloads already carry business_id/location_id;
   // idempotency_key is injected when absent).
@@ -104,6 +154,63 @@ abstract interface class DukaanRepository {
     required String partyId,
     String? account,
   });
+  Future<ValuationReport> fetchValuationReport({
+    required String businessId,
+    String? locationId,
+    String? dateFrom,
+    String? dateTo,
+  });
+  Future<PaymentAllocationReview> fetchPaymentAllocationReview({
+    required String businessId,
+    String? locationId,
+    String? direction,
+    String? partyId,
+    String? status,
+  });
+  Future<PaymentRecord> reallocatePayment({
+    required String id,
+    required List<Map<String, dynamic>> allocations,
+    required String reason,
+    String? idempotencyKey,
+  });
+
+  // CSV imports are review-only until confirmImport is explicitly called.
+  Future<ImportDryRun> previewImport({
+    required String businessId,
+    required CsvImportKind kind,
+    required List<int> bytes,
+    required String filename,
+    required String duplicateStrategy,
+  });
+  Future<ImportJob> uploadImport({
+    required String businessId,
+    required CsvImportKind kind,
+    required List<int> bytes,
+    required String filename,
+    required String duplicateStrategy,
+  });
+  Future<List<ImportJob>> listImports({required String businessId});
+  Future<ImportJob> fetchImport(String id);
+  Future<ImportConfirmation> confirmImport({
+    required String id,
+    String? idempotencyKey,
+  });
+
+  // Integrations. Device registration requires a real externally supplied FCM
+  // token; the mobile UI intentionally does not fabricate one.
+  Future<List<NotificationDevice>> listNotificationDevices();
+  Future<NotificationDevice> registerNotificationDevice({
+    required String businessId,
+    required String fcmToken,
+    String? locationId,
+    required String platform,
+    Map<String, dynamic> metadata = const {},
+  });
+  Future<void> unregisterNotificationDevice(String id);
+  Future<List<Reminder>> listReminders();
+  Future<Reminder> createReminder(Map<String, dynamic> payload);
+  Future<Reminder> updateReminder(String id, Map<String, dynamic> payload);
+  Future<void> deleteReminder(String id);
 
   // Assistant proposals.
   Future<List<ProposalSummary>> listProposals();
@@ -115,10 +222,28 @@ abstract interface class DukaanRepository {
   });
 }
 
+class VoiceTranscriptionException implements Exception {
+  const VoiceTranscriptionException.timeout();
+
+  @override
+  String toString() => 'Voice transcription timed out.';
+}
+
 class ApiDukaanRepository implements DukaanRepository {
-  ApiDukaanRepository(this._dio);
+  ApiDukaanRepository(this._dio, {Dio Function()? uploadClientFactory})
+      : _uploadClientFactory = uploadClientFactory ?? _createUploadClient;
 
   final Dio _dio;
+  final Dio Function() _uploadClientFactory;
+
+  static Dio _createUploadClient() => Dio(
+        BaseOptions(
+          connectTimeout: const Duration(seconds: 12),
+          sendTimeout: const Duration(seconds: 90),
+          receiveTimeout: const Duration(seconds: 30),
+          responseType: ResponseType.plain,
+        ),
+      );
   String? _businessId;
 
   Future<String> _resolveBusinessId() async {
@@ -134,10 +259,12 @@ class ApiDukaanRepository implements DukaanRepository {
   @override
   Future<List<BusinessLocation>> fetchLocations() async {
     final businessId = await _resolveBusinessId();
-    final response = await _dio.get<Object>('locations/', queryParameters: {'business_id': businessId});
+    final response = await _dio.get<Object>('locations/',
+        queryParameters: {'business_id': businessId});
     return _rows(response.data)
         .map(
-          (row) => BusinessLocation.fromJson({...row, 'business_id': businessId}),
+          (row) =>
+              BusinessLocation.fromJson({...row, 'business_id': businessId}),
         )
         .toList(growable: false);
   }
@@ -153,20 +280,61 @@ class ApiDukaanRepository implements DukaanRepository {
   }
 
   @override
-  Future<List<BusinessEntry>> fetchEntries(String locationId) async {
+  Future<List<BusinessEntry>> fetchEntries(
+    String locationId, {
+    BusinessRole? role,
+  }) async {
     final businessId = await _resolveBusinessId();
-    final query = {'business_id': businessId, 'location_id': locationId};
-    final responses = await Future.wait([
-      _dio.get<Object>('sales/', queryParameters: query),
-      _dio.get<Object>('purchases/', queryParameters: query),
-      _dio.get<Object>('expenses/', queryParameters: query),
-      _dio.get<Object>('payments/', queryParameters: query),
-    ]);
-    final types = [EntryType.sale, EntryType.purchase, EntryType.expense, EntryType.payment];
+    final effectiveRole =
+        role ?? BusinessBootstrap.fromJson(await fetchBootstrap()).role;
+    // Cashiers cannot read purchase/expense reports or endpoints. Receipts
+    // remain available as payment rows, alongside sales.
+    final requests = <(String, EntryType, Future<Response<Object>>)>[
+      (
+        'sales/',
+        EntryType.sale,
+        _dio.get<Object>('sales/', queryParameters: {
+          'business_id': businessId,
+          'location_id': locationId,
+          'brief': '1',
+        })
+      ),
+      if (effectiveRole.canManageOperations)
+        (
+          'purchases/',
+          EntryType.purchase,
+          _dio.get<Object>('purchases/', queryParameters: {
+            'business_id': businessId,
+            'location_id': locationId,
+            'brief': '1',
+          })
+        ),
+      if (effectiveRole.canManageOperations)
+        (
+          'expenses/',
+          EntryType.expense,
+          _dio.get<Object>('expenses/', queryParameters: {
+            'business_id': businessId,
+            'location_id': locationId,
+            'brief': '1',
+          })
+        ),
+      (
+        'payments/',
+        EntryType.payment,
+        _dio.get<Object>('payments/', queryParameters: {
+          'business_id': businessId,
+          'location_id': locationId,
+          'brief': '1',
+        })
+      ),
+    ];
+    final responses = await Future.wait(requests.map((request) => request.$3));
     final entries = <BusinessEntry>[];
     for (var index = 0; index < responses.length; index++) {
       entries.addAll(
-        _rows(responses[index].data).map((row) => _entryFromJson(row, types[index])),
+        _rows(responses[index].data)
+            .map((row) => _entryFromJson(row, requests[index].$2)),
       );
     }
     entries.sort((a, b) => b.occurredAt.compareTo(a.occurredAt));
@@ -178,7 +346,12 @@ class ApiDukaanRepository implements DukaanRepository {
     final businessId = await _resolveBusinessId();
     final response = await _dio.get<Object>(
       'products/',
-      queryParameters: {'business_id': businessId, 'location_id': locationId},
+      // Pickers must see the whole catalog: bounded page, not the 50 default.
+      queryParameters: {
+        'business_id': businessId,
+        'location_id': locationId,
+        'page_size': 200
+      },
     );
     return _rows(response.data).map(Product.fromJson).toList(growable: false);
   }
@@ -188,7 +361,12 @@ class ApiDukaanRepository implements DukaanRepository {
     final businessId = await _resolveBusinessId();
     final response = await _dio.get<Object>(
       'parties/',
-      queryParameters: {'business_id': businessId, 'location_id': locationId},
+      // Pickers must see the whole address book: bounded page, not the 50 default.
+      queryParameters: {
+        'business_id': businessId,
+        'location_id': locationId,
+        'page_size': 200
+      },
     );
     return _rows(response.data).map(Party.fromJson).toList(growable: false);
   }
@@ -209,9 +387,270 @@ class ApiDukaanRepository implements DukaanRepository {
         'content': input.content,
         'locale': locale,
       },
-      options: Options(extra: {'locale': locale}),
+      // Model extraction can take ~20s server-side plus slow-network
+      // latency; the 20s default would time out real responses on 4G.
+      // Never retried (each call mints a new proposal): see api_client.
+      options: Options(
+        extra: {'locale': locale},
+        receiveTimeout: const Duration(seconds: 60),
+      ),
     );
     return _proposalFromJson(_object(response.data));
+  }
+
+  @override
+  Future<String> uploadVoiceRecording({
+    required String businessId,
+    required List<int> bytes,
+  }) async {
+    if (bytes.isEmpty || bytes.length > maxAttachmentBytes) {
+      throw ArgumentError.value(
+          bytes.length, 'bytes', 'Voice recording is empty or too large.');
+    }
+    final form = FormData.fromMap({
+      'business_id': businessId,
+      'kind': 'VOICE',
+      'mime': voiceMimeType,
+      'size_bytes': bytes.length,
+      'file': MultipartFile.fromBytes(
+        bytes,
+        filename: 'voice-${DateTime.now().millisecondsSinceEpoch}.m4a',
+        contentType: DioMediaType('audio', 'm4a'),
+      ),
+    });
+    final response = await _dio.post<Object>(
+      'assistant/attachments/upload/',
+      data: form,
+      options: Options(
+        sendTimeout: const Duration(seconds: 90),
+        receiveTimeout: const Duration(seconds: 30),
+      ),
+    );
+    final attachment = _object(response.data);
+    final id = attachment['id']?.toString() ?? '';
+    if (id.isEmpty || attachment['status'] != 'READY') {
+      throw const FormatException('Voice attachment upload was not confirmed.');
+    }
+    return id;
+  }
+
+  @override
+  Future<String> uploadImageAttachment({
+    required String businessId,
+    required String mime,
+    required List<int> bytes,
+  }) async {
+    const allowedMimes = {
+      'image/jpeg',
+      'image/png',
+      'application/pdf',
+    };
+    if (!allowedMimes.contains(mime)) {
+      throw ArgumentError.value(mime, 'mime', 'Unsupported document type.');
+    }
+    if (bytes.isEmpty || bytes.length > maxAttachmentBytes) {
+      throw ArgumentError.value(
+          bytes.length, 'bytes', 'Document is empty or too large.');
+    }
+    final extension = switch (mime) {
+      'application/pdf' => 'pdf',
+      'image/png' => 'png',
+      _ => 'jpg',
+    };
+    final parts = mime.split('/');
+    final form = FormData.fromMap({
+      'business_id': businessId,
+      'kind': 'IMAGE',
+      'mime': mime,
+      'size_bytes': bytes.length,
+      'file': MultipartFile.fromBytes(
+        bytes,
+        filename:
+            'document-${DateTime.now().millisecondsSinceEpoch}.$extension',
+        contentType: DioMediaType(parts.first, parts.last),
+      ),
+    });
+    final response = await _dio.post<Object>(
+      'assistant/attachments/upload/',
+      data: form,
+      options: Options(
+        sendTimeout: const Duration(seconds: 90),
+        receiveTimeout: const Duration(seconds: 30),
+      ),
+    );
+    final attachment = _object(response.data);
+    final id = attachment['id']?.toString() ?? '';
+    if (id.isEmpty || attachment['status'] != 'READY') {
+      throw const FormatException(
+          'Document attachment upload was not confirmed.');
+    }
+    return id;
+  }
+
+  @override
+  Future<AttachmentUploadTicket> presignVoiceUpload({
+    required String businessId,
+    required int sizeBytes,
+  }) async {
+    if (sizeBytes <= 0 || sizeBytes > maxAttachmentBytes) {
+      throw ArgumentError.value(
+          sizeBytes, 'sizeBytes', 'Voice recording is empty or too large.');
+    }
+    final response = await _dio.post<Object>(
+      'assistant/attachments/presign/',
+      data: {
+        'business_id': businessId,
+        'kind': 'VOICE',
+        'mime': voiceMimeType,
+        'size_bytes': sizeBytes,
+      },
+    );
+    return AttachmentUploadTicket.fromJson(_object(response.data));
+  }
+
+  @override
+  Future<void> uploadPresignedVoiceRecording({
+    required AttachmentUploadTicket ticket,
+    required List<int> bytes,
+  }) async {
+    if (bytes.isEmpty || bytes.length > maxAttachmentBytes) {
+      throw ArgumentError.value(
+          bytes.length, 'bytes', 'Voice recording is empty or too large.');
+    }
+    final headers = Map<String, String>.from(ticket.uploadHeaders);
+    if (!headers.keys.any((key) => key.toLowerCase() == 'content-type')) {
+      headers['Content-Type'] = voiceMimeType;
+    }
+    // A bare client is intentional: the API interceptor must never attach the
+    // user's bearer token to a third-party presigned storage URL.
+    final client = _uploadClientFactory();
+    try {
+      await client.put<Object>(
+        ticket.uploadUrl,
+        data: bytes,
+        options: Options(
+          headers: headers,
+          responseType: ResponseType.plain,
+          sendTimeout: const Duration(seconds: 90),
+          receiveTimeout: const Duration(seconds: 30),
+        ),
+      );
+    } finally {
+      client.close(force: true);
+    }
+  }
+
+  @override
+  Future<AssistantProposal> createProposalFromAudio({
+    required String attachmentId,
+    required String businessId,
+    required String locationId,
+    required String locale,
+  }) async {
+    final response = await _dio.post<Object>(
+      'assistant/proposals/from-audio/',
+      data: {
+        'attachment_id': attachmentId,
+        'business_id': businessId,
+        'location_id': locationId,
+        'locale': locale,
+      },
+      options: Options(
+        extra: {'locale': locale},
+        receiveTimeout: const Duration(seconds: 30),
+      ),
+    );
+    return _proposalFromJson(_object(response.data));
+  }
+
+  @override
+  Future<AssistantProposal> createProposalFromImage({
+    required String attachmentId,
+    required String businessId,
+    required String locationId,
+    required String locale,
+  }) async {
+    final response = await _dio.post<Object>(
+      'assistant/proposals/from-image/',
+      data: {
+        'attachment_id': attachmentId,
+        'business_id': businessId,
+        'location_id': locationId,
+        'locale': locale,
+      },
+      options: Options(
+        extra: {'locale': locale},
+        receiveTimeout: const Duration(seconds: 30),
+      ),
+    );
+    return _proposalFromJson(_object(response.data));
+  }
+
+  @override
+  Future<AssistantProposal> pollProposal(
+    String id, {
+    Duration timeout = const Duration(seconds: 90),
+    Duration pollInterval = const Duration(seconds: 1),
+  }) async {
+    final completer = Completer<AssistantProposal>();
+    var stopped = false;
+    var inFlight = false;
+    Timer? timeoutTimer;
+    Timer? pollTimer;
+
+    void stopTimers() {
+      timeoutTimer?.cancel();
+      pollTimer?.cancel();
+    }
+
+    void finish(AssistantProposal proposal) {
+      if (completer.isCompleted) return;
+      stopped = true;
+      stopTimers();
+      completer.complete(proposal);
+    }
+
+    void fail(Object error) {
+      if (completer.isCompleted) return;
+      stopped = true;
+      stopTimers();
+      completer.completeError(error);
+    }
+
+    Future<void> pollOnce() async {
+      if (stopped || inFlight || completer.isCompleted) return;
+      inFlight = true;
+      try {
+        final response = await _dio.get<Object>('assistant/proposals/$id/');
+        if (stopped) return;
+        final proposal = _proposalFromJson(_object(response.data));
+        if (_isTranscriptionTerminal(proposal)) {
+          finish(proposal);
+          return;
+        }
+      } on Object catch (error) {
+        if (!stopped) fail(error);
+      } finally {
+        inFlight = false;
+      }
+    }
+
+    timeoutTimer = Timer(timeout, () {
+      fail(const VoiceTranscriptionException.timeout());
+    });
+    pollTimer = Timer.periodic(pollInterval, (_) {
+      unawaited(pollOnce());
+    });
+    unawaited(pollOnce());
+    return completer.future;
+  }
+
+  bool _isTranscriptionTerminal(AssistantProposal proposal) {
+    if (proposal.status != 'DRAFT') return true;
+    if (proposal.transcript.trim().isNotEmpty) return true;
+    return proposal.blockingQuestions.any(
+      (question) => !question.toLowerCase().contains('being transcribed'),
+    );
   }
 
   @override
@@ -236,10 +675,11 @@ class ApiDukaanRepository implements DukaanRepository {
   }
 
   @override
-  Future<PostedResult> createSale(SaleDraft draft) async {
+  Future<PostedResult> createSale(SaleDraft draft,
+      {String? idempotencyKey}) async {
     final response = await _dio.post<Object>(
       'sales/',
-      data: draft.toApiJson(const Uuid().v4()),
+      data: draft.toApiJson(idempotencyKey ?? const Uuid().v4()),
     );
     return _postedResult(_object(response.data));
   }
@@ -257,6 +697,14 @@ class ApiDukaanRepository implements DukaanRepository {
       queryParameters: {if (businessId != null) 'business_id': businessId},
     );
     return _object(response.data);
+  }
+
+  @override
+  Future<void> revokeAllSessions({required String currentPassword}) async {
+    await _dio.post<Object>(
+      'auth/sessions/revoke-all/',
+      data: {'current_password': currentPassword},
+    );
   }
 
   @override
@@ -285,27 +733,32 @@ class ApiDukaanRepository implements DukaanRepository {
       queryParameters: {'business_id': resolved},
     );
     return _rows(response.data)
-        .map((row) => BusinessLocation.fromJson({...row, 'business_id': resolved}))
+        .map((row) =>
+            BusinessLocation.fromJson({...row, 'business_id': resolved}))
         .toList(growable: false);
   }
 
   @override
   Future<BusinessLocation> createLocation(Map<String, dynamic> payload) async {
-    final businessId = payload['business']?.toString() ?? await _resolveBusinessId();
+    final businessId =
+        payload['business']?.toString() ?? await _resolveBusinessId();
     final response = await _dio.post<Object>(
       'locations/',
       data: {...payload, 'business': businessId},
     );
-    return BusinessLocation.fromJson({..._object(response.data), 'business_id': businessId});
+    return BusinessLocation.fromJson(
+        {..._object(response.data), 'business_id': businessId});
   }
 
   @override
-  Future<BusinessLocation> updateLocation(String id, Map<String, dynamic> payload) async {
+  Future<BusinessLocation> updateLocation(
+      String id, Map<String, dynamic> payload) async {
     final response = await _dio.patch<Object>('locations/$id/', data: payload);
     final row = _object(response.data);
     return BusinessLocation.fromJson({
       ...row,
-      'business_id': row['business_id'] ?? row['business'] ?? await _resolveBusinessId(),
+      'business_id':
+          row['business_id'] ?? row['business'] ?? await _resolveBusinessId(),
     });
   }
 
@@ -321,12 +774,15 @@ class ApiDukaanRepository implements DukaanRepository {
       'gst-registrations/',
       queryParameters: {'business_id': resolved},
     );
-    return _rows(response.data).map(GstRegistration.fromJson).toList(growable: false);
+    return _rows(response.data)
+        .map(GstRegistration.fromJson)
+        .toList(growable: false);
   }
 
   @override
   Future<GstRegistration> createGst(Map<String, dynamic> payload) async {
-    final businessId = payload['business']?.toString() ?? await _resolveBusinessId();
+    final businessId =
+        payload['business']?.toString() ?? await _resolveBusinessId();
     final response = await _dio.post<Object>(
       'gst-registrations/',
       data: {...payload, 'business': businessId},
@@ -335,8 +791,10 @@ class ApiDukaanRepository implements DukaanRepository {
   }
 
   @override
-  Future<GstRegistration> updateGst(String id, Map<String, dynamic> payload) async {
-    final response = await _dio.patch<Object>('gst-registrations/$id/', data: payload);
+  Future<GstRegistration> updateGst(
+      String id, Map<String, dynamic> payload) async {
+    final response =
+        await _dio.patch<Object>('gst-registrations/$id/', data: payload);
     return GstRegistration.fromJson(_object(response.data));
   }
 
@@ -347,12 +805,15 @@ class ApiDukaanRepository implements DukaanRepository {
       'memberships/',
       queryParameters: {'business_id': resolved},
     );
-    return _rows(response.data).map(Membership.fromJson).toList(growable: false);
+    return _rows(response.data)
+        .map(Membership.fromJson)
+        .toList(growable: false);
   }
 
   @override
   Future<Membership> createMembership(Map<String, dynamic> payload) async {
-    final businessId = payload['business']?.toString() ?? await _resolveBusinessId();
+    final businessId =
+        payload['business']?.toString() ?? await _resolveBusinessId();
     final response = await _dio.post<Object>(
       'memberships/',
       data: {...payload, 'business': businessId},
@@ -361,14 +822,48 @@ class ApiDukaanRepository implements DukaanRepository {
   }
 
   @override
-  Future<Membership> updateMembership(String id, Map<String, dynamic> payload) async {
-    final response = await _dio.patch<Object>('memberships/$id/', data: payload);
+  Future<Membership> updateMembership(
+      String id, Map<String, dynamic> payload) async {
+    final response =
+        await _dio.patch<Object>('memberships/$id/', data: payload);
     return Membership.fromJson(_object(response.data));
   }
 
   @override
   Future<void> deleteMembership(String id) async {
     await _dio.delete<Object>('memberships/$id/');
+  }
+
+  @override
+  Future<List<Invitation>> listInvitations({required String businessId}) async {
+    final response = await _dio.get<Object>(
+      'invitations/',
+      queryParameters: {'business_id': businessId},
+    );
+    return _rows(response.data)
+        .map(Invitation.fromJson)
+        .toList(growable: false);
+  }
+
+  @override
+  Future<Invitation> createInvitation(Map<String, dynamic> payload) async {
+    final response = await _dio.post<Object>('invitations/', data: payload);
+    return Invitation.fromJson(_object(response.data));
+  }
+
+  @override
+  Future<Invitation> revokeInvitation(String id) async {
+    final response = await _dio.post<Object>('invitations/$id/revoke/');
+    return Invitation.fromJson(_object(response.data));
+  }
+
+  @override
+  Future<Invitation> acceptInvitation({required String token}) async {
+    final response = await _dio.post<Object>(
+      'invitations/accept/',
+      data: {'token': token.trim()},
+    );
+    return Invitation.fromJson(_object(response.data));
   }
 
   @override
@@ -449,6 +944,36 @@ class ApiDukaanRepository implements DukaanRepository {
   Future<Map<String, dynamic>> fetchTransfer(String id) async {
     final response = await _dio.get<Object>('transfers/$id/');
     return _object(response.data);
+  }
+
+  @override
+  Future<SaleInvoicePdf> fetchSaleInvoicePdf(String saleId) async {
+    final response = await _dio.get<List<int>>(
+      'invoices/sales/$saleId/pdf/',
+      options: Options(
+        responseType: ResponseType.bytes,
+        receiveTimeout: const Duration(seconds: 45),
+      ),
+    );
+    final bytes = response.data;
+    if (bytes == null || bytes.isEmpty) {
+      throw const FormatException('The invoice PDF was empty.');
+    }
+    if (bytes.length < 5 ||
+        bytes[0] != 0x25 ||
+        bytes[1] != 0x50 ||
+        bytes[2] != 0x44 ||
+        bytes[3] != 0x46 ||
+        bytes[4] != 0x2d) {
+      throw const FormatException('The server did not return a PDF invoice.');
+    }
+    return SaleInvoicePdf(
+      bytes: List<int>.from(bytes),
+      filename: _safePdfFilename(
+        response.headers.value('content-disposition'),
+        saleId,
+      ),
+    );
   }
 
   @override
@@ -542,7 +1067,8 @@ class ApiDukaanRepository implements DukaanRepository {
   }
 
   @override
-  Future<Map<String, dynamic>> postOpeningBalance(Map<String, dynamic> payload) async {
+  Future<Map<String, dynamic>> postOpeningBalance(
+      Map<String, dynamic> payload) async {
     final response = await _dio.post<Object>(
       'party-ledger/opening-balances/',
       data: _withIdempotency(payload),
@@ -583,9 +1109,248 @@ class ApiDukaanRepository implements DukaanRepository {
   }
 
   @override
+  Future<ValuationReport> fetchValuationReport({
+    required String businessId,
+    String? locationId,
+    String? dateFrom,
+    String? dateTo,
+  }) async {
+    final response = await _dio.get<Object>(
+      'reports/valuation/',
+      queryParameters: {
+        'business_id': businessId,
+        if (locationId != null && locationId.isNotEmpty)
+          'location_id': locationId,
+        if (dateFrom != null && dateFrom.isNotEmpty) 'date_from': dateFrom,
+        if (dateTo != null && dateTo.isNotEmpty) 'date_to': dateTo,
+      },
+    );
+    return ValuationReport.fromJson(_object(response.data));
+  }
+
+  @override
+  Future<PaymentAllocationReview> fetchPaymentAllocationReview({
+    required String businessId,
+    String? locationId,
+    String? direction,
+    String? partyId,
+    String? status,
+  }) async {
+    final response = await _dio.get<Object>(
+      'payments/allocation-review/',
+      queryParameters: {
+        'business_id': businessId,
+        if (locationId != null && locationId.isNotEmpty)
+          'location_id': locationId,
+        if (direction != null && direction.isNotEmpty) 'direction': direction,
+        if (partyId != null && partyId.isNotEmpty) 'party_id': partyId,
+        if (status != null && status.isNotEmpty) 'status': status,
+      },
+    );
+    return PaymentAllocationReview.fromJson(_object(response.data));
+  }
+
+  @override
+  Future<PaymentRecord> reallocatePayment({
+    required String id,
+    required List<Map<String, dynamic>> allocations,
+    required String reason,
+    String? idempotencyKey,
+  }) async {
+    final key = idempotencyKey ?? const Uuid().v4();
+    final response = await _dio.post<Object>(
+      'payments/$id/reallocate/',
+      data: {
+        'allocations': allocations,
+        'reason': reason,
+        'idempotency_key': key,
+      },
+      options: Options(headers: {'Idempotency-Key': key}),
+    );
+    return PaymentRecord.fromJson(_object(response.data));
+  }
+
+  @override
+  Future<ImportDryRun> previewImport({
+    required String businessId,
+    required CsvImportKind kind,
+    required List<int> bytes,
+    required String filename,
+    required String duplicateStrategy,
+  }) async {
+    final response = await _uploadImport(
+      businessId: businessId,
+      kind: kind,
+      bytes: bytes,
+      filename: filename,
+      duplicateStrategy: duplicateStrategy,
+      dryRun: true,
+    );
+    return ImportDryRun.fromJson(_object(response.data));
+  }
+
+  @override
+  Future<ImportJob> uploadImport({
+    required String businessId,
+    required CsvImportKind kind,
+    required List<int> bytes,
+    required String filename,
+    required String duplicateStrategy,
+  }) async {
+    final response = await _uploadImport(
+      businessId: businessId,
+      kind: kind,
+      bytes: bytes,
+      filename: filename,
+      duplicateStrategy: duplicateStrategy,
+      dryRun: false,
+    );
+    return ImportJob.fromJson(_object(response.data));
+  }
+
+  Future<Response<Object>> _uploadImport({
+    required String businessId,
+    required CsvImportKind kind,
+    required List<int> bytes,
+    required String filename,
+    required String duplicateStrategy,
+    required bool dryRun,
+  }) async {
+    if (bytes.isEmpty || bytes.length > 2 * 1024 * 1024) {
+      throw ArgumentError.value(
+          bytes.length, 'bytes', 'CSV must be non-empty and at most 2 MB.');
+    }
+    final safeName = filename.replaceAll('\\', '/').split('/').last;
+    if (!safeName.toLowerCase().endsWith('.csv') || safeName.length <= 4) {
+      throw ArgumentError.value(filename, 'filename', 'Choose a .csv file.');
+    }
+    final strategy = duplicateStrategy.toUpperCase();
+    if (strategy != 'UPDATE' && strategy != 'SKIP') {
+      throw ArgumentError.value(
+          duplicateStrategy, 'duplicateStrategy', 'Must be UPDATE or SKIP.');
+    }
+    final form = FormData.fromMap({
+      'business_id': businessId,
+      'file': MultipartFile.fromBytes(
+        bytes,
+        filename: safeName,
+        contentType: DioMediaType('text', 'csv'),
+      ),
+      'dry_run': dryRun,
+      'duplicate_strategy': strategy,
+    });
+    return _dio.post<Object>(
+      kind == CsvImportKind.product ? 'imports/products/' : 'imports/parties/',
+      data: form,
+      options: Options(
+        sendTimeout: const Duration(seconds: 60),
+        receiveTimeout: const Duration(seconds: 60),
+      ),
+    );
+  }
+
+  @override
+  Future<List<ImportJob>> listImports({required String businessId}) async {
+    final response = await _dio.get<Object>(
+      'imports/',
+      queryParameters: {'business_id': businessId},
+    );
+    return _rows(response.data).map(ImportJob.fromJson).toList(growable: false);
+  }
+
+  @override
+  Future<ImportJob> fetchImport(String id) async {
+    final response = await _dio.get<Object>('imports/$id/');
+    return ImportJob.fromJson(_object(response.data));
+  }
+
+  @override
+  Future<ImportConfirmation> confirmImport({
+    required String id,
+    String? idempotencyKey,
+  }) async {
+    final key = idempotencyKey ?? 'import:$id';
+    final response = await _dio.post<Object>(
+      'imports/$id/confirm/',
+      data: {'idempotency_key': key},
+      options: Options(headers: {'Idempotency-Key': key}),
+    );
+    return ImportConfirmation.fromJson(_object(response.data));
+  }
+
+  @override
+  Future<List<NotificationDevice>> listNotificationDevices() async {
+    final response =
+        await _dio.get<Object>('integrations/notifications/devices/');
+    return _rows(response.data)
+        .map(NotificationDevice.fromJson)
+        .toList(growable: false);
+  }
+
+  @override
+  Future<NotificationDevice> registerNotificationDevice({
+    required String businessId,
+    required String fcmToken,
+    String? locationId,
+    required String platform,
+    Map<String, dynamic> metadata = const {},
+  }) async {
+    final response = await _dio.post<Object>(
+      'integrations/notifications/devices/',
+      data: {
+        'business_id': businessId,
+        if (locationId != null && locationId.isNotEmpty)
+          'location_id': locationId,
+        'fcm_token': fcmToken,
+        'platform': platform.toUpperCase(),
+        'metadata': metadata,
+      },
+    );
+    return NotificationDevice.fromJson(_object(response.data));
+  }
+
+  @override
+  Future<void> unregisterNotificationDevice(String id) async {
+    await _dio.delete<Object>('integrations/notifications/devices/$id/');
+  }
+
+  @override
+  Future<List<Reminder>> listReminders() async {
+    final response =
+        await _dio.get<Object>('integrations/notifications/reminders/');
+    return _rows(response.data).map(Reminder.fromJson).toList(growable: false);
+  }
+
+  @override
+  Future<Reminder> createReminder(Map<String, dynamic> payload) async {
+    final response = await _dio.post<Object>(
+      'integrations/notifications/reminders/',
+      data: payload,
+    );
+    return Reminder.fromJson(_object(response.data));
+  }
+
+  @override
+  Future<Reminder> updateReminder(
+      String id, Map<String, dynamic> payload) async {
+    final response = await _dio.patch<Object>(
+      'integrations/notifications/reminders/$id/',
+      data: payload,
+    );
+    return Reminder.fromJson(_object(response.data));
+  }
+
+  @override
+  Future<void> deleteReminder(String id) async {
+    await _dio.delete<Object>('integrations/notifications/reminders/$id/');
+  }
+
+  @override
   Future<List<ProposalSummary>> listProposals() async {
     final response = await _dio.get<Object>('assistant/proposals/');
-    return _rows(response.data).map(ProposalSummary.fromJson).toList(growable: false);
+    return _rows(response.data)
+        .map(ProposalSummary.fromJson)
+        .toList(growable: false);
   }
 
   @override
@@ -596,8 +1361,11 @@ class ApiDukaanRepository implements DukaanRepository {
 
   @override
   Future<List<ProposalRevision>> fetchRevisions(String id) async {
-    final response = await _dio.get<Object>('assistant/proposals/$id/revisions/');
-    return _rows(response.data).map(ProposalRevision.fromJson).toList(growable: false);
+    final response =
+        await _dio.get<Object>('assistant/proposals/$id/revisions/');
+    return _rows(response.data)
+        .map(ProposalRevision.fromJson)
+        .toList(growable: false);
   }
 
   @override
@@ -634,6 +1402,32 @@ class ApiDukaanRepository implements DukaanRepository {
     return data;
   }
 
+  static String _safePdfFilename(String? contentDisposition, String saleId) {
+    var candidate = 'invoice-$saleId.pdf';
+    if (contentDisposition != null) {
+      final match = RegExp(
+        r'''filename\*?=(?:UTF-8''\s*)?"?([^";]+)"?''',
+        caseSensitive: false,
+      ).firstMatch(contentDisposition);
+      if (match != null) {
+        try {
+          candidate = Uri.decodeComponent(match.group(1)!.trim());
+        } on FormatException {
+          candidate = match.group(1)!.trim();
+        }
+      }
+    }
+    final basename = candidate.replaceAll('\\', '/').split('/').last;
+    final safe = basename
+        .replaceAll(RegExp(r'[\x00-\x1f\x7f]'), '_')
+        .replaceAll(RegExp(r'[^A-Za-z0-9._ -]'), '_')
+        .replaceAll(RegExp(r'\.{2,}'), '_')
+        .trim()
+        .replaceAll(RegExp(r'^[. ]+|[. ]+$'), '');
+    if (safe.isEmpty) return 'invoice-$saleId.pdf';
+    return safe.toLowerCase().endsWith('.pdf') ? safe : '$safe.pdf';
+  }
+
   static List<Map<String, dynamic>> _rows(Object? data) {
     final value = data is Map
         ? data['results'] ?? data['data'] ?? data['items'] ?? const []
@@ -651,7 +1445,8 @@ class ApiDukaanRepository implements DukaanRepository {
     throw const FormatException('Expected a JSON object from the API.');
   }
 
-  static BusinessEntry _entryFromJson(Map<String, dynamic> json, EntryType type) {
+  static BusinessEntry _entryFromJson(
+      Map<String, dynamic> json, EntryType type) {
     final party = json['customer'] ?? json['supplier'] ?? json['party'];
     final partyName = party is Map
         ? party['name']
@@ -674,11 +1469,18 @@ class ApiDukaanRepository implements DukaanRepository {
             : type == EntryType.payment
                 ? 'amount_minor'
                 : 'grand_total_minor',
-        type == EntryType.expense ? 'total' : type == EntryType.payment ? 'amount' : 'grand_total',
+        type == EntryType.expense
+            ? 'total'
+            : type == EntryType.payment
+                ? 'amount'
+                : 'grand_total',
       ),
       pendingMinor: minorFromRecord(json, 'due_total_minor', 'due_amount'),
       occurredAt: DateTime.tryParse(
-            (json['occurred_at'] ?? json['invoice_date'] ?? json['created_at'] ?? '')
+            (json['occurred_at'] ??
+                    json['invoice_date'] ??
+                    json['created_at'] ??
+                    '')
                 .toString(),
           ) ??
           DateTime.now(),
@@ -686,58 +1488,8 @@ class ApiDukaanRepository implements DukaanRepository {
     );
   }
 
-  static AssistantProposal _proposalFromJson(Map<String, dynamic> json) {
-    final previewSource = json['preview_data'] ?? json['preview'];
-    final preview = previewSource is Map
-        ? Map<String, dynamic>.from(previewSource)
-        : <String, dynamic>{};
-    final previewText = json['preview'] is String ? json['preview'] as String : '';
-    final facts = <ReviewFact>[];
-    final rawFacts = preview['facts'] ?? preview['fields'];
-    if (rawFacts is List) {
-      for (final fact in rawFacts.whereType<Map>()) {
-        facts.add(
-          ReviewFact(
-            (fact['label'] ?? fact['name'] ?? '').toString(),
-            (fact['value'] ?? '').toString(),
-            warning: fact['warning'] == true,
-          ),
-        );
-      }
-    } else {
-      for (final entry in preview.entries) {
-        if (const {'title', 'summary', 'facts', 'fields'}.contains(entry.key)) continue;
-        if (entry.value is String || entry.value is num || entry.value is bool) {
-          facts.add(ReviewFact(_humanize(entry.key), entry.value.toString()));
-        }
-      }
-    }
-    return AssistantProposal(
-      id: json['id'].toString(),
-      version: (json['version'] as num?)?.toInt() ?? 1,
-      commandType: (json['command_type'] ?? 'ENTRY').toString(),
-      title: (preview['title'] ??
-              preview['summary'] ??
-              (previewText.isNotEmpty ? previewText : 'Proposed entry'))
-          .toString(),
-      facts: facts,
-      warnings: _strings(json['warnings']),
-      blockingQuestions: _strings(json['blocking_questions']),
-      rawPayload: json['payload'] is Map
-          ? Map<String, dynamic>.from(json['payload'] as Map)
-          : const {},
-    );
-  }
-
-  static List<String> _strings(Object? value) {
-    if (value is! List) return const [];
-    return value.map((item) => item.toString()).toList(growable: false);
-  }
-
-  static String _humanize(String key) {
-    final spaced = key.replaceAll('_', ' ');
-    return spaced.isEmpty ? spaced : '${spaced[0].toUpperCase()}${spaced.substring(1)}';
-  }
+  static AssistantProposal _proposalFromJson(Map<String, dynamic> json) =>
+      AssistantProposal.fromJson(json);
 
   static PostedResult _postedResult(Map<String, dynamic> json) {
     final result = json['result'] is Map
@@ -753,521 +1505,3 @@ class ApiDukaanRepository implements DukaanRepository {
     );
   }
 }
-
-class DemoDukaanRepository implements DukaanRepository {
-  DemoDukaanRepository()
-      : _entries = [
-          BusinessEntry(
-            id: 'sale-1042',
-            type: EntryType.sale,
-            reference: 'INV-1042',
-            partyName: 'Ramesh Kumar',
-            totalMinor: 240000,
-            pendingMinor: 90000,
-            occurredAt: DateTime.now().subtract(const Duration(minutes: 24)),
-          ),
-          BusinessEntry(
-            id: 'sale-1041',
-            type: EntryType.sale,
-            reference: 'INV-1041',
-            partyName: 'Walk-in',
-            totalMinor: 76000,
-            pendingMinor: 0,
-            occurredAt: DateTime.now().subtract(const Duration(hours: 2)),
-          ),
-          BusinessEntry(
-            id: 'expense-88',
-            type: EntryType.expense,
-            reference: 'EXP-0088',
-            partyName: 'Shop electricity',
-            totalMinor: 125000,
-            pendingMinor: 0,
-            occurredAt: DateTime.now().subtract(const Duration(hours: 3)),
-          ),
-        ];
-
-  static const _uuid = Uuid();
-  final List<BusinessEntry> _entries;
-
-  static const locations = [
-    BusinessLocation(
-      id: 'loc-main',
-      businessId: 'business-demo',
-      name: 'Main Market',
-      isPrimary: true,
-    ),
-    BusinessLocation(
-      id: 'loc-godown',
-      businessId: 'business-demo',
-      name: 'Godown',
-    ),
-  ];
-
-  static final products = [
-    Product(
-      id: 'product-shirt-blue',
-      packId: 'pack-shirt-blue',
-      name: 'Blue cotton shirt',
-      sku: 'SH-BLU-40',
-      unit: 'pcs',
-      stock: Decimal.parse('18'),
-      lowStockAt: Decimal.parse('5'),
-      retailPriceMinor: 80000,
-      wholesalePriceMinor: 68000,
-    ),
-    Product(
-      id: 'product-rice',
-      packId: 'pack-rice-5kg',
-      name: 'Basmati rice 5 kg',
-      sku: 'RICE-BAS-5',
-      unit: 'bags',
-      stock: Decimal.parse('4'),
-      lowStockAt: Decimal.parse('8'),
-      retailPriceMinor: 72000,
-      wholesalePriceMinor: 65000,
-    ),
-    Product(
-      id: 'product-oil',
-      packId: 'pack-oil-1l',
-      name: 'Mustard oil 1 L',
-      sku: 'OIL-MUS-1',
-      unit: 'bottles',
-      stock: Decimal.parse('31'),
-      lowStockAt: Decimal.parse('10'),
-      retailPriceMinor: 18500,
-      wholesalePriceMinor: 16900,
-    ),
-  ];
-
-  static final parties = [
-    Party(
-      id: 'party-ramesh',
-      name: 'Ramesh Kumar',
-      phone: '+91 98765 43210',
-      kind: PartyKind.customer,
-      toReceiveMinor: 328000,
-      toPayMinor: 0,
-    ),
-    Party(
-      id: 'party-sharma',
-      name: 'Sharma Distributors',
-      phone: '+91 98111 22334',
-      kind: PartyKind.supplier,
-      toReceiveMinor: 0,
-      toPayMinor: 1240000,
-    ),
-    Party(
-      id: 'party-neha',
-      name: 'Neha Stores',
-      phone: '+91 98990 11223',
-      kind: PartyKind.both,
-      toReceiveMinor: 110000,
-      toPayMinor: 46000,
-    ),
-  ];
-
-  Future<T> _pause<T>(T value) async {
-    await Future<void>.delayed(const Duration(milliseconds: 80));
-    return value;
-  }
-
-  @override
-  Future<List<BusinessLocation>> fetchLocations() => _pause(locations);
-
-  @override
-  Future<DashboardSummary> fetchDashboard(String locationId) {
-    return _pause(
-      DashboardSummary(
-        salesMinor: locationId == 'loc-main' ? 1846000 : 386000,
-        expensesMinor: 125000,
-        toReceiveMinor: 438000,
-        toPayMinor: 1286000,
-        lowStockCount: products.where((product) => product.isLowStock).length,
-        asOf: DateTime.now(),
-        summary:
-            'Sales are strongest in shirts today. Basmati rice is below its minimum stock level, and ₹900 from Ramesh remains pending.',
-      ),
-    );
-  }
-
-  @override
-  Future<List<BusinessEntry>> fetchEntries(String locationId) =>
-      _pause(List.unmodifiable(_entries));
-
-  @override
-  Future<List<Party>> fetchParties(String locationId) => _pause(parties);
-
-  @override
-  Future<List<Product>> fetchProducts(String locationId) => _pause(products);
-
-  @override
-  Future<AssistantProposal> interpret({
-    required AssistantInput input,
-    required String locationId,
-    required String locale,
-  }) async {
-    await Future<void>.delayed(const Duration(milliseconds: 450));
-    final isTooShort = input.type != AssistantInputType.image && input.content.trim().length < 6;
-    return AssistantProposal(
-      id: _uuid.v4(),
-      version: 1,
-      commandType: input.type == AssistantInputType.image ? 'PURCHASE' : 'SALE',
-      title: input.type == AssistantInputType.image
-          ? 'Purchase from scanned bill'
-          : 'Sale to Ramesh Kumar',
-      facts: input.type == AssistantInputType.image
-          ? const [
-              ReviewFact('Source', 'Uploaded bill'),
-              ReviewFact('Total', '₹1,850'),
-              ReviewFact('Stock effect', '+12 units'),
-            ]
-          : const [
-              ReviewFact('Items', '3 × Blue cotton shirt'),
-              ReviewFact('Total', '₹2,400'),
-              ReviewFact('Paid externally', '₹1,500'),
-              ReviewFact('You will receive', '₹900'),
-              ReviewFact('Stock effect', '−3 at Main Market'),
-            ],
-      warnings: const ['Check the product match and GST before recording.'],
-      blockingQuestions: isTooShort ? const ['What product and quantity should be recorded?'] : const [],
-      rawPayload: {'input': input.toJson(), 'location_id': locationId},
-    );
-  }
-
-  @override
-  Future<AssistantProposal> refreshProposal(AssistantProposal proposal) async => proposal;
-
-  @override
-  Future<PostedResult> confirmProposal(AssistantProposal proposal) async {
-    await Future<void>.delayed(const Duration(milliseconds: 350));
-    final id = _uuid.v4();
-    _entries.insert(
-      0,
-      BusinessEntry(
-        id: id,
-        type: proposal.commandType == 'PURCHASE' ? EntryType.purchase : EntryType.sale,
-        reference: 'DEMO-${1000 + _entries.length}',
-        partyName: proposal.commandType == 'PURCHASE' ? 'Scanned supplier' : 'Ramesh Kumar',
-        totalMinor: proposal.commandType == 'PURCHASE' ? 185000 : 240000,
-        pendingMinor: proposal.commandType == 'PURCHASE' ? 0 : 90000,
-        occurredAt: DateTime.now(),
-      ),
-    );
-    return PostedResult(id: id, reference: 'DEMO-${1000 + _entries.length}', message: 'Saved');
-  }
-
-  @override
-  Future<PostedResult> createSale(SaleDraft draft) async {
-    await Future<void>.delayed(const Duration(milliseconds: 350));
-    final id = _uuid.v4();
-    final reference = 'DEMO-${1000 + _entries.length}';
-    _entries.insert(
-      0,
-      BusinessEntry(
-        id: id,
-        type: EntryType.sale,
-        reference: reference,
-        partyName: draft.customerName ?? 'Walk-in',
-        totalMinor: draft.totalMinor,
-        pendingMinor: draft.pendingMinor,
-        occurredAt: DateTime.now(),
-      ),
-    );
-    return PostedResult(id: id, reference: reference, message: 'Sale recorded');
-  }
-
-  @override
-  Future<Map<String, dynamic>> fetchMe() => _pause(const {
-        'id': 'user-demo',
-        'phone': '+919876543210',
-        'display_name': 'Demo User',
-      });
-
-  @override
-  Future<Map<String, dynamic>> fetchBootstrap({String? businessId}) => _pause({
-        'user': {
-          'id': 'user-demo',
-          'name': 'Demo User',
-          'phone': '+919876543210',
-          'role': 'OWNER',
-        },
-        'business': {
-          'id': businessId ?? 'business-demo',
-          'name': 'Demo Business',
-          'currency': 'INR',
-          'timezone': 'Asia/Kolkata',
-        },
-        'locations': [
-          {'id': 'loc-main', 'name': 'Main Market', 'code': 'MAIN'},
-          {'id': 'loc-godown', 'name': 'Godown', 'code': 'GODOWN'},
-        ],
-        'permissions': ['*'],
-      });
-
-  @override
-  Future<List<Business>> listBusinesses() => _pause(const [
-        Business(id: 'business-demo', name: 'Demo Business', role: 'OWNER'),
-      ]);
-
-  @override
-  Future<Business> createBusiness(Map<String, dynamic> payload) => _pause(
-        Business(id: _uuid.v4(), name: (payload['name'] ?? 'Business').toString()),
-      );
-
-  @override
-  Future<Business> fetchBusiness(String id) => _pause(
-        Business(id: id, name: 'Demo Business', role: 'OWNER'),
-      );
-
-  @override
-  Future<List<BusinessLocation>> listLocations({String? businessId}) =>
-      _pause(locations);
-
-  @override
-  Future<BusinessLocation> createLocation(Map<String, dynamic> payload) => _pause(
-        BusinessLocation(
-          id: _uuid.v4(),
-          businessId: (payload['business'] ?? 'business-demo').toString(),
-          name: (payload['name'] ?? 'Location').toString(),
-        ),
-      );
-
-  @override
-  Future<BusinessLocation> updateLocation(String id, Map<String, dynamic> payload) =>
-      _pause(
-        BusinessLocation(
-          id: id,
-          businessId: 'business-demo',
-          name: (payload['name'] ?? 'Main Market').toString(),
-        ),
-      );
-
-  @override
-  Future<void> deleteLocation(String id) => _pause(null);
-
-  @override
-  Future<List<GstRegistration>> listGst({String? businessId}) => _pause(const []);
-
-  @override
-  Future<GstRegistration> createGst(Map<String, dynamic> payload) => _pause(
-        GstRegistration(
-          id: _uuid.v4(),
-          businessId: (payload['business'] ?? 'business-demo').toString(),
-          gstin: (payload['gstin'] ?? '').toString(),
-        ),
-      );
-
-  @override
-  Future<GstRegistration> updateGst(String id, Map<String, dynamic> payload) => _pause(
-        GstRegistration(
-          id: id,
-          businessId: 'business-demo',
-          gstin: (payload['gstin'] ?? '').toString(),
-        ),
-      );
-
-  @override
-  Future<List<Membership>> listMemberships({String? businessId}) => _pause(const [
-        Membership(id: 'membership-demo', businessId: 'business-demo', role: 'OWNER'),
-      ]);
-
-  @override
-  Future<Membership> createMembership(Map<String, dynamic> payload) => _pause(
-        Membership(
-          id: _uuid.v4(),
-          businessId: (payload['business'] ?? 'business-demo').toString(),
-          role: (payload['role'] ?? 'CASHIER').toString(),
-        ),
-      );
-
-  @override
-  Future<Membership> updateMembership(String id, Map<String, dynamic> payload) => _pause(
-        Membership(
-          id: id,
-          businessId: 'business-demo',
-          role: (payload['role'] ?? 'CASHIER').toString(),
-        ),
-      );
-
-  @override
-  Future<void> deleteMembership(String id) => _pause(null);
-
-  @override
-  Future<Product> fetchProduct(String id) =>
-      _pause(products.firstWhere((product) => product.id == id, orElse: () => products.first));
-
-  @override
-  Future<Product> createProduct(Map<String, dynamic> payload) => _pause(
-        Product(
-          id: _uuid.v4(),
-          packId: _uuid.v4(),
-          name: (payload['name'] ?? 'Product').toString(),
-          sku: (payload['sku'] ?? '').toString(),
-          unit: (payload['base_unit'] ?? 'pcs').toString(),
-          stock: Decimal.parse('0'),
-          lowStockAt: Decimal.parse('0'),
-          retailPriceMinor: 0,
-          wholesalePriceMinor: 0,
-        ),
-      );
-
-  @override
-  Future<Product> updateProduct(String id, Map<String, dynamic> payload) =>
-      fetchProduct(id);
-
-  @override
-  Future<void> deleteProduct(String id) => _pause(null);
-
-  @override
-  Future<Party> fetchParty(String id) =>
-      _pause(parties.firstWhere((party) => party.id == id, orElse: () => parties.first));
-
-  @override
-  Future<Party> createParty(Map<String, dynamic> payload) => _pause(
-        Party(
-          id: _uuid.v4(),
-          name: (payload['name'] ?? 'Party').toString(),
-          phone: (payload['phone_e164'] ?? '').toString(),
-          kind: PartyKind.customer,
-          toReceiveMinor: 0,
-          toPayMinor: 0,
-        ),
-      );
-
-  @override
-  Future<Party> updateParty(String id, Map<String, dynamic> payload) => fetchParty(id);
-
-  @override
-  Future<void> deleteParty(String id) => _pause(null);
-
-  @override
-  Future<Map<String, dynamic>> fetchSale(String id) => _pause({'id': id});
-
-  @override
-  Future<Map<String, dynamic>> fetchPurchase(String id) => _pause({'id': id});
-
-  @override
-  Future<Map<String, dynamic>> fetchPayment(String id) => _pause({'id': id});
-
-  @override
-  Future<Map<String, dynamic>> fetchExpense(String id) => _pause({'id': id});
-
-  @override
-  Future<Map<String, dynamic>> fetchTransfer(String id) => _pause({'id': id});
-
-  Future<PostedResult> _demoPost(String prefix) async {
-    await Future<void>.delayed(const Duration(milliseconds: 350));
-    final id = _uuid.v4();
-    return PostedResult(id: id, reference: '$prefix-${1000 + _entries.length}', message: 'Saved');
-  }
-
-  @override
-  Future<PostedResult> createPurchase(Map<String, dynamic> payload) =>
-      _demoPost('DEMO-PUR');
-
-  @override
-  Future<PostedResult> createPayment(Map<String, dynamic> payload) =>
-      _demoPost('DEMO-PAY');
-
-  @override
-  Future<PostedResult> createExpense(Map<String, dynamic> payload) =>
-      _demoPost('DEMO-EXP');
-
-  @override
-  Future<PostedResult> createTransfer(Map<String, dynamic> payload) =>
-      _demoPost('DEMO-TRF');
-
-  @override
-  Future<Map<String, dynamic>> reverseSale({
-    required String id,
-    required String reason,
-    String? idempotencyKey,
-  }) =>
-      _pause({'id': id, 'status': 'REVERSED'});
-
-  @override
-  Future<Map<String, dynamic>> reversePurchase({
-    required String id,
-    required String reason,
-    String? idempotencyKey,
-  }) =>
-      _pause({'id': id, 'status': 'REVERSED'});
-
-  @override
-  Future<Map<String, dynamic>> reversePayment({
-    required String id,
-    required String reason,
-    String? idempotencyKey,
-  }) =>
-      _pause({'id': id, 'status': 'REVERSED'});
-
-  @override
-  Future<Map<String, dynamic>> reverseExpense({
-    required String id,
-    required String reason,
-    String? idempotencyKey,
-  }) =>
-      _pause({'id': id, 'status': 'REVERSED'});
-
-  @override
-  Future<Map<String, dynamic>> reverseTransfer({
-    required String id,
-    required String reason,
-    String? idempotencyKey,
-  }) =>
-      _pause({'id': id, 'status': 'REVERSED'});
-
-  @override
-  Future<Map<String, dynamic>> adjustStock(Map<String, dynamic> payload) =>
-      _pause({'id': _uuid.v4()});
-
-  @override
-  Future<Map<String, dynamic>> postOpeningBalance(Map<String, dynamic> payload) =>
-      _pause({'id': _uuid.v4()});
-
-  @override
-  Future<List<StockRow>> fetchStockReport({
-    required String businessId,
-    String? locationId,
-  }) =>
-      _pause(
-        products
-            .map(
-              (product) => StockRow(
-                productId: product.id,
-                name: product.name,
-                unit: product.unit,
-                quantity: product.stock,
-                lowStockThreshold: product.lowStockAt,
-                isLowStock: product.isLowStock,
-              ),
-            )
-            .toList(growable: false),
-      );
-
-  @override
-  Future<LedgerReport> fetchPartyLedger({
-    required String businessId,
-    required String partyId,
-    String? account,
-  }) =>
-      _pause(LedgerReport(partyId: partyId, balanceMinor: 0, entries: const []));
-
-  @override
-  Future<List<ProposalSummary>> listProposals() => _pause(const []);
-
-  @override
-  Future<Map<String, dynamic>> fetchProposal(String id) => _pause({'id': id});
-
-  @override
-  Future<List<ProposalRevision>> fetchRevisions(String id) => _pause(const []);
-
-  @override
-  Future<Map<String, dynamic>> cancelProposal({
-    required String id,
-    required int version,
-  }) =>
-      _pause({'id': id, 'version': version, 'status': 'CANCELLED'});
-}
-
-bool get isDemoRepositoryEnabled => AppConfig.demoMode;

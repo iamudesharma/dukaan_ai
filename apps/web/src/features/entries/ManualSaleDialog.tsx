@@ -13,9 +13,9 @@ interface Props {
 }
 
 export function ManualSaleDialog({ open, onClose }: Props) {
-  const { bootstrap, locationId } = useWorkspace();
-  const products = useQuery({ queryKey: ["products", bootstrap.business.id, locationId], queryFn: () => getProducts(bootstrap.business.id, locationId), enabled: open });
-  const parties = useQuery({ queryKey: ["parties", bootstrap.business.id], queryFn: () => getParties(bootstrap.business.id), enabled: open });
+  const { bootstrap, access, locationId } = useWorkspace();
+  const products = useQuery({ queryKey: ["products", bootstrap.user.id, bootstrap.business.id, locationId], queryFn: () => getProducts(bootstrap.business.id, locationId, { includeWholesalePrices: access.canViewWholesalePrices }), enabled: open });
+  const parties = useQuery({ queryKey: ["parties", bootstrap.user.id, bootstrap.business.id], queryFn: () => getParties(bootstrap.business.id, { customersOnly: access.isCashier }), enabled: open });
   const [productId, setProductId] = useState("");
   const [customerId, setCustomerId] = useState("");
   const [quantity, setQuantity] = useState("1");
@@ -23,6 +23,7 @@ export function ManualSaleDialog({ open, onClose }: Props) {
   const [paid, setPaid] = useState("0");
   const [priceMode, setPriceMode] = useState<"RETAIL" | "WHOLESALE">("RETAIL");
   const [paymentMode, setPaymentMode] = useState<ManualSaleInput["paymentMode"]>("CASH");
+  const effectivePriceMode = access.canViewWholesalePrices ? priceMode : "RETAIL";
   const [reviewing, setReviewing] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const queryClient = useQueryClient();
@@ -46,8 +47,8 @@ export function ManualSaleDialog({ open, onClose }: Props) {
     unitPriceMinor,
     paidMinor,
     paymentMode,
-    priceMode,
-  }) : null, [bootstrap.business.id, locationId, paidMinor, paymentMode, priceMode, quantity, selectedCustomer, selectedProduct, unitPriceMinor]);
+    priceMode: effectivePriceMode,
+  }) : null, [bootstrap.business.id, effectivePriceMode, locationId, paidMinor, paymentMode, quantity, selectedCustomer, selectedProduct, unitPriceMinor]);
 
   const post = useMutation({
     mutationFn: (sale: ManualSaleInput) => recordManualSale(sale),
@@ -66,6 +67,7 @@ export function ManualSaleDialog({ open, onClose }: Props) {
       setQuantity("1");
       setUnitPrice("");
       setPaid("0");
+      setPriceMode("RETAIL");
       post.reset();
     }
   }, [open]);
@@ -76,7 +78,7 @@ export function ManualSaleDialog({ open, onClose }: Props) {
     setProductId(id);
     const product = products.data?.find((candidate) => candidate.id === id);
     if (product) {
-      const price = priceMode === "WHOLESALE" ? product.wholesalePriceMinor : product.retailPriceMinor;
+      const price = effectivePriceMode === "WHOLESALE" ? product.wholesalePriceMinor : product.retailPriceMinor;
       setUnitPrice((price / 100).toFixed(2));
     }
   }
@@ -93,7 +95,10 @@ export function ManualSaleDialog({ open, onClose }: Props) {
     event.preventDefault();
     if (!input || !valid) return;
     if (!navigator.onLine) {
-      await saveOfflineDraft({ kind: "sale", locationId, content: input as unknown as Record<string, unknown> });
+      await saveOfflineDraft(
+        { userId: bootstrap.user.id, businessId: bootstrap.business.id },
+        { kind: "sale", locationId, content: input as unknown as Record<string, unknown> },
+      );
       setMessage("Saved on this device as a draft. Nothing was posted.");
       return;
     }
@@ -103,7 +108,7 @@ export function ManualSaleDialog({ open, onClose }: Props) {
   return (
     <div className="dialog-backdrop" onMouseDown={(event) => { if (event.currentTarget === event.target) onClose(); }}>
       <section className="manual-dialog" role="dialog" aria-modal="true" aria-labelledby="manual-sale-title">
-        <header><div><p className="eyebrow">Manual entry</p><h2 id="manual-sale-title">Record a sale</h2></div><button className="icon-button" onClick={onClose} aria-label="Close sale form"><X /></button></header>
+        <header><div><p className="folio-kicker">Manual entry</p><h2 id="manual-sale-title">Record a sale</h2></div><button className="icon-button" onClick={onClose} aria-label="Close sale form"><X /></button></header>
         {message ? (
           <div className="manual-success" role="status"><span><Check /></span><h3>{message}</h3><p>{navigator.onLine ? "Stock and outstanding balances were updated together." : "Review and post it after reconnecting."}</p><button className="primary-button full" onClick={onClose}>Done</button></div>
         ) : reviewing && input ? (
@@ -124,7 +129,7 @@ export function ManualSaleDialog({ open, onClose }: Props) {
           </form>
         ) : (
           <form className="manual-form" onSubmit={(event) => { event.preventDefault(); if (valid) setReviewing(true); }}>
-            <div className="segmented-control" aria-label="Price type"><button type="button" className={priceMode === "RETAIL" ? "active" : ""} onClick={() => choosePriceMode("RETAIL")}>Retail</button><button type="button" className={priceMode === "WHOLESALE" ? "active" : ""} onClick={() => choosePriceMode("WHOLESALE")}>Wholesale</button></div>
+            {access.canViewWholesalePrices ? <div className="segmented-control" aria-label="Price type"><button type="button" className={priceMode === "RETAIL" ? "active" : ""} onClick={() => choosePriceMode("RETAIL")}>Retail</button><button type="button" className={priceMode === "WHOLESALE" ? "active" : ""} onClick={() => choosePriceMode("WHOLESALE")}>Wholesale</button></div> : null}
             <label>Product<select value={productId} onChange={(event) => chooseProduct(event.target.value)} required><option value="">Select product</option>{products.data?.map((product) => <option value={product.id} key={product.id}>{product.name} · {product.onHand} in stock</option>)}</select></label>
             <label>Customer <span className="optional">Optional for fully paid sales</span><select value={customerId} onChange={(event) => setCustomerId(event.target.value)}><option value="">Walk-in customer</option>{parties.data?.filter((party) => party.kind !== "SUPPLIER").map((party) => <option value={party.id} key={party.id}>{party.name}</option>)}</select></label>
             <div className="two-fields"><label>Quantity<input type="number" min="0.001" step="0.001" value={quantity} onChange={(event) => setQuantity(event.target.value)} required /></label><label>Unit price<input type="number" min="0" step="0.01" value={unitPrice} onChange={(event) => setUnitPrice(event.target.value)} required /></label></div>

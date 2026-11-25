@@ -14,5 +14,9 @@ export default defineConfig({
         environment: "jsdom",
         setupFiles: "./src/test/setup.ts",
         css: true,
+        // Keep jsdom tests stable on constrained hosts: the default worker pool
+        // can exhaust resources and turn async UI assertions into timeouts.
+        pool: "forks",
+        maxWorkers: 2,
     },
 });

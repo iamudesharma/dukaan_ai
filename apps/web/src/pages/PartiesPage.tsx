@@ -1,6 +1,6 @@
 import { useMemo, useState, type FormEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { MessageCircleMore, Plus, Search, Users, X } from "lucide-react";
+import { FileSpreadsheet, MessageCircleMore, Plus, Search, Users, X } from "lucide-react";
 import { useWorkspace } from "../app/WorkspaceContext";
 import { EmptyState } from "../components/EmptyState";
 import { LoadingBlock } from "../components/LoadingBlock";
@@ -8,11 +8,13 @@ import { PageHeader } from "../components/PageHeader";
 import { StatusBadge } from "../components/StatusBadge";
 import { createParty, getParties, getPartyLedger, postOpeningBalance } from "../data/repository";
 import { formatMoney } from "../lib/format";
+import { CsvImportPanel } from "../features/imports/CsvImportPanel";
 
 export function PartiesPage() {
-  const { bootstrap, locationId } = useWorkspace();
+  const { bootstrap, access, locationId } = useWorkspace();
   const [search, setSearch] = useState("");
   const [adding, setAdding] = useState(false);
+  const [importing, setImporting] = useState(false);
   const [ledgerPartyId, setLedgerPartyId] = useState<string | null>(null);
   const [name, setName] = useState("");
   const [kind, setKind] = useState<"CUSTOMER" | "SUPPLIER" | "BOTH">("CUSTOMER");
@@ -21,16 +23,17 @@ export function PartiesPage() {
   const [openingSide, setOpeningSide] = useState<"RECEIVABLE" | "PAYABLE">("RECEIVABLE");
   const queryClient = useQueryClient();
   const query = useQuery({
-    queryKey: ["parties", bootstrap.business.id],
-    queryFn: () => getParties(bootstrap.business.id),
+    queryKey: ["parties", bootstrap.user.id, bootstrap.business.id],
+    queryFn: () => getParties(bootstrap.business.id, { customersOnly: access.isCashier }),
   });
   const ledger = useQuery({
-    queryKey: ["ledger", bootstrap.business.id, ledgerPartyId],
+    queryKey: ["ledger", bootstrap.user.id, bootstrap.business.id, ledgerPartyId],
     queryFn: () => getPartyLedger(bootstrap.business.id, ledgerPartyId as string, locationId),
     enabled: ledgerPartyId !== null,
   });
   const create = useMutation({
     mutationFn: async () => {
+      if (!access.canManageParties) throw new Error("Your role cannot add parties.");
       const created = await createParty({
         business: bootstrap.business.id,
         name,
@@ -64,20 +67,28 @@ export function PartiesPage() {
     if (name.trim()) create.mutate();
   }
   const parties = useMemo(() => (query.data ?? []).filter((party) =>
-    `${party.name} ${party.phone ?? ""}`.toLowerCase().includes(search.toLowerCase()),
-  ), [query.data, search]);
+    (access.canViewSuppliers || party.kind !== "SUPPLIER")
+    && `${party.name} ${party.phone ?? ""}`.toLowerCase().includes(search.toLowerCase()),
+  ), [access.canViewSuppliers, query.data, search]);
   const toReceive = parties.reduce((sum, party) => sum + party.receivableMinor, 0);
-  const toPay = parties.reduce((sum, party) => sum + party.payableMinor, 0);
+  const toPay = access.canViewSuppliers ? parties.reduce((sum, party) => sum + party.payableMinor, 0) : 0;
+  const ledgerEntries = access.canViewSuppliers
+    ? ledger.data?.entries ?? []
+    : (ledger.data?.entries ?? []).filter((entry) => entry.account === "RECEIVABLE");
+  const ledgerBalance = access.canViewSuppliers
+    ? ledger.data?.balance ?? 0
+    : ledgerEntries.reduce((sum, entry) => sum + entry.amountMinor, 0);
 
   return (
     <>
       <PageHeader
-        eyebrow="Customers & suppliers"
-        title="Parties"
-        description="See every balance in plain language. A party can be a customer, supplier, or both."
-        actions={<button className="primary-button" onClick={() => setAdding(true)}><Plus />Add party</button>}
+        eyebrow={access.isCashier ? "01 · Customers" : "01 · Customers & suppliers"}
+        title={access.isCashier ? "Customers" : "Parties"}
+        description={access.isCashier ? "Find customers and review what they owe." : "See every balance in plain language. A party can be a customer, supplier, or both."}
+        actions={access.canManageParties ? <><button className="primary-button" onClick={() => setAdding(true)}><Plus />Add party</button><button className="secondary-button" onClick={() => setImporting(true)}><FileSpreadsheet />Import CSV</button></> : undefined}
       />
-      {adding ? (
+      {importing && access.canManageParties ? <CsvImportPanel businessId={bootstrap.business.id} initialKind="PARTY" canImport={access.canManageParties} onClose={() => setImporting(false)} onChanged={() => queryClient.invalidateQueries({ queryKey: ["parties"] })} /> : null}
+      {adding && access.canManageParties ? (
         <section className="panel" role="dialog" aria-label="Add party">
           <form className="manual-form" onSubmit={submitAdd}>
             <div className="two-fields">
@@ -98,10 +109,10 @@ export function PartiesPage() {
         </section>
       ) : null}
       <section className="balance-callouts">
-        <article className="receive"><span>You will receive</span><strong>{formatMoney(toReceive)}</strong><small>Across {parties.filter((p) => p.receivableMinor > 0).length} parties</small></article>
-        <article className="pay"><span>You will pay</span><strong>{formatMoney(toPay)}</strong><small>Across {parties.filter((p) => p.payableMinor > 0).length} parties</small></article>
+        <article className="receive"><span className="folio-kicker">You will receive</span><strong>{formatMoney(toReceive)}</strong><small>Across {parties.filter((p) => p.receivableMinor > 0).length} parties</small></article>
+        {access.canViewSuppliers ? <article className="pay"><span className="folio-kicker">You will pay</span><strong>{formatMoney(toPay)}</strong><small>Across {parties.filter((p) => p.payableMinor > 0).length} parties</small></article> : null}
       </section>
-      <section className="panel data-panel">
+      <section className="panel register-section data-panel">
         <div className="filter-row">
           <label className="inline-search wide"><Search /><span className="sr-only">Search parties</span><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search name or phone" /></label>
         </div>
@@ -112,25 +123,25 @@ export function PartiesPage() {
                 <div className="party-card-top"><span className="party-avatar"><Users /></span><div><h3>{party.name}</h3><p>{party.phone ?? "No phone added"}</p></div><StatusBadge>{party.kind.toLowerCase()}</StatusBadge></div>
                 <div className="party-balances">
                   <div><span>You will receive</span><strong className="receive-text">{formatMoney(party.receivableMinor)}</strong></div>
-                  <div><span>You will pay</span><strong className="pay-text">{formatMoney(party.payableMinor)}</strong></div>
+                  {access.canViewSuppliers ? <div><span>You will pay</span><strong className="pay-text">{formatMoney(party.payableMinor)}</strong></div> : null}
                 </div>
                 <div className="party-actions"><button type="button" onClick={() => setLedgerPartyId(party.id)}>View ledger</button><button type="button"><MessageCircleMore />Share reminder</button></div>
               </article>
             ))}
           </div>
-        ) : <EmptyState title="No parties found" detail="Add a customer or supplier to start a ledger." />}
+        ) : <EmptyState title="No parties found" detail={access.isCashier ? "Customers will appear here when they are added." : "Add a customer or supplier to start a ledger."} />}
       </section>
       {ledgerPartyId ? (
         <section className="panel" role="dialog" aria-label="Party ledger">
           <header className="panel-heading simple">
-            <div><h2>Ledger</h2><p>Receivables and payables for this party.</p></div>
+            <div><h2>Ledger</h2><p>{access.isCashier ? "Customer receipts and outstanding balance." : "Receivables and payables for this party."}</p></div>
             <button className="icon-button" aria-label="Close ledger" onClick={() => setLedgerPartyId(null)}><X /></button>
           </header>
           {ledger.isLoading ? <LoadingBlock /> : ledger.data ? (
             <div>
-              <p><strong>Balance: {formatMoney(ledger.data.balance)}</strong></p>
-              {ledger.data.entries.length ? (
-                <ul>{ledger.data.entries.slice(0, 50).map((entry) => <li key={entry.id}>{entry.account} · {formatMoney(entry.amountMinor)} · {entry.occurredAt}</li>)}</ul>
+              <p><strong>Balance: {formatMoney(ledgerBalance)}</strong></p>
+              {ledgerEntries.length ? (
+                <ul>{ledgerEntries.slice(0, 50).map((entry) => <li key={entry.id}>{entry.account} · {formatMoney(entry.amountMinor)} · {entry.occurredAt}</li>)}</ul>
               ) : <p>No ledger entries yet.</p>}
             </div>
           ) : <p>Could not load the ledger.</p>}
